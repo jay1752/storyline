@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>{% block title %}Storyline{% endblock %}</title>
+  {% include "_head.html" %}
+  <link rel="stylesheet" href="/static/css/chat-widget.css?v={{ asset_version('css/chat-widget.css') }}">
+  <script src="/static/js/htmx.min.js?v={{ asset_version('js/htmx.min.js') }}"></script>
+  <script src="/static/js/shell.js?v={{ asset_version('js/shell.js') }}" defer></script>
+  <script src="/static/js/chat-widget.js?v={{ asset_version('js/chat-widget.js') }}" defer></script>
+</head>
+<body>
+  {% include "_icons.html" %}
+  {% set user = request.state.user %}
+  <div class="shell" id="shell" data-sidebar="expanded">
+    <aside class="sidebar" id="sidebar" aria-label="Primary">
+      <a class="brand" href="/analytics" title="Storyline">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--structure)"/><path d="M8 21l5-6 4 3 7-9" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="brand-name">Storyline</span>
+      </a>
+
+      {% if user %}
+      <button class="side-search" type="button" data-open-palette title="Search (⌘K)">
+        <svg class="icon"><use href="#i-search"/></svg><span>Search…</span><span class="kbd">⌘K</span>
+      </button>
+      {% endif %}
+
+      <nav class="side-group" aria-label="Main">
+        <div class="side-label">Research</div>
+        <a class="nav-item {{ 'active' if active_nav == 'analytics' else '' }}" href="/analytics" title="Analytics"><svg class="icon"><use href="#i-analytics"/></svg><span class="label">Analytics</span></a>
+        <a class="nav-item {{ 'active' if active_nav == 'community' else '' }}" href="/community" title="Community"><svg class="icon"><use href="#i-chat"/></svg><span class="label">Community</span></a>
+        <div class="side-label">Tracking</div>
+        <a class="nav-item {{ 'active' if active_nav == 'management' else '' }}" href="/management" title="Management"><svg class="icon"><use href="#i-management"/></svg><span class="label">Management</span></a>
+        <a class="nav-item {{ 'active' if active_nav == 'portfolio' else '' }}" href="/portfolio" title="Portfolio"><svg class="icon"><use href="#i-portfolio"/></svg><span class="label">Portfolio</span></a>
+        <div class="side-label">System</div>
+        <a class="nav-item {{ 'active' if active_nav == 'settings' else '' }}" href="/settings" title="AI settings"><svg class="icon"><use href="#i-settings"/></svg><span class="label">AI settings</span></a>
+        {% if request.state.is_admin %}<a class="nav-item {{ 'active' if active_nav == 'admin' else '' }}" href="/admin" title="Data ingestion (admin)"><svg class="icon"><use href="#i-admin"/></svg><span class="label">Data ingestion</span></a>{% endif %}
+      </nav>
+
+      <div class="side-spacer"></div>
+
+      <div class="side-foot">
+        <div class="side-tools">
+          <button class="icon-btn" type="button" id="palette-toggle" title="Palette" aria-label="Change palette"><svg class="icon"><use href="#i-palette"/></svg></button>
+          <button class="icon-btn" type="button" id="theme-toggle" title="Theme: system" aria-label="Change theme"><svg class="icon"><use href="#i-monitor"/></svg></button>
+          <button class="icon-btn" type="button" id="sidebar-toggle" title="Collapse sidebar" aria-label="Collapse sidebar"><svg class="icon"><use href="#i-sidebar"/></svg></button>
+        </div>
+        {% if user %}
+        <div class="user-chip">
+          <span class="avatar">{{ user.email[0] }}</span>
+          <div class="user-meta">
+            <div class="user-email" title="{{ user.email }}">{{ user.email }}</div>
+            <div class="user-sub">{{ 'verified' if user.email_verified_at else 'unverified' }}</div>
+          </div>
+          <form method="post" action="/logout"><button class="icon-btn" type="submit" title="Log out" aria-label="Log out"><svg class="icon"><use href="#i-logout"/></svg></button></form>
+        </div>
+        {% else %}
+        <a class="btn btn-primary" href="/login">Log in</a>
+        {% endif %}
+      </div>
+    </aside>
+    <div class="scrim" id="scrim"></div>
+
+    <div class="main">
+      <header class="mobilebar">
+        <button class="icon-btn" type="button" id="drawer-open" aria-label="Open menu"><svg class="icon"><use href="#i-menu"/></svg></button>
+        <a class="brand" href="/analytics"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--structure)"/><path d="M8 21l5-6 4 3 7-9" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="brand-name">Storyline</span></a>
+        {% if user %}<button class="icon-btn" type="button" data-open-palette aria-label="Search"><svg class="icon"><use href="#i-search"/></svg></button>{% else %}<span></span>{% endif %}
+      </header>
+
+      <main class="page">
+        {% if user and not user.email_verified_at %}
+        <div class="alert">
+          <span>Verify your email so you can recover your account.</span>
+          <form method="post" action="/resend-verification"><button class="btn btn-sm" type="submit">Resend link</button></form>
+        </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  {% if user %}
+  <div class="palette-scrim" id="palette" role="dialog" aria-modal="true" aria-label="Search" data-admin="{{ 1 if request.state.is_admin else 0 }}">
+    <div class="palette">
+      <div class="palette-input-row">
+        <svg class="icon"><use href="#i-search"/></svg>
+        <input id="palette-input" type="text" placeholder="Search stocks, or jump to a page…" autocomplete="off" spellcheck="false">
+        <span class="kbd">esc</span>
+      </div>
+      <div class="palette-list" id="palette-list"></div>
+      <div class="palette-foot"><span>↑↓ navigate</span><span>↵ open</span><span>esc close</span></div>
+    </div>
+  </div>
+  {% include "_chat_widget.html" %}
+  {% endif %}
+</body>
+</html>

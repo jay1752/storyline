@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Management · Storyline{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div class="page-head-main">
+    <span class="eyebrow">Tracking</span>
+    <h1 class="page-title">Management</h1>
+    <p class="page-sub">Every stock you hold or watch. Each one has a story page: a daily read in your framework, and an optional journal of what you do.</p>
+  </div>
+  <div class="page-actions">
+    {% if counts.all %}
+    <form method="post" action="/management/analyze-all" style="margin:0;"><button class="btn" type="submit" title="Analyse every tracked stock now"><svg class="icon icon-sm"><use href="#i-refresh"/></svg>Analyse all now</button></form>
+    {% endif %}
+    <a class="btn btn-primary" href="/management/add"><svg class="icon icon-sm"><use href="#i-plus"/></svg>Track a stock</a>
+    {% if counts.all %}
+    <form method="post" action="/management/delete-all" onsubmit="return confirm('Delete all {{ counts.all }} tracked positions? This can\'t be undone.');" style="margin:0;">
+      <button class="btn btn-danger" type="submit"><svg class="icon icon-sm"><use href="#i-trash"/></svg>Delete all</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if imported is not none %}
+<div class="chip-row">
+  <span class="badge pos">{{ imported }} tracked</span>
+  {% if skipped %}<span class="badge neutral">{{ skipped }} skipped (already tracked, or no match)</span>{% endif %}
+</div>
+{% endif %}
+{% if analyzing or any_running %}<div class="alert" role="status"><svg class="icon icon-sm"><use href="#i-refresh"/></svg> Analysing your stocks — this page refreshes itself as results arrive.</div>{% endif %}
+
+{% set attention = positions|selectattr('signal', 'in', ['trim_consider', 'exit_consider'])|list|length %}
+{% set flagged = positions|selectattr('bad_flags')|list|length %}
+<div class="kpi-grid">
+  <div class="kpi"><span class="kpi-label">Tracked</span><span class="kpi-value">{{ counts.all }}</span><span class="kpi-sub">stocks in total</span></div>
+  <div class="kpi"><span class="kpi-label">Positions</span><span class="kpi-value">{{ counts.positions }}</span><span class="kpi-sub">actually bought</span></div>
+  <div class="kpi"><span class="kpi-label">Watchlist</span><span class="kpi-value">{{ counts.watchlist }}</span><span class="kpi-sub">tracking only</span></div>
+  <div class="kpi"><span class="kpi-label">Need a look</span><span class="kpi-value {{ 'neg' if attention else '' }}">{{ attention }}</span><span class="kpi-sub">trim / exit verdicts</span></div>
+  <div class="kpi"><span class="kpi-label">Journal flags</span><span class="kpi-value {{ 'neg' if flagged else '' }}">{{ flagged }}</span><span class="kpi-sub">stocks where your actions break a rule</span></div>
+</div>
+
+<section class="section">
+  <div class="section-head">
+    <div>
+      <h2 class="section-title">Tracked stocks</h2>
+      <span class="section-note">open a stock to see its full story</span>
+    </div>
+    <div class="toolbar">
+      <form method="post" action="/management/auto-insights" class="auto-form" style="margin:0;">
+        <input type="hidden" name="on" value="{{ 0 if auto_insights else 1 }}">
+        <button class="btn btn-sm {{ 'btn-ghost' if not auto_insights else '' }}" type="submit" title="Analyse your tracked stocks automatically every morning">
+          <span class="dot-state {{ 'on' if auto_insights else '' }}"></span>Daily analysis: {{ 'on' if auto_insights else 'off' }}</button>
+      </form>
+      <div class="filter-pills" id="type-filter" role="group" aria-label="Filter">
+        <button class="filter-pill active" data-filter="all" type="button">All ({{ counts.all }})</button>
+        <button class="filter-pill" data-filter="position" type="button">Positions ({{ counts.positions }})</button>
+        <button class="filter-pill" data-filter="watchlist" type="button">Watchlist ({{ counts.watchlist }})</button>
+      </div>
+    </div>
+  </div>
+
+  {% if positions %}
+  <div class="table-wrap">
+    <table class="positions">
+      <thead>
+        <tr><th>Stock</th><th>Type</th><th>Anchor</th><th>Since anchor</th><th>1-yr</th><th>Bucket</th><th>Verdict</th><th>Latest story</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for p in positions %}
+        <tr data-type="{{ p.anchor_type }}">
+          <td>
+            <a class="row-ticker" href="/management/{{ p.id }}">{{ p.symbol }}</a>
+            <span class="row-sub">{{ p.company_name }}</span>
+          </td>
+          <td><span class="badge neutral">{{ p.anchor_type|capitalize }}</span></td>
+          <td>{{ p.anchor_date }}{% if p.buy_price %}<span class="row-sub">{{ "%g"|format(p.buy_price) }} avg{% if p.quantity %} · {{ "%g"|format(p.quantity) }} sh{% endif %}</span>{% else %}<span class="row-sub">added</span>{% endif %}</td>
+          <td>{% if p.since_anchor_pct is not none %}<span class="{{ 'val-pos' if p.since_anchor_pct >= 0 else 'val-neg' }}">{{ "%+.1f"|format(p.since_anchor_pct) }}%</span>{% else %}<span class="stub">—</span>{% endif %}</td>
+          <td>{% if p.one_yr_pct is not none %}<span class="{{ 'val-pos' if p.one_yr_pct >= 0 else 'val-neg' }}">{{ "%+.0f"|format(p.one_yr_pct) }}%</span>{% else %}<span class="stub">—</span>{% endif %}</td>
+          <td>{% if p.analysed_at %}{{ p.valuation_label }}{% else %}<span class="stub">—</span>{% endif %}</td>
+          <td>
+            {% if not p.analysed_at %}<span class="badge neutral">Not analysed</span>
+            {% elif p.signal == 'buy_consider' %}<span class="badge pos badge-dot">Buy / add</span>
+            {% elif p.signal == 'hold' %}<span class="badge pos badge-dot">Hold</span>
+            {% elif p.signal == 'trim_consider' %}<span class="badge accent badge-dot">Trim</span>
+            {% elif p.signal == 'exit_consider' %}<span class="badge neg badge-dot">Exit</span>
+            {% else %}<span class="badge neutral badge-dot">Watch</span>{% endif %}
+          </td>
+          <td>
+            {% if p.run_status in ('queued', 'running') %}<span class="badge accent">Analysing…</span>
+            {% elif p.run_status == 'failed' %}<span class="badge neg" title="{{ p.run_error }}">Last run failed</span>
+            {% elif p.analysed_at %}<a href="/management/{{ p.id }}#analysis" class="muted"><time data-utc="{{ p.analysed_at }}" data-fmt="date">{{ p.analysed_at[:10] }}</time></a>{% else %}<span class="stub">—</span>{% endif %}
+            {% if p.bad_flags %}<a class="badge {{ 'neg' if p.has_alert else 'accent' }}" href="/management/{{ p.id }}#analysis" title="Where your own actions break a framework rule">{{ p.bad_flags }} flag{{ '' if p.bad_flags == 1 else 's' }}</a>{% endif %}
+            <a class="row-sub" href="/management/{{ p.id }}">Open story →</a>
+          </td>
+          <td>
+            <form method="post" action="/management/{{ p.id }}/delete" onsubmit="return confirm('Stop tracking {{ p.symbol }}? Its story and journal are deleted too.');" style="margin:0;">
+              <button class="icon-btn" type="submit" title="Stop tracking {{ p.symbol }}" aria-label="Stop tracking {{ p.symbol }}"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card"><div class="empty">
+    <svg class="icon"><use href="#i-inbox"/></svg>
+    <h3>Nothing tracked yet</h3>
+    <p>Add a stock by hand, or open the assistant and attach a broker statement to import positions automatically.</p>
+    <div class="inline-controls" style="justify-content:center;">
+      <a class="btn btn-primary" href="/management/add">Track a stock</a>
+      <button class="btn" type="button" onclick="openChatForImport()">Import a statement</button>
+    </div>
+  </div></div>
+  {% endif %}
+</section>
+
+{% if closed %}
+<section class="section">
+  <div class="section-head"><div><h2 class="section-title">Closed positions</h2><span class="section-note">stocks you exited — their story and journal stay readable</span></div></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Stock</th><th>Closed</th><th>Avg cost</th><th>Exit price</th><th>Result</th></tr></thead>
+    <tbody>{% for c in closed %}
+      <tr><td><a class="row-ticker" href="/management/{{ c.id }}">{{ c.symbol }}</a><span class="row-sub">{{ c.company_name }}</span></td>
+        <td>{{ c.closed_at }}</td><td>{{ "%g"|format(c.buy_price) if c.buy_price else '—' }}</td><td>{{ "%g"|format(c.exit_price) if c.exit_price else '—' }}</td>
+        <td>{% if c.buy_price and c.exit_price %}{% set r = (c.exit_price / c.buy_price - 1) * 100 %}<span class="{{ 'val-pos' if r >= 0 else 'val-neg' }}">{{ "%+.1f"|format(r) }}%</span>{% else %}<span class="stub">—</span>{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+</section>
+{% endif %}
+
+<script>
+  document.querySelectorAll("#type-filter .filter-pill").forEach(function (pill) {
+    pill.addEventListener("click", function () {
+      var f = pill.dataset.filter;
+      document.querySelectorAll("#type-filter .filter-pill").forEach(function (p) { p.classList.toggle("active", p === pill); });
+      document.querySelectorAll("table.positions tbody tr").forEach(function (tr) { tr.hidden = f !== "all" && tr.dataset.type !== f; });
+    });
+  });
+  document.querySelectorAll("time[data-utc]").forEach(function (t) {
+    var raw = t.dataset.utc.replace(" ", "T"), d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(raw) ? raw : raw + "Z");
+    if (!isNaN(d)) t.textContent = d.toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
+  });
+  {% if any_running %}setTimeout(function () { location.reload(); }, 6000);{% endif %}
+</script>
+
+{% endblock %}

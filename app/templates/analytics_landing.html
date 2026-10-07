@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Analytics · Storyline{% endblock %}
+{% block content %}
+
+<section class="hero">
+  <span class="eyebrow">Analytics</span>
+  <h1 class="page-title">Find a stock, read its story</h1>
+  <p class="page-sub">A quarterly quality matrix and full fundamentals for every symbol with reported data.</p>
+
+  <div class="hero-search">
+    <svg class="icon"><use href="#i-search"/></svg>
+    <input class="hero-search-input" type="search" name="q" placeholder="Search by symbol or company name…" autocomplete="off" autofocus
+           hx-get="/search-stocks" hx-trigger="keyup changed delay:250ms, search" hx-target="#hero-search-results" hx-swap="innerHTML">
+    <div class="hero-search-results" id="hero-search-results"></div>
+  </div>
+
+  <div class="coverage">
+    <div><b>{{ "{:,}".format(total_with_data) }}</b><span>stocks with data</span></div>
+    <div><b>IN + US</b><span>markets</span></div>
+    <div><b>⌘K</b><span>search anywhere</span></div>
+  </div>
+</section>
+
+{% if available %}
+<section class="section">
+  <div class="section-head">
+    <h2 class="section-title">Jump straight in</h2>
+    {% if request.state.is_admin %}<span class="section-note"><a href="/admin">coverage by stock in Data ingestion →</a></span>{% endif %}
+  </div>
+  <div class="stock-grid">
+    {% for s in available %}
+    <a class="stock-card" href="/analytics/{{ s.symbol }}">
+      <span class="row-ticker">{{ s.symbol }}</span>
+      <span class="sc-name">{{ s.name }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% endblock %}

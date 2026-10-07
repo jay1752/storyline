@@ -1,0 +1,10 @@
+{% if q %}
+  {% for r in results %}
+  <a class="stock-result" href="/analytics/{{ r.symbol }}">
+    <span class="row-ticker">{{ r.symbol }}</span>
+    <span class="sr-name">{{ r.name }}</span>
+    <span class="badge neutral">{{ r.market }}</span>
+  </a>
+  {% endfor %}
+  {% if not results %}<div class="stock-result-empty">No stocks with data match "{{ q }}"</div>{% endif %}
+{% endif %}

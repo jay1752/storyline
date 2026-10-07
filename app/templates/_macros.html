@@ -1,0 +1,54 @@
+{# Heat class for a matrix cell: tint encodes the sign and size of the value itself.
+   `hi`/`mid` are the magnitude cut-offs for the strongest and middle tints. #}
+{% macro heat(v, hi=25, mid=10) -%}
+{%- if v is none -%}
+{%- elif v >= hi %}h-p3
+{%- elif v >= mid %}h-p2
+{%- elif v > 0 %}h-p1
+{%- elif v <= -hi %}h-n3
+{%- elif v <= -mid %}h-n2
+{%- elif v < 0 %}h-n1
+{%- endif -%}
+{%- endmacro %}
+
+{# Period table: label column + one column per period + a sparkline. Rows/columns with no data never reach here. #}
+{% macro period_table(t, key="") -%}
+<div class="table-wrap">
+  <table class="fin">
+    <thead><tr>
+      <th>Metric</th>
+      {% for c in t.columns %}<th class="{{ 'latest' if loop.last else '' }}" {% if t.fulls %}title="{{ t.fulls[loop.index0] }}"{% endif %}>{{ c }}</th>{% endfor %}
+      {% if t.rows and t.rows[0].spark is defined %}<th class="spark-col">Trend</th>{% endif %}
+    </tr></thead>
+    <tbody>
+      {% for r in t.rows %}
+      <tr class="{{ 'strong' if r.bold else '' }}">
+        <td>{% if key %}<button type="button" class="row-explore" data-explore="metric" data-set="{{ key }}" data-metric="{{ r.label }}" title="Open {{ r.label }} chart">{{ r.label }}</button>{% else %}{{ r.label }}{% endif %}{% if r.unit %}<span class="row-sub">{{ r.unit }}</span>{% endif %}</td>
+        {% for c in r.cells %}<td class="{{ 'latest' if loop.last else '' }}">{% if c.t %}<span class="{{ 'val-pos' if c.tone == 'pos' else ('val-neg' if c.tone == 'neg' else '') }}">{{ c.t }}</span>{% else %}<span class="stub">—</span>{% endif %}</td>{% endfor %}
+        {% if t.rows[0].spark is defined %}<td class="spark-col">{% if r.spark %}{% if key %}<button type="button" class="spark-btn" data-explore="metric" data-set="{{ key }}" data-metric="{{ r.label }}" aria-label="Open {{ r.label }} chart">{% endif %}<svg class="spark {{ 'up' if r.spark.up else 'down' }}" width="{{ r.spark.w }}" height="{{ r.spark.h }}" viewBox="0 0 {{ r.spark.w }} {{ r.spark.h }}" aria-hidden="true"><path d="{{ r.spark.d }}"/><circle cx="{{ r.spark.lx }}" cy="{{ r.spark.ly }}" r="2"/></svg>{% if key %}</button>{% endif %}{% endif %}</td>{% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{%- endmacro %}
+
+{# Value-labelled bar chart: period and exact value printed under every bar. #}
+{% macro bar_chart(c, key="") -%}
+<div class="card barchart{{ ' explorable' if key else '' }}"{% if key %} data-explore="metric" data-set="{{ key }}" data-metric="{{ c.title }}"{% endif %}>
+  <div class="bc-head"><b>{{ c.title }}</b><span class="section-note">{{ c.unit }}</span>{% if key %}<button type="button" class="icon-btn bc-expand" data-explore="metric" data-set="{{ key }}" data-metric="{{ c.title }}" aria-label="Maximize {{ c.title }} chart" title="Maximize"><svg class="icon icon-sm"><use href="#i-expand"/></svg></button>{% endif %}</div>
+  <div class="bc-scroll">
+    <div class="bc-cols" style="--n: {{ c.bars|length }}">
+      {% for b in c.bars %}
+      <div class="bc-col">
+        <div class="bc-plot" style="--zero: {{ c.zero }}%">
+          {% if b.text %}<i class="bc-bar {{ 'neg' if b.neg else '' }} {{ 'last' if loop.last else '' }}" style="top: {{ b.top }}%; height: {{ b.h }}%"></i>{% endif %}
+        </div>
+        <span class="bc-label">{{ b.label }}</span>
+        <span class="bc-val {{ 'neg' if b.neg else '' }}">{{ b.text if b.text else '—' }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{%- endmacro %}

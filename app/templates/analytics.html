@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% from "_macros.html" import heat, period_table, bar_chart %}
+{% block title %}{{ stock.symbol }} · Analytics · Storyline{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div class="page-head-main">
+    <div class="eyebrow">
+      <a href="/analytics">Analytics</a><span>/</span><span>{{ 'India' if stock.market == 'IN' else 'US' }}</span>
+      {% if stock.sector and stock.sector != 'Unclassified' %}<span>·</span><span>{{ stock.sector }}</span>{% endif %}
+    </div>
+    <h1 class="page-title">{{ stock.name }}</h1>
+    <div class="chip-row">
+      <span class="badge neutral mono">{{ stock.symbol }}</span>
+      {% if stock.cap_tier %}<span class="badge neutral">{{ stock.cap_tier|capitalize }} cap</span>{% endif %}
+    </div>
+  </div>
+  <form class="page-actions" hx-post="/track" hx-target="#track-result" hx-swap="innerHTML">
+    <input type="hidden" name="symbol" value="{{ stock.symbol }}">
+    <input type="hidden" name="company_name" value="{{ stock.name }}">
+    <select name="anchor_type" class="form-input" style="width:auto;" aria-label="Track as">
+      <option value="watchlist">Watchlist</option>
+      <option value="position">Position</option>
+    </select>
+    <button class="btn btn-primary" type="submit"><svg class="icon icon-sm"><use href="#i-plus"/></svg>Track</button>
+    <a class="btn" href="/community?symbol={{ stock.symbol }}" title="Discussion about {{ stock.symbol }}"><svg class="icon icon-sm"><use href="#i-chat"/></svg>Discuss</a>
+  </form>
+</div>
+<div id="track-result"></div>
+
+{% if kpis %}
+<div class="kpi-grid">
+  {% for k in kpis %}
+  <div class="kpi">
+    <span class="kpi-label">{{ k.label }}</span>
+    <span class="kpi-value {{ k.tone }}">{{ k.value }}</span>
+    <span class="kpi-sub">{% if k.sub_tone %}<span class="{{ 'val-pos' if k.sub_tone == 'pos' else 'val-neg' }}">{{ k.sub.split(' · ')[0] }}</span>{% if ' · ' in k.sub %} · {{ k.sub.split(' · ', 1)[1] }}{% endif %}{% else %}{{ k.sub }}{% endif %}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<nav class="subnav" id="subnav" aria-label="On this page">
+  <a href="#overview" class="active">Overview</a>
+  {% if raw.quarterly %}<a href="#quarterly">Quarterly</a>{% endif %}
+  {% if raw.annual %}<a href="#annual">Annual</a>{% endif %}
+  {% if raw.balance %}<a href="#balance">Balance sheet</a>{% endif %}
+  {% if raw.ownership or matrix.institutional_holders is not none %}<a href="#ownership">Ownership</a>{% endif %}
+  <a href="#lens">Quality lens</a>
+</nav>
+
+<section class="section" id="overview">
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <h2 class="card-title">Price</h2>
+        {% if price_summary %}<span class="section-note" id="price-period"></span>{% endif %}
+      </div>
+      {% if price_series %}
+      <div class="card-tools">
+      <div class="seg" id="price-range" role="group" aria-label="Price range">
+        <button type="button" data-range="1M">1M</button>
+        <button type="button" data-range="6M">6M</button>
+        <button type="button" class="active" data-range="1Y">1Y</button>
+        <button type="button" data-range="5Y">5Y</button>
+        <button type="button" data-range="MAX">All</button>
+      </div>
+      <button type="button" class="icon-btn" data-explore="price" aria-label="Maximize price chart" title="Maximize"><svg class="icon icon-sm"><use href="#i-expand"/></svg></button>
+      </div>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      {% if price_series %}
+      <div class="price-chart explorable" id="price-chart" data-explore="price" data-currency="{{ price_summary.currency }}" aria-label="Price chart"></div>
+      <div class="price-stats">
+        <div><span class="stat-label">52-week low</span><b>{{ price_summary.currency }}{{ "{:,.2f}".format(price_summary.lo_52w) }}</b></div>
+        <div><span class="stat-label">52-week high</span><b>{{ price_summary.currency }}{{ "{:,.2f}".format(price_summary.hi_52w) }}</b></div>
+        <div><span class="stat-label">Last close</span><b>{{ price_summary.currency }}{{ "{:,.2f}".format(price_summary.last) }}</b></div>
+        <div><span class="stat-label">As of</span><b>{{ price_summary.as_of }}</b></div>
+      </div>
+      {% else %}
+      <div class="empty"><svg class="icon"><use href="#i-analytics"/></svg><h3>No price history yet</h3><p>Fundamentals are below. Prices appear once the daily price ingestion has covered this symbol.</p></div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{% if raw.quarterly %}
+<section class="section" id="quarterly">
+  <div class="section-head">
+    <div>
+      <h2 class="section-title">Quarterly results</h2>
+      <span class="section-note">{{ raw.money_unit }} unless stated · {{ n_quarters }} quarters on file</span>
+    </div>
+    <div class="toolbar">
+      <div class="seg" role="group" aria-label="Quarters shown">
+        {% for opt in range_options %}
+        <a class="{{ 'active' if opt == current_range else '' }}" href="/analytics/{{ default_symbol }}?span={{ opt }}#quarterly">{{ opt if opt == 'all' else opt + 'Q' }}</a>
+        {% endfor %}
+      </div>
+      <a class="btn btn-sm" href="/export/stock/{{ stock.symbol }}.csv"><svg class="icon icon-sm"><use href="#i-arrow-down"/></svg>CSV</a>
+    </div>
+  </div>
+  {% if raw.quarterly.charts %}<div class="chart-grid">{% for c in raw.quarterly.charts %}{{ bar_chart(c, 'quarterly') }}{% endfor %}</div>{% endif %}
+  {{ period_table(raw.quarterly, 'quarterly') }}
+  <p class="prose">Growth is the reported figure where the source gave one; otherwise it is computed from the same quarter a year earlier (or the previous quarter for QoQ) in the rows shown. Empty rows are hidden.</p>
+</section>
+{% endif %}
+
+{% if raw.annual %}
+<section class="section" id="annual">
+  <div class="section-head">
+    <div><h2 class="section-title">Annual results</h2><span class="section-note">{{ raw.money_unit }} unless stated · {{ n_annual }} fiscal years on file</span></div>
+  </div>
+  {% if raw.annual.charts %}<div class="chart-grid">{% for c in raw.annual.charts %}{{ bar_chart(c, 'annual') }}{% endfor %}</div>{% endif %}
+  {{ period_table(raw.annual, 'annual') }}
+</section>
+{% endif %}
+
+{% if raw.balance %}
+<section class="section" id="balance">
+  <div class="section-head"><div><h2 class="section-title">Balance sheet &amp; ratios</h2><span class="section-note">only periods with reported values · {{ raw.money_unit }} unless stated</span></div></div>
+  {{ period_table(raw.balance, 'balance') }}
+  {% if has_ratios %}
+  <div class="stat-row">
+    {% for label, val in ratio_stats %}{% if val != '—' and val != '— – —' %}
+    <div class="stat-cell"><div class="stat-label">{{ label }}</div><div class="stat-val" style="{{ 'font-size:1.05rem;' if '–' in val else '' }}">{{ val }}</div></div>
+    {% endif %}{% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if raw.ownership or matrix.institutional_holders is not none %}
+<section class="section" id="ownership">
+  <div class="section-head"><div><h2 class="section-title">Ownership</h2><span class="section-note">{{ 'shareholding pattern by quarter' if raw.ownership else '13F institutional holdings' }}</span></div></div>
+  {% if raw.ownership %}{{ period_table(raw.ownership, 'ownership') }}{% endif %}
+  {% if matrix.institutional_holders is not none %}
+  <div class="own-grid">
+    <div class="kpi"><span class="kpi-label">13F managers</span><span class="kpi-value">{{ "{:,}".format(matrix.institutional_holders) }}</span><span class="kpi-sub">as of {{ matrix.institutional_period }}</span></div>
+    <div class="kpi"><span class="kpi-label">Shares held</span><span class="kpi-value">{{ "{:,}".format(matrix.institutional_shares) }}</span>{% if matrix.institutional_pct is not none %}<span class="kpi-sub">{{ matrix.institutional_pct }}% of shares outstanding</span>{% endif %}</div>
+    {% if matrix.institutional_qoq_pct is not none %}<div class="kpi"><span class="kpi-label">QoQ change</span><span class="kpi-value {{ 'pos' if matrix.institutional_qoq_pct >= 0 else 'neg' }}">{{ "%+.1f"|format(matrix.institutional_qoq_pct) }}%</span><span class="kpi-sub">shares held</span></div>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% set has_lens = matrix.has_layer2 or (matrix.guidance|select|list|length) or (matrix.sector_momentum|select|list|length) or matrix.has_layer5 %}
+{% if has_lens %}
+<section class="section" id="lens">
+  <div class="section-head">
+    <div><h2 class="section-title">Quality lens</h2><span class="section-note">derived context — vs. sector peers, guidance, macro</span></div>
+  </div>
+  {% if chips %}<div class="chip-row">{% for c in chips %}<span class="badge {{ c.cls }} badge-dot">{{ c.text }}</span>{% endfor %}</div>{% endif %}
+  <div class="matrix-wrap">
+    <table class="matrix">
+      <thead><tr><th>Parameter</th>{% for q in quarters %}<th class="{{ 'latest' if loop.last else '' }}" title="{{ quarter_full_labels[loop.index0] }}">{{ q }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% if matrix.guidance|select|list|length %}
+        <tr class="metric-row"><td>Guidance vs. delivered</td>
+          {% for g in matrix.guidance %}<td class="{{ 'latest' if loop.last else '' }}">{% if g %}<span class="badge {{ 'pos' if g == 'beat' else ('neg' if g == 'miss' else 'neutral') }}">{{ g|capitalize }}</span>{% else %}<span class="stub">—</span>{% endif %}</td>{% endfor %}
+        </tr>
+        {% endif %}
+        {% if matrix.growth_vs_sector|select("ne", none)|list|length %}
+        <tr class="metric-row"><td>Growth vs. sector (pp)</td>
+          {% for v in matrix.growth_vs_sector %}<td class="{{ 'latest' if loop.last else '' }} {{ heat(v, 10, 3) if v is not none else '' }}">{% if v is none %}<span class="stub">—</span>{% else %}{{ "+%g"|format(v) if v >= 0 else v }}{% endif %}</td>{% endfor %}
+        </tr>
+        {% endif %}
+        {% if matrix.margin_vs_sector|select("ne", none)|list|length %}
+        <tr class="metric-row"><td>Margin vs. sector (pp)</td>
+          {% for v in matrix.margin_vs_sector %}<td class="{{ 'latest' if loop.last else '' }} {{ heat(v, 10, 3) if v is not none else '' }}">{% if v is none %}<span class="stub">—</span>{% else %}{{ "+%g"|format(v) if v >= 0 else v }}{% endif %}</td>{% endfor %}
+        </tr>
+        {% endif %}
+        {% if matrix.sector_momentum|select|list|length %}
+        <tr class="metric-row"><td>Sector momentum</td>
+          {% for m in matrix.sector_momentum %}<td class="{{ 'latest' if loop.last else '' }}">{% if m %}<span class="badge {{ 'pos' if m == 'favor' else ('neg' if m == 'out' else 'neutral') }}">{{ m|capitalize }}</span>{% else %}<span class="stub">—</span>{% endif %}</td>{% endfor %}
+        </tr>
+        {% endif %}
+        {% if matrix.has_layer5 %}
+        <tr class="metric-row"><td>Macro context</td>
+          <td colspan="{{ quarters|length }}" style="text-align:left; color:var(--muted);">
+            {% if matrix.macro_gdp_growth is not none %}GDP growth {{ "%+.1f"|format(matrix.macro_gdp_growth) }}%{% endif %}{% if matrix.macro_cpi_yoy is not none %} · CPI {{ "%.1f"|format(matrix.macro_cpi_yoy) }}%{% endif %}{% if matrix.macro_policy_rate is not none %} · Policy rate {{ "%.2f"|format(matrix.macro_policy_rate) }}%{% endif %}{% if matrix.macro_unemployment is not none %} · Unemployment {{ "%.1f"|format(matrix.macro_unemployment) }}%{% endif %} — as of {{ matrix.macro_period }}
+          </td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+
+<script src="/static/js/analytics-page.js?v={{ asset_version('js/analytics-page.js') }}" defer></script>
+<script src="/static/js/chart-explorer.js?v={{ asset_version('js/chart-explorer.js') }}" defer></script>
+<script id="explorer-data" type="application/json">{{ explorer | tojson }}</script>
+{% if price_series %}<script id="price-data" type="application/json">{{ price_series | tojson }}</script>{% endif %}
+
+{% endblock %}

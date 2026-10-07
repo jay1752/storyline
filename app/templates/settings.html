@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}AI settings · Storyline{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div class="page-head-main">
+    <span class="eyebrow">System</span>
+    <h1 class="page-title">AI settings</h1>
+    <p class="page-sub">Pick the model behind the chat assistant and the daily Insights job. Bring a key for any provider — keys are stored encrypted and never shown again.</p>
+  </div>
+</div>
+
+{% if saved %}<div class="alert" role="status"><svg class="icon icon-sm"><use href="#i-check"/></svg> Settings saved.</div>{% endif %}
+{% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+
+<script id="ai-registry" type="application/json">{{ registry | tojson }}</script>
+<script id="ai-state" type="application/json">{{ {"settings": {"provider": settings.provider, "model": settings.model_name, "use_platform_default": settings.use_platform_default, "fallback_provider": settings.fallback_provider, "fallback_model": settings.fallback_model}, "saved": saved_keys} | tojson }}</script>
+
+<section class="card set-free">
+  <div class="card-head"><h2 class="card-title">Want to run it free for a month?</h2><span class="section-note">limits as published by each provider — check your own console for exact numbers</span></div>
+  <div class="card-body">
+    <div class="free-grid">
+      <div><b>Groq</b><span class="muted">No card. ~1,000 requests/day, 200K tokens/day per model. Text only.</span></div>
+      <div><b>Gemini</b><span class="muted">No card. ~20 requests/day per model. Reads PDFs and images.</span></div>
+      <div><b>OpenRouter</b><span class="muted">Models ending <code>:free</code>. 50 requests/day (1,000 after a one-time $10 top-up).</span></div>
+      <div><b>Mistral</b><span class="muted">No card, phone check. ~1B tokens/month; prompts may train their models.</span></div>
+    </div>
+    <div class="inline-controls">
+      <button class="btn btn-primary btn-sm" type="button" id="preset-free">Use free setup: Groq, with Gemini as fallback</button>
+      <span class="hint">Fills the form below — you still add each key and press Save.</span>
+    </div>
+  </div>
+</section>
+
+<form class="form-card" method="post" action="/settings" id="ai-form" autocomplete="off">
+  <div>
+    <h2 class="section-title">Main model</h2>
+    <p class="prose" style="margin-top:0.3rem;">Used for every chat answer and Insights run.</p>
+  </div>
+  <div class="form-grid">
+    <div class="form-field">
+      <label for="provider">Provider</label>
+      <select name="provider" id="provider" class="form-input"></select>
+      <span class="hint" id="provider-info"></span>
+    </div>
+    <div class="form-field">
+      <label for="model_name">Model</label>
+      <select name="model_name" id="model_name" class="form-input"></select>
+      <input type="text" name="custom_model" id="custom_model" class="form-input" placeholder="Model ID, exactly as the provider names it" hidden>
+      <span class="hint"><button type="button" class="linklike" id="refresh-models">Load models from my key</button> <span id="models-msg"></span></span>
+    </div>
+    <div class="form-field">
+      <label for="api_key">API key <span class="key-state" id="key-state"></span></label>
+      <input type="password" name="api_key" id="api_key" class="form-input" autocomplete="new-password" placeholder="Paste a key to save it">
+      <span class="hint"><a id="key-link" href="#" target="_blank" rel="noopener">Get a key</a> <label class="inline-check" id="remove-wrap" style="margin-left:0.6rem;" hidden><input type="checkbox" id="remove-key"> remove saved key</label></span>
+    </div>
+    <label class="form-field inline-check-field" id="platform-wrap" for="use_platform_default" hidden>
+      <span class="inline-check"><input type="checkbox" name="use_platform_default" id="use_platform_default" value="1"> Use the shared key provided with this app</span>
+      <span class="hint">Untick to use your own key for this provider.</span>
+    </label>
+  </div>
+  <div class="inline-controls">
+    <button type="button" class="btn" id="test-main">Test connection</button>
+    <span class="test-result" id="test-main-result" role="status"></span>
+  </div>
+
+  <hr class="rule">
+
+  <div>
+    <h2 class="section-title">Fallback model <span class="muted" style="font-weight:400;">(optional)</span></h2>
+    <p class="prose" style="margin-top:0.3rem;">If the main model is out of quota or credits, or overloaded, chat switches to this one automatically — before any answer text appears. It can be a different provider, and it also covers PDF reading when your main model can't.</p>
+  </div>
+  <div class="form-grid">
+    <div class="form-field">
+      <label for="fallback_provider">Provider</label>
+      <select name="fallback_provider" id="fallback_provider" class="form-input"></select>
+      <span class="hint" id="fallback-info"></span>
+    </div>
+    <div class="form-field" id="fb-model-wrap">
+      <label for="fallback_model">Model</label>
+      <select name="fallback_model" id="fallback_model" class="form-input"></select>
+      <input type="text" name="fallback_custom" id="fallback_custom" class="form-input" placeholder="Model ID" hidden>
+    </div>
+    <div class="form-field" id="fb-key-wrap">
+      <label for="fallback_api_key">API key <span class="key-state" id="fb-key-state"></span></label>
+      <input type="password" name="fallback_api_key" id="fallback_api_key" class="form-input" autocomplete="new-password" placeholder="Paste a key to save it">
+      <span class="hint"><a id="fb-key-link" href="#" target="_blank" rel="noopener">Get a key</a></span>
+    </div>
+  </div>
+  <div class="inline-controls" id="fb-test-wrap">
+    <button type="button" class="btn" id="test-fallback">Test fallback</button>
+    <span class="test-result" id="test-fallback-result" role="status"></span>
+  </div>
+
+  <div><button class="btn btn-primary" type="submit">Save settings</button></div>
+</form>
+
+<script src="/static/js/settings-page.js?v={{ asset_version('js/settings-page.js') }}" defer></script>
+{% endblock %}

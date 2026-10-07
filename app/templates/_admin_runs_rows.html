@@ -1,0 +1,20 @@
+{% for r in runs %}
+<tr>
+  <td>{{ r.id }}</td>
+  <td><span class="row-ticker">{{ r.source_name }}</span></td>
+  <td>{{ r.target }}</td>
+  <td class="mono" style="font-size:0.74rem;">{{ r.started_at[:19] }}</td>
+  <td class="mono" style="font-size:0.74rem;">{{ r.finished_at[:19] if r.finished_at else '—' }}</td>
+  <td>
+    {% if r.status == 'success' %}<span class="badge pos">Success</span>
+    {% elif r.status == 'running' %}<span class="badge accent">Running</span>
+    {% elif r.status == 'queued' %}<span class="badge neutral">Queued</span>
+    {% elif r.status == 'not_configured' %}<span class="badge accent">Not configured</span>
+    {% elif r.status == 'not_implemented' %}<span class="badge neutral">Not built yet</span>
+    {% else %}<span class="badge neg">Failed</span>{% endif %}
+  </td>
+  <td>{{ r.rows_written }}</td>
+  <td style="white-space:normal; max-width:22rem; color:var(--muted); font-size:0.78rem;">{{ r.error_message or '' }}</td>
+</tr>
+{% endfor %}
+{% if not runs %}<tr><td colspan="8" class="muted">No matching runs.</td></tr>{% endif %}

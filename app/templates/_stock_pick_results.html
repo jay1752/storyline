@@ -1,0 +1,9 @@
+{% if q %}
+  {% for r in results %}
+  <button type="button" class="stock-result" data-symbol="{{ r.symbol }}" data-name="{{ r.name }}" onclick="selectStock(this)">
+    <span class="row-ticker">{{ r.symbol }}</span>
+    <span class="sr-name">{{ r.name }}</span>
+  </button>
+  {% endfor %}
+  {% if not results %}<div class="stock-result-empty">No matches for "{{ q }}"</div>{% endif %}
+{% endif %}

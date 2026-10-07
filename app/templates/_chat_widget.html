@@ -1,0 +1,33 @@
+<button class="chat-fab" id="chat-fab" type="button" onclick="toggleChat()" aria-label="Open assistant" title="Ask Storyline (⌘/)">
+  <svg class="icon"><use href="#i-sparkle"/></svg>
+</button>
+
+<section class="chat-panel" id="chat-panel" role="dialog" aria-label="Storyline assistant">
+  <header class="chat-head">
+    <div class="chat-title">
+      <span class="chat-mark"><svg class="icon"><use href="#i-sparkle"/></svg></span>
+      <div class="chat-title-text">
+        <strong>Assistant</strong>
+        <span class="chat-context" id="chat-context"></span>
+      </div>
+    </div>
+    <div class="chat-head-actions">
+      <button class="icon-btn" type="button" id="chat-new" title="New conversation" aria-label="New conversation"><svg class="icon"><use href="#i-refresh"/></svg></button>
+      <button class="icon-btn" type="button" id="chat-expand" title="Expand" aria-label="Expand"><svg class="icon"><use href="#i-expand"/></svg></button>
+      <button class="icon-btn" type="button" id="chat-close" title="Close (Esc)" aria-label="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+  </header>
+
+  <div class="chat-log" id="chat-log" aria-live="polite"></div>
+
+  <div class="chat-composer">
+    <div class="chat-attachment" id="chat-attachment"></div>
+    <form class="chat-form" id="chat-form" onsubmit="sendChatMessage(event)">
+      <button type="button" class="icon-btn chat-attach" title="Attach a statement (PDF, CSV or image)" aria-label="Attach a file" onclick="pickChatFile(false)"><svg class="icon"><use href="#i-paperclip"/></svg></button>
+      <input type="file" id="chat-file" accept=".pdf,.csv,.tsv,.txt,.png,.jpg,.jpeg,.webp" hidden onchange="onChatFilePicked(this)">
+      <textarea id="chat-input" rows="1" placeholder="Ask about this page…" autocomplete="off" aria-label="Message"></textarea>
+      <button type="submit" class="chat-send" id="chat-send" title="Send" aria-label="Send"><svg class="icon"><use href="#i-arrow-up"/></svg></button>
+    </form>
+    <div class="chat-foot">Answers use your Storyline data. Verify numbers before acting · <span class="kbd">⌘/</span></div>
+  </div>
+</section>

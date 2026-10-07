@@ -1,0 +1,22 @@
+{% for s in stocks %}
+<tr>
+  <td><a class="row-ticker" href="/analytics/{{ s.symbol }}">{{ s.symbol }}</a></td>
+  <td>{{ s.name }}</td>
+  <td>{{ s.market }}</td>
+  <td>{% if s.cap_tier %}<span class="badge neutral">{{ s.cap_tier|capitalize }}</span>{% else %}<span class="row-sub">—</span>{% endif %}</td>
+  <td title="{{ s.l1_quarters }} distinct quarters">
+    {% if s.l1_quarters >= 8 %}<span class="badge pos">{{ s.l1_quarters }}q</span>
+    {% elif s.l1_quarters > 0 %}<span class="badge accent">{{ s.l1_quarters }}q</span>
+    {% else %}<span class="row-sub">—</span>{% endif %}
+  </td>
+  <td>{% if s.l2_ok %}<span class="badge pos">✓</span>{% else %}<span class="row-sub">—</span>{% endif %}</td>
+  <td title="{{ s.l3_quarters }} distinct quarters">
+    {% if s.l3_quarters >= 4 %}<span class="badge pos">{{ s.l3_quarters }}q</span>
+    {% elif s.l3_quarters > 0 %}<span class="badge accent">{{ s.l3_quarters }}q</span>
+    {% else %}<span class="row-sub">—</span>{% endif %}
+  </td>
+  <td>{% if s.l4_price_points > 0 %}<span class="badge pos">✓</span>{% else %}<span class="row-sub">—</span>{% endif %}</td>
+  <td>{% if s.market in macro_markets %}<span class="badge neutral">✓</span>{% else %}<span class="row-sub">—</span>{% endif %}</td>
+</tr>
+{% endfor %}
+{% if not stocks %}<tr><td colspan="9" class="muted">No matching symbols.</td></tr>{% endif %}

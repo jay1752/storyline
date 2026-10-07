@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Portfolio · Storyline{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div class="page-head-main">
+    <span class="eyebrow">Tracking</span>
+    <h1 class="page-title">Portfolio</h1>
+    <p class="page-sub">{% if holdings %}{{ holdings|length }} holding{{ '' if holdings|length == 1 else 's' }} · prices as of {{ as_of }}{% else %}Your holdings, value and returns in one place.{% endif %}</p>
+  </div>
+  <div class="page-actions">
+    <button class="btn" type="button" onclick="openChatForImport()"><svg class="icon icon-sm"><use href="#i-sparkle"/></svg>Import statement</button>
+    <a class="btn btn-primary" href="/management/add"><svg class="icon icon-sm"><use href="#i-plus"/></svg>Add holding</a>
+  </div>
+</div>
+
+{% if holdings %}
+
+{% if has_in and has_us %}
+<div class="seg" id="pf-scope" role="group" aria-label="Portfolio scope">
+  <button type="button" class="active" data-scope="all">All holdings</button>
+  <button type="button" data-scope="in">India ₹</button>
+  <button type="button" data-scope="us">US $</button>
+</div>
+{% endif %}
+
+<section class="card pf-hero">
+  {% for key, sm in summaries.items() if sm %}
+  <div class="pf-scope" data-scope="{{ key }}" {% if not loop.first %}hidden{% endif %}>
+    <span class="kpi-label">Current value</span>
+    <div class="pf-value">{{ sm.value }}</div>
+    <div class="pf-stats">
+      <div><span class="kpi-label">Invested</span><b>{{ sm.invested }}</b></div>
+      <div><span class="kpi-label">Total returns</span><b class="{{ sm.pnl_tone }}">{{ sm.pnl }}</b><span class="pf-pill {{ sm.pnl_tone }}">{{ sm.pnl_pct }}</span></div>
+      <div><span class="kpi-label">1D returns</span><b class="{{ sm.day_tone }}">{{ sm.day }}</b><span class="pf-pill {{ sm.day_tone }}">{{ sm.day_pct }}</span></div>
+      <div><span class="kpi-label">Holdings</span><b>{{ sm.count }}</b></div>
+    </div>
+    {% if key == 'all' and has_us %}<span class="section-note">US holdings are converted at a fixed ₹{{ fx|int }}/$ in this combined view.</span>{% endif %}
+    {% if sm.costed < sm.count %}<span class="section-note">Returns cover the {{ sm.costed }} holding{{ '' if sm.costed == 1 else 's' }} with a buy price.</span>{% endif %}
+  </div>
+  {% endfor %}
+</section>
+
+<div class="pf-grid">
+  <section class="card pf-alloc">
+    <div class="card-head">
+      <h2 class="card-title">Allocation</h2>
+      <div class="seg" id="pf-alloc-tabs" role="group" aria-label="Allocation by">
+        <button type="button" class="active" data-set="class">Asset</button>
+        <button type="button" data-set="sector">Sector</button>
+        <button type="button" data-set="holding">Holding</button>
+      </div>
+    </div>
+    <div class="card-body">
+      {% for key, segs in donuts.items() %}
+      <div class="pf-donut-set" data-set="{{ key }}" {% if not loop.first %}hidden{% endif %}>
+        <svg class="pf-donut" viewBox="0 0 36 36" role="img" aria-label="Allocation by {{ key }}">
+          <circle cx="18" cy="18" r="15.9155" fill="none" stroke="var(--bar-track)" stroke-width="4.2"/>
+          {% for sg in segs %}<circle cx="18" cy="18" r="15.9155" fill="none" stroke="{{ sg.color }}" stroke-width="4.2" stroke-dasharray="{{ sg.dash }} {{ 100 - sg.dash }}" stroke-dashoffset="{{ sg.offset }}"/>{% endfor %}
+        </svg>
+        <ul class="pf-legend">
+          {% for sg in segs %}<li><i style="background: {{ sg.color }}"></i><span class="pf-lg-name">{{ sg.label }}</span><span class="pf-lg-val">{{ sg.value_s }}</span><b>{{ sg.pct }}%</b></li>{% endfor %}
+        </ul>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card pf-movers">
+    <div class="card-head"><h2 class="card-title">Today's movers</h2><span class="section-note">1-day change</span></div>
+    <div class="card-body">
+      {% if movers.up %}
+      {% for label, group in (('Gainers', movers.up), ('Losers', movers.down)) %}
+      <div class="pf-mv-group"><span class="kpi-label">{{ label }}</span>
+        {% for h in group %}
+        <a class="pf-mv" href="/analytics/{{ h.symbol }}"><span class="row-ticker">{{ h.ticker }}</span><span class="sr-name muted">{{ h.name }}</span><b class="{{ h.day_tone }}">{{ h.day_pct_s }}</b></a>
+        {% endfor %}
+      </div>
+      {% endfor %}
+      {% else %}<p class="prose">Not enough price history to show a daily change yet.</p>{% endif %}
+    </div>
+  </section>
+</div>
+
+<section class="section">
+  <div class="section-head">
+    <h2 class="section-title">Holdings</h2>
+    <div class="toolbar">
+      <input class="search-input" id="pf-search" type="search" placeholder="Filter holdings…" aria-label="Filter holdings" style="max-width:14rem;">
+      <select class="form-input" id="pf-sort" style="width:auto;" aria-label="Sort holdings">
+        <option value="value">Sort: current value</option>
+        <option value="pnl">Sort: total returns %</option>
+        <option value="day">Sort: 1D change %</option>
+        <option value="name">Sort: name</option>
+      </select>
+    </div>
+  </div>
+
+  {% for mk, title in (('IN', 'Indian stocks'), ('US', 'US stocks')) %}
+  {% set group = holdings|selectattr('market', 'equalto', mk)|list %}
+  {% if group %}
+  <div class="card pf-group" data-market="{{ mk }}">
+    <div class="pf-group-head"><b>{{ title }}</b><span class="section-note">{{ group|length }} · {{ summaries['in' if mk == 'IN' else 'us'].value }}</span></div>
+    <div class="pf-cols section-note"><span>Holding</span><span>Price · 1D</span><span>Value</span><span>Returns</span><span>30D</span><span>Weight</span></div>
+    <div class="pf-rows">
+      {% for h in group %}
+      <a class="pf-row" href="/analytics/{{ h.symbol }}" data-name="{{ h.name|lower }} {{ h.ticker|lower }}" data-value="{{ h.value_inr }}" data-pnl="{{ h.pnl_pct if h.pnl_pct is not none else -1000000 }}" data-day="{{ h.day_pct if h.day_pct is not none else -1000000 }}">
+        <div class="pf-id"><span class="pf-av" style="--c: var(--s{{ loop.index0 % 8 + 1 }})">{{ h.ticker[0] }}</span><div><b>{{ h.name }}</b><span class="row-sub">{{ h.ticker }} · {{ h.qty_s }} × {{ h.avg_s }}</span></div></div>
+        <div class="pf-cell pf-price"><b>{{ h.ltp_s }}</b><span class="{{ h.day_tone }}">{{ h.day_pct_s }}</span></div>
+        <div class="pf-cell pf-valc"><b>{{ h.value_s }}</b><span class="row-sub">Invested {{ h.invested_s }}</span></div>
+        <div class="pf-cell pf-retc"><b class="{{ h.pnl_tone }}">{{ h.pnl_s }}</b><span class="{{ h.pnl_tone }}">{{ h.pnl_pct_s }}</span></div>
+        <div class="pf-spark">{% if h.spark %}<svg class="spark {{ 'up' if h.spark.up else 'down' }}" width="{{ h.spark.w }}" height="{{ h.spark.h }}" viewBox="0 0 {{ h.spark.w }} {{ h.spark.h }}" aria-hidden="true"><path d="{{ h.spark.d }}"/><circle cx="{{ h.spark.lx }}" cy="{{ h.spark.ly }}" r="2"/></svg>{% endif %}</div>
+        <div class="pf-cell pf-w"><b>{{ h.weight_pct }}%</b></div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+
+  {% if needs_details %}
+  <div class="alert"><span><b>{{ needs_details|length }}</b> position{{ '' if needs_details|length == 1 else 's' }} can't be valued yet:
+    {% for n in needs_details %}<a href="/management">{{ n.symbol.split(':')[1] }}</a> ({{ n.why }}){{ ', ' if not loop.last }}{% endfor %}.</span></div>
+  {% endif %}
+</section>
+
+<details class="expandable">
+  <summary><span class="summary-title">Risk &amp; diversification</span><span class="section-note">concentration · correlation · attribution</span></summary>
+  <div class="details-body">
+    <h3 class="section-title">Concentration <span class="section-note">% of book</span></h3>
+    <div class="conc-wrap">
+      {% for h in holdings %}
+      <div class="conc-row {{ 'flag' if h.weight_pct == max_weight else '' }}">
+        <div class="conc-label"><a class="row-ticker" href="/analytics/{{ h.symbol }}">{{ h.ticker }}</a><span class="conc-sector">{{ h.sector }}</span></div>
+        <div class="conc-track"><div class="conc-fill" style="width:{{ h.weight_pct }}%"></div></div>
+        <div class="conc-pct">{{ h.weight_pct }}%</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if symbols|length > 1 %}
+    <h3 class="section-title">Correlation <span class="section-note">top {{ symbols|length }} by weight · trailing 180 days</span></h3>
+    <div class="corr-wrap">
+      <table class="corr">
+        <thead><tr><th></th>{% for lbl in short_labels %}<th>{{ lbl }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in corr_matrix %}
+          <tr>
+            <th>{{ short_labels[loop.index0] }}</th>
+            {% for v in row %}
+              {% if v is none %}<td class="diag" title="Not enough overlapping price history yet">—</td>
+              {% elif v == 1.0 %}<td class="diag">1.00</td>
+              {% elif v >= 0.5 %}<td class="high">{{ "%.2f"|format(v) }}</td>
+              {% elif v >= 0.25 %}<td class="mid">{{ "%.2f"|format(v) }}</td>
+              {% else %}<td class="low">{{ "%.2f"|format(v) }}</td>{% endif %}
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">Cells above 0.50 are flagged — holdings that look diversified by sector but move together. "—" means too little overlapping price history, not zero correlation.</p>
+    {% endif %}
+
+    {% if attribution %}
+    {% set max_pp = (attribution|map(attribute='pp')|map('abs')|list|max) or 1 %}
+    <h3 class="section-title">Attribution <span class="section-note">what drove the {{ "%+.1f"|format(portfolio_return) }}% return</span></h3>
+    <div class="attr-wrap">
+      {% for a in attribution %}
+      <div class="attr-row">
+        <a class="attr-name" href="/analytics/{{ a.symbol }}">{{ a.symbol.split(':')[1] }}</a>
+        <div class="attr-bar"><i class="{{ 'p' if a.pp >= 0 else 'n' }}" style="width:{{ ((a.pp|abs) / max_pp * 50)|round(1) }}%"></i></div>
+        <span class="attr-val {{ 'val-pos' if a.pp >= 0 else 'val-neg' }}">{{ "%+.1f"|format(a.pp) }} pp</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</details>
+
+<script src="/static/js/portfolio-page.js?v={{ asset_version('js/portfolio-page.js') }}" defer></script>
+
+{% else %}
+
+<section class="card">
+  <div class="empty">
+    <svg class="icon"><use href="#i-portfolio"/></svg>
+    <h3>No holdings yet</h3>
+    <p>Add a holding with its quantity and buy price, or import a broker statement and the assistant will build your positions.</p>
+    <div class="inline-controls" style="justify-content:center;">
+      <a class="btn btn-primary" href="/management/add">Add a holding</a>
+      <button class="btn" type="button" onclick="openChatForImport()">Import a statement</button>
+    </div>
+    {% if needs_details %}<p class="section-note">{{ needs_details|length }} tracked position(s) need a quantity or price history before they can be valued — see <a href="/management">Management</a>.</p>{% endif %}
+  </div>
+</section>
+
+{% endif %}
+{% endblock %}

@@ -1,0 +1,18 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+jinja2==3.1.4
+python-multipart==0.0.9
+requests==2.32.3
+python-dotenv==1.0.1
+py5paisa==0.7.21.2
+pyotp==2.10.0
+google-genai==2.25.0
+yfinance==1.7.0
+cryptography==43.0.3
+# pydantic-ai-slim, NOT the full pydantic-ai meta-package: the full package's [mcp]/[web]
+# extras pull in fastmcp-slim -> mcp -> sse-starlette, which demand starlette>=1.3.1 —
+# directly incompatible with fastapi==0.115.0's own starlette<0.39.0 pin. Confirmed live:
+# installing plain `pydantic-ai` silently upgrades starlette to 1.7.0 and breaks this
+# app's FastAPI. [google,anthropic] are the only model-provider extras actually used here.
+pydantic-ai-slim[google,anthropic,openai]==2.54.0
+argon2-cffi==25.1.0

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Track a stock · Management · Storyline{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div class="page-head-main">
+    <span class="eyebrow"><a href="/management">Management</a><span>/</span><span>New</span></span>
+    <h1 class="page-title">Track a stock</h1>
+  </div>
+  <a class="btn" href="/management"><svg class="icon icon-sm" style="transform:scaleX(-1)"><use href="#i-arrow-right"/></svg>Back to Management</a>
+</div>
+
+{% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+
+<form method="post" action="/management/add" style="max-width:60rem;">
+  <div class="form-card track-row">
+    <div>
+      <h2 class="section-title">Add manually</h2>
+      <p class="prose" style="margin-top:0.3rem;">Pick a stock, say whether you bought it or are just watching, and set where tracking starts.</p>
+    </div>
+    <div class="form-grid">
+      <div class="form-field stock-picker-field">
+        <label>Stock</label>
+        <input type="hidden" name="symbol" value="{{ form.symbol or '' }}">
+        <input type="hidden" name="company_name" value="{{ form.company_name or '' }}">
+        <div class="picker-label">{{ (form.symbol + ' — ' + form.company_name) if form.symbol else 'No stock selected yet' }}</div>
+        <input class="search-input picker-query" style="max-width:none;" type="search" name="q" placeholder="Search by symbol or company name…" autocomplete="off"
+               hx-get="/management/pick-stock" hx-trigger="keyup changed delay:250ms, search" hx-target="next .stock-search-results" hx-swap="innerHTML">
+        <div class="stock-search-results"></div>
+      </div>
+
+      <div class="form-field">
+        <label for="anchor_type">Type</label>
+        <select name="anchor_type" id="anchor_type" class="form-input">
+          <option value="position" {{ "selected" if form.anchor_type == "position" else "" }}>Position (bought)</option>
+          <option value="watchlist" {{ "selected" if form.anchor_type == "watchlist" else "" }}>Watchlist (tracking only)</option>
+        </select>
+      </div>
+
+      <div class="form-field">
+        <label for="add-date">Start date</label>
+        <input type="date" name="date" id="add-date" class="form-input" value="{{ form.date or today }}">
+        <span class="hint">Defaults to today. Edit for a real past buy date.</span>
+      </div>
+
+      <div class="form-field">
+        <label for="price">Buy price</label>
+        <div class="inline-controls" style="flex-wrap:nowrap;">
+          {% set field_id = "price" %}
+          {% set value = form.price or "" %}
+          {% include "_price_input.html" %}
+          <button type="button" class="btn btn-sm" title="Fill from our price history" hx-get="/management/quote" hx-include="closest .track-row" hx-vals='{"field_id": "price"}' hx-target="#price" hx-swap="outerHTML"><svg class="icon icon-sm"><use href="#i-refresh"/></svg>DB price</button>
+        </div>
+        <span class="hint">Suggested from our own price history for the date above — edit freely.</span>
+      </div>
+
+      <div class="form-field">
+        <label for="quantity">Quantity <span class="muted">(optional)</span></label>
+        <input type="number" step="any" min="0" name="quantity" id="quantity" class="form-input" value="{{ form.quantity or '' }}">
+      </div>
+    </div>
+
+    <div><button class="btn btn-primary" type="submit">Start tracking</button></div>
+  </div>
+</form>
+
+<div class="form-card" style="max-width:60rem;">
+  <div>
+    <h2 class="section-title">Or import from a broker statement</h2>
+    <p class="prose" style="margin-top:0.3rem;">Attach a contract note, tradebook, or holdings statement (PDF or CSV) in the assistant. It reads the file, nets your buys and sells into the correct quantity and average price per stock, and shows the result to confirm — nothing is saved until you click confirm.</p>
+  </div>
+  <div><button type="button" class="btn btn-accent" onclick="openChatForImport()"><svg class="icon icon-sm"><use href="#i-sparkle"/></svg>Import with the assistant</button></div>
+</div>
+
+<script src="/static/js/tracking.js?v={{ asset_version('js/tracking.js') }}"></script>
+{% endblock %}

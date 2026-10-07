@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Community · Storyline{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div class="page-head-main">
+    <span class="eyebrow">Community</span>
+    <h1 class="page-title">Markets, together</h1>
+    <p class="page-sub">A fresh AI briefing every morning, then the conversation: what members are watching and why.</p>
+  </div>
+</div>
+
+<script id="brief-data" type="application/json">{{ {"briefing": briefing, "dates": briefing_dates} | tojson }}</script>
+
+<section class="card brief" id="brief" aria-label="Daily market briefing">
+  <div class="brief-head">
+    <div class="brief-title">
+      <span class="bot-tag"><svg class="icon icon-sm"><use href="#i-sparkle"/></svg> AI daily briefing</span>
+      <h2 id="brief-date-label">Daily market briefing</h2>
+    </div>
+    <div class="brief-meta">
+      <label class="brief-pick" id="brief-pick" hidden><span class="sr-only">Earlier briefings</span><select id="brief-date" class="form-input"></select></label>
+      <span class="hint">Written automatically each morning · identical for everyone · can't be edited</span>
+    </div>
+  </div>
+  <div class="brief-body md clamp" id="brief-body"></div>
+  <div class="brief-foot"><button class="linklike" type="button" id="brief-more">Read the full briefing</button><span class="hint" id="brief-model"></span></div>
+</section>
+
+<section class="notes" id="notes" data-symbol="{{ filter_symbol or '' }}">
+  <div class="section-head">
+    <div>
+      <h2 class="section-title">Community notes</h2>
+      <span class="section-note">Newest conversations first · 10 at a time</span>
+    </div>
+    <div class="notes-tools">
+      {% if filter_symbol %}<a class="chip-filter" href="/community" title="Clear filter"><span>{{ filter_symbol }}</span><svg class="icon icon-sm"><use href="#i-x"/></svg></a>{% endif %}
+      <span class="me">Posting as <b id="my-name">{{ my_handle }}</b> · <button class="linklike" type="button" id="rename">change</button></span>
+    </div>
+  </div>
+
+  <form class="card composer-card" id="composer" autocomplete="off">
+    <textarea id="composer-text" rows="2" maxlength="4000" placeholder="Start a conversation — tag a stock with $MCX or $AAPL" aria-label="Start a conversation"></textarea>
+    <div class="composer-row">
+      <span class="hint">Enter to post · Shift+Enter for a new line · **bold**, `code` and links work · discussion only, not investment advice</span>
+      <button class="btn btn-primary" type="submit" id="composer-send"><svg class="icon icon-sm"><use href="#i-arrow-up"/></svg><span>Post</span></button>
+    </div>
+  </form>
+
+  <div class="new-banner" id="new-banner" hidden><button class="btn btn-sm" type="button"></button></div>
+
+  <div id="threads" class="threads"></div>
+
+  <div class="empty" id="empty" hidden>
+    <svg class="icon"><use href="#i-chat"/></svg>
+    <h3>{% if filter_symbol %}No conversations about {{ filter_symbol }} yet{% else %}No conversations yet{% endif %}</h3>
+    <p>Start the first one — what are you watching today?</p>
+  </div>
+
+  <div class="load-more-row" id="load-more-row" hidden>
+    <button class="btn" type="button" id="load-more">Load 10 more conversations</button>
+    <span class="hint" id="older-note"></span>
+  </div>
+</section>
+
+<script src="/static/js/community-page.js?v={{ asset_version('js/community-page.js') }}" defer></script>
+{% endblock %}
