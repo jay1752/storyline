@@ -115,6 +115,16 @@ CREATE TABLE IF NOT EXISTS annual_data (
     PRIMARY KEY (symbol, period_end_date)
 );
 
+CREATE TABLE IF NOT EXISTS stock_metrics (   -- one row per stock with fundamentals: powers the Analytics discovery screens and search context
+    symbol TEXT PRIMARY KEY,
+    market TEXT, name TEXT, sector TEXT, cap_tier TEXT, bank INTEGER,
+    raws TEXT,                -- JSON {rule key: the number that rule is judged on}; judged against the USER's thresholds at request time
+    roce REAL, de REAL, growth_min4 REAL, opm REAL, cfo_pat REAL,
+    sales_cagr_3y REAL, roce_3y REAL, div_payout REAL,
+    pe REAL, pe_low REAL, pe_high REAL, price REAL,
+    updated_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS institutional_holdings (
     symbol                TEXT NOT NULL REFERENCES stocks(symbol),
     period_end_date       TEXT NOT NULL,      -- 13F reporting quarter-end, e.g. "2026-06-30"

@@ -2,9 +2,9 @@
   {% for r in results %}
   <a class="stock-result" href="/analytics/{{ r.symbol }}">
     <span class="row-ticker">{{ r.symbol }}</span>
-    <span class="sr-name">{{ r.name }}</span>
+    <span class="sr-name">{{ r.name }}<small class="sr-ctx">{% if r.sector and r.sector != 'Unclassified' %}{{ r.sector }}{% endif %}{% if r.cap_tier %} · {{ r.cap_tier|capitalize }} cap{% endif %}{% if r.roce is not none %} · {{ 'ROE' if r.bank else 'ROCE' }} {{ "%.0f"|format(r.roce) }}%{% endif %}{% if r.de is not none and not r.bank %} · debt/equity {{ "%.1f"|format(r.de) }}{% endif %}</small></span>
     <span class="badge neutral">{{ r.market }}</span>
   </a>
   {% endfor %}
-  {% if not results %}<div class="stock-result-empty">No stocks with data match "{{ q }}"</div>{% endif %}
+  {% if not results %}<div class="stock-result-empty">No stocks with data match "{{ q }}". Try a company name, a ticker or a sector such as "banks".</div>{% endif %}
 {% endif %}

@@ -22,14 +22,14 @@ def search_stocks(request: Request, q: Optional[str] = None):
         with get_market_conn() as m:
             results = m.execute(
                 """
-                SELECT symbol, name, market,
-                       (SELECT COUNT(*) FROM quarterly_data qd WHERE qd.symbol = stocks.symbol) AS quarters
-                FROM stocks
-                WHERE (symbol LIKE ? OR name LIKE ?)
-                  AND EXISTS (SELECT 1 FROM quarterly_data qd WHERE qd.symbol = stocks.symbol)
-                ORDER BY (symbol LIKE ?) DESC, symbol
+                SELECT s.symbol, s.name, s.market, s.sector, s.cap_tier, sm.roce, sm.de, sm.bank,
+                       (SELECT COUNT(*) FROM quarterly_data qd WHERE qd.symbol = s.symbol) AS quarters
+                FROM stocks s LEFT JOIN stock_metrics sm ON sm.symbol = s.symbol
+                WHERE (s.symbol LIKE ? OR s.name LIKE ? OR s.sector LIKE ?)
+                  AND EXISTS (SELECT 1 FROM quarterly_data qd WHERE qd.symbol = s.symbol)
+                ORDER BY (s.symbol LIKE ?) DESC, (s.name LIKE ?) DESC, (s.market = 'IN') DESC, (s.cap_tier = 'large') DESC, (s.cap_tier = 'mid') DESC, s.symbol
                 LIMIT 12
                 """,
-                (like, like, f"%{q.strip().upper()}%"),
+                (like, like, like, f"{q.strip().upper()}%", f"{q.strip()}%"),
             ).fetchall()
     return templates.TemplateResponse("_stock_search_results.html", {"request": request, "results": results, "q": q})

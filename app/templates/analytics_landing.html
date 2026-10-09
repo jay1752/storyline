@@ -4,38 +4,65 @@
 
 <section class="hero">
   <span class="eyebrow">Analytics</span>
-  <h1 class="page-title">Find a stock, read its story</h1>
-  <p class="page-sub">A quarterly quality matrix and full fundamentals for every symbol with reported data.</p>
+  <h1 class="page-title">Find a stock worth your time</h1>
+  <p class="page-sub">Search a name or pick what you're looking for. {{ "{:,}".format(total_with_data) }} stocks with reported data, India and US.</p>
 
   <div class="hero-search">
     <svg class="icon"><use href="#i-search"/></svg>
-    <input class="hero-search-input" type="search" name="q" placeholder="Search by symbol or company name…" autocomplete="off" autofocus
+    <input class="hero-search-input" type="search" name="q" placeholder="Search by company, symbol or sector…" autocomplete="off" autofocus
            hx-get="/search-stocks" hx-trigger="keyup changed delay:250ms, search" hx-target="#hero-search-results" hx-swap="innerHTML">
     <div class="hero-search-results" id="hero-search-results"></div>
   </div>
-
-  <div class="coverage">
-    <div><b>{{ "{:,}".format(total_with_data) }}</b><span>stocks with data</span></div>
-    <div><b>IN + US</b><span>markets</span></div>
-    <div><b>⌘K</b><span>search anywhere</span></div>
-  </div>
 </section>
 
-{% if available %}
-<section class="section">
-  <div class="section-head">
-    <h2 class="section-title">Jump straight in</h2>
-    {% if request.state.is_admin %}<span class="section-note"><a href="/admin">coverage by stock in Data ingestion →</a></span>{% endif %}
+<section class="section dz">
+  <div class="section-head"><div><h2 class="section-title">What are you looking for?</h2><span class="section-note">each one is a ready-made screen, explained in plain words</span></div></div>
+  <div class="dz-chips" role="group" aria-label="Screens">
+    {% for s in screens %}<a class="dz-chip {{ 'on' if s.key == screen.key else '' }} {{ 'star' if s.star else '' }}" href="/analytics?screen={{ s.key }}&market={{ market }}">{{ s.label }}</a>{% endfor %}
   </div>
-  <div class="stock-grid">
-    {% for s in available %}
-    <a class="stock-card" href="/analytics/{{ s.symbol }}">
-      <span class="row-ticker">{{ s.symbol }}</span>
-      <span class="sc-name">{{ s.name }}</span>
-    </a>
-    {% endfor %}
+
+  <div class="card dz-card">
+    <div class="card-head">
+      <div>
+        <h3 class="card-title">{{ screen.label }}</h3>
+        <span class="section-note">{{ screen.desc }}</span>
+      </div>
+      <div class="card-tools">
+        <div class="seg" role="group" aria-label="Market">
+          {% for m, lbl in (('IN', 'India'), ('US', 'US'), ('ALL', 'Both')) %}<a class="{{ 'active' if m == market else '' }}" href="/analytics?screen={{ screen.key }}&market={{ m }}">{{ lbl }}</a>{% endfor %}
+        </div>
+      </div>
+    </div>
+    {% if result.rows %}
+    <div class="table-wrap">
+      <table class="fin ia-text dz-table">
+        <thead><tr><th>Stock</th><th>Why it's here</th><th>P/E</th><th>ROCE</th><th>Sales growth (3y)</th><th>Debt / equity</th><th></th></tr></thead>
+        <tbody>
+          {% for r in result.rows %}
+          <tr>
+            <td><a class="row-ticker" href="/analytics/{{ r.symbol }}">{{ r.name }}</a><span class="row-sub">{{ r.symbol }}{% if r.sector and r.sector != 'Unclassified' %} · {{ r.sector }}{% endif %}{% if r.cap_tier %} · {{ r.cap_tier|capitalize }}{% endif %}</span></td>
+            <td>{% if screen.key == 'rules' %}<span class="vchip {{ 'pos-chip' if not r.judge.failing else '' }}">{{ r.why }}</span>{% else %}{{ r.why }}{% endif %}</td>
+            <td>{{ "%.0f×"|format(r.pe) if r.pe else '—' }}</td>
+            <td>{{ "%.0f%%"|format(r.roce) if r.roce is not none else '—' }}{% if r.bank %}<small class="muted"> ROE</small>{% endif %}</td>
+            <td>{% if r.sales_cagr_3y is not none %}<span class="{{ 'val-pos' if r.sales_cagr_3y >= 0 else 'val-neg' }}">{{ "%+.0f%%"|format(r.sales_cagr_3y) }}</span>{% else %}—{% endif %}</td>
+            <td>{{ "%.2f"|format(r.de) if r.de is not none else '—' }}</td>
+            <td class="dz-act">{% if r.tracked %}<span class="badge pos">Tracking</span>{% else %}<button type="button" class="btn btn-sm" hx-post="/track" hx-swap="outerHTML"
+                hx-vals='{"symbol": "{{ r.symbol }}", "company_name": {{ r.name|tojson }}, "anchor_type": "watchlist"}'>Track</button>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="dz-foot"><span class="section-note">{% if result.count > result.rows|length %}Showing {{ result.rows|length }} of {{ result.count }} · {% endif %}{% if screen.key == 'rules' %}Stocks that pass every rule come first, then those that miss just one. Stocks with too little data to judge most rules are left out. {% endif %}Open any stock for its full story, or track it to watch it against your rules.</span>
+      {% if screen.key == 'rules' %}<a class="btn btn-sm btn-ghost" href="/rules">Change my rules</a>{% endif %}</div>
+    {% else %}
+    <div class="empty">
+      <svg class="icon"><use href="#i-analytics"/></svg>
+      {% if preparing %}<h3>Preparing the screens…</h3><p>The first build takes about half a minute. Refresh in a moment.</p>
+      {% else %}<h3>No matches in {{ {'IN': 'India', 'US': 'the US', 'ALL': 'either market'}[market] }}</h3><p>{% if screen.key == 'rules' %}Your rules are strict for this market. Loosen one on Investment rules, or try another screen.{% else %}Try the other market or another screen.{% endif %}</p>{% endif %}
+    </div>
+    {% endif %}
   </div>
 </section>
-{% endif %}
 
 {% endblock %}

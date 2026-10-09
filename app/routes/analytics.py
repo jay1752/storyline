@@ -13,28 +13,68 @@ from app.templates_config import templates
 router = APIRouter()
 
 
-@router.get("/analytics", response_class=HTMLResponse)
-def analytics_landing(request: Request):
-    with get_market_conn() as conn:
-        available = conn.execute(
-            """
-            SELECT s.symbol, s.name, s.market,
-                   (SELECT source FROM quarterly_data q WHERE q.symbol = s.symbol ORDER BY period_end_date DESC LIMIT 1) AS latest_source
-            FROM stocks s
-            WHERE EXISTS (SELECT 1 FROM quarterly_data q WHERE q.symbol = s.symbol)
-            ORDER BY (s.market = 'IN') DESC, (SELECT COUNT(*) FROM quarterly_data q WHERE q.symbol = s.symbol) DESC, s.symbol
-            LIMIT 24
-            """
-        ).fetchall()
-        total_with_data = conn.execute(
-            "SELECT COUNT(DISTINCT symbol) c FROM quarterly_data"
-        ).fetchone()["c"]
+_REFRESH = {"running": False}
 
+
+def _refresh_metrics_if_stale() -> None:
+    """The discovery screens read stock_metrics. Build it in the background when it is missing or older than 3 days (about 30 s)."""
+    import threading
+
+    from app import discovery
+
+    age = discovery.metrics_age_days()
+    if (age is None or age > 3) and not _REFRESH["running"]:
+        _REFRESH["running"] = True
+
+        def go():
+            try:
+                discovery.build_metrics()
+            finally:
+                _REFRESH["running"] = False
+
+        threading.Thread(target=go, daemon=True).start()
+
+
+def _why(key: str, r: dict) -> str:
+    fmt = lambda v, s="%": f"{v:.0f}{s}" if v is not None else None
+    if key == "rules":
+        j = r["judge"]
+        return f"{j['passed']} of {j['total']} rules" + (f" · misses {j['failing'][0]}" if j["failing"] else "")
+    parts = {
+        "compounders": [f"ROCE {fmt(r['roce_3y'])} avg (3y)", f"sales +{fmt(r['sales_cagr_3y'])}/yr"],
+        "growers": [f"sales up {fmt(r['growth_min4'])}+ every quarter"],
+        "debtfree": [f"debt/equity {r['de']:.2f}" if r["de"] is not None else None],
+        "cash": [f"cash flow {r['cfo_pat']:.1f}× profit" if r["cfo_pat"] is not None else None],
+        "dividend": [f"pays out {fmt(r['div_payout'])} of profit"],
+        "big": [f"{(r['cap_tier'] or '').capitalize()} cap"],
+        "cheap": [f"P/E {r['pe']:.0f}× vs its range" if r["pe"] else None],
+    }.get(key, [])
+    return " · ".join(x for x in parts if x)
+
+
+@router.get("/analytics", response_class=HTMLResponse)
+def analytics_landing(request: Request, screen: str = "rules", market: str = "IN"):
+    from app import discovery
+    from app import framework as fw
+    from app.db import get_users_conn
+
+    screen = screen if screen in discovery.SCREEN_BY_KEY else "rules"
+    market = market if market in ("IN", "US", "ALL") else "IN"
+    _refresh_metrics_if_stale()
+    with get_users_conn() as u:
+        th = fw.resolve(u, request.state.user_id)
+        tracked = {r["symbol"] for r in u.execute("SELECT symbol FROM tracked_positions WHERE user_id = ? AND status = 'active'", (request.state.user_id,))}
+    res = discovery.run_screen(screen, th, market)
+    for r in res["rows"]:
+        r["why"] = _why(screen, r)
+        r["tracked"] = r["symbol"] in tracked
+    with get_market_conn() as conn:
+        total_with_data = conn.execute("SELECT COUNT(DISTINCT symbol) c FROM quarterly_data").fetchone()["c"]
     return templates.TemplateResponse(
         "analytics_landing.html",
-        {"request": request, "active_nav": "analytics", "available": available, "total_with_data": total_with_data},
+        {"request": request, "active_nav": "analytics", "total_with_data": total_with_data, "screens": discovery.SCREENS,
+         "screen": discovery.SCREEN_BY_KEY[screen], "market": market, "result": res, "preparing": discovery.metrics_age_days() is None},
     )
-
 
 def _delta(cur, prev, unit=""):
     if cur is None or prev is None:

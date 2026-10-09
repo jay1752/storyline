@@ -97,12 +97,13 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
     bank = is_bank_or_financial(sector)
     filters: list[dict] = []
 
-    def add(rule, label, value, threshold, status, note=None):
+    def add(rule, label, value, threshold, status, note=None, raw=None):
         r = th[rule]
         if not r["enabled"]:
             status, note = "off", "switched off for this scan"
         filters.append({"key": rule, "label": label, "value": value, "threshold": threshold, "status": status, "note": note,
-                        "rule": rule, "op": r["op"], "limit": r["value"], "unit": r["unit"], "enabled": bool(r["enabled"]), "source": r["source"]})
+                        "rule": rule, "op": r["op"], "limit": r["value"], "unit": r["unit"], "enabled": bool(r["enabled"]), "source": r["source"],
+                        "raw": raw})  # raw = the number the status was judged on (None = not computable), so a screen can re-judge it against other thresholds
 
     # ROCE (ROE for banks/financials)
     rk = "roe" if bank else "roce"
@@ -110,7 +111,7 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
     v = _f(latest.get("roe_pct" if bank else "roce_pct"))
     add(rk, "ROE" if bank else "ROCE", None if v is None else f"{v:.1f}%", f"> {thr:g}%",
         "unknown" if v is None else ("pass" if v > thr else "fail"),
-        "banks/financials use ROE instead of ROCE" if bank else None)
+        "banks/financials use ROE instead of ROCE" if bank else None, raw=v)
     # Debt / equity
     de = _f(latest.get("debt_equity"))
     de_thr = th["de"]["value"]
@@ -122,15 +123,16 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
             "rule does not apply to banks/financials")
     else:
         add("de", "Debt / equity", None if de is None else f"{de:.2f}", f"< {de_thr:g}",
-            "unknown" if de is None else ("pass" if de < de_thr else "fail"))
+            "unknown" if de is None else ("pass" if de < de_thr else "fail"), raw=de)
     # Promoter pledge — the exact % where we hold it (India shareholding filings), else the pledged / no-pledge flag
     pl_thr = th["pledge"]["value"]
     pct, flag = _f(latest.get("promoter_pledge_pct")), latest.get("promoter_pledge")
     if pct is not None:
-        add("pledge", "Promoter pledge", f"{pct:.1f}%", f"< {pl_thr:g}%", "pass" if pct < pl_thr else "fail")
+        add("pledge", "Promoter pledge", f"{pct:.1f}%", f"< {pl_thr:g}%", "pass" if pct < pl_thr else "fail", raw=pct)
     else:
         add("pledge", "Promoter pledge", flag if flag else None, f"< {pl_thr:g}%", "unknown" if not flag else ("fail" if flag == "Pledged" else "pass"),
-            "only 'pledged / no pledge' is stored, not the exact %" if flag == "Pledged" else None)
+            "only 'pledged / no pledge' is stored, not the exact %" if flag == "Pledged" else None,
+            raw=(100.0 if flag == "Pledged" else (0.0 if flag else None)))
     # Sales growth, last 4 quarters
     sg = th["sales_growth"]["value"]
     growth = [_f(r.get("revenue_growth_pct")) for r in rows[-4:]]
@@ -138,13 +140,13 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
     g_status = "unknown" if not known else ("pass" if all(g > sg for g in known) else "fail")
     add("sales_growth", "Sales growth (YoY, last 4Q)",
         None if not known else " → ".join(f"{g:.0f}%" for g in known), f"> {sg:g}%", g_status,
-        None if len(known) == 4 or not known else f"only {len(known)} of 4 quarters have a YoY figure")
+        None if len(known) == 4 or not known else f"only {len(known)} of 4 quarters have a YoY figure", raw=min(known) if known else None)
     # Operating margin
     om = th["opm"]["value"]
     opm = _f(latest.get("opm_pct"))
     add("opm", "Operating margin", None if opm is None else f"{opm:.1f}%", f"> {om:g}%",
         "unknown" if opm is None else ("pass" if opm > om else "fail"),
-        "framework threshold is for high-margin businesses" if om >= 25 else None)
+        "framework threshold is for high-margin businesses" if om >= 25 else None, raw=opm)
     # Promoter holding: high and not falling by more than the tolerance
     tol = th["promoter"]["value"]
     prom = [_f(r.get("promoter_pct")) for r in rows[-5:]]
@@ -152,7 +154,7 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
     if len(prom_k) >= 2:
         chg = prom_k[-1] - prom_k[0]
         add("promoter", "Promoter holding (non-decreasing)", f"{prom_k[-1]:.1f}% ({chg:+.1f} pp)", f"falls ≤ {tol:g} pp",
-            "fail" if chg < -tol else "pass")
+            "fail" if chg < -tol else "pass", raw=chg)
     else:
         add("promoter", "Promoter holding (non-decreasing)", None if not prom_k else f"{prom_k[-1]:.1f}%", f"falls ≤ {tol:g} pp", "unknown")
     # ---- Coverage, liquidity and cash conversion (inputs stored by the SEC and BSE ingestion; see quarterly_data) ----
@@ -178,11 +180,11 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
         else:
             pbt, fc = sum(p for p, _ in use), sum(f for _, f in use)
             if fc <= 0:
-                add("interest_cover", "Interest coverage", "no interest cost", f"> {ic_thr:g}×", "pass")
+                add("interest_cover", "Interest coverage", "no interest cost", f"> {ic_thr:g}×", "pass", raw=1e9)
             else:
                 cov = (pbt + fc) / fc
                 add("interest_cover", "Interest coverage", ratio(cov), f"> {ic_thr:g}×", "pass" if cov > ic_thr else "fail",
-                    None if full else "latest quarter only (fewer than 4 quarters of interest data)")
+                    None if full else "latest quarter only (fewer than 4 quarters of interest data)", raw=cov)
 
     # Current / quick ratio from the most recent balance sheet we hold (India: latest fiscal year-end; US: every quarter)
     bs = next((r for r in reversed(rows[-8:]) if _f(r.get("current_assets_cr")) is not None and _f(r.get("current_liabilities_cr"))), None)
@@ -196,7 +198,7 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
             ca, cl, inv = _f(bs["current_assets_cr"]), _f(bs["current_liabilities_cr"]), _f(bs.get("inventory_cr"))
             val = (ca - (inv or 0)) / cl if qk else ca / cl
             note = f"balance sheet as of {bs['period_end_date']}" + ("; no inventory reported, treated as nil" if qk and inv is None else "")
-            add(rule, label, ratio(val), f"> {thr_v:g}×", "pass" if val > thr_v else "fail", note)
+            add(rule, label, ratio(val), f"> {thr_v:g}×", "pass" if val > thr_v else "fail", note, raw=val)
 
     # Operating cash flow / net profit over the last 4 quarters
     cf_thr = th["cfo_pat"]["value"]
@@ -208,7 +210,7 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
         tot_np = sum(npf)
         if tot_np > 0:
             val = sum(cf) / tot_np
-            add("cfo_pat", "Operating cash flow ÷ profit", ratio(val), f"> {cf_thr:g}×", "pass" if val > cf_thr else "fail")
+            add("cfo_pat", "Operating cash flow ÷ profit", ratio(val), f"> {cf_thr:g}×", "pass" if val > cf_thr else "fail", raw=val)
         else:
             add("cfo_pat", "Operating cash flow ÷ profit", None, f"> {cf_thr:g}×", "unknown", "net profit over the last 4 quarters isn't positive")
     elif (fy := next((a for a in reversed(annual or []) if _f(a.get("cfo_cr")) is not None and _f(a.get("net_profit_cr")) is not None), None)) is not None:
@@ -216,7 +218,7 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
         if np_fy > 0:
             val = _f(fy.get("cfo_cr")) / np_fy
             add("cfo_pat", "Operating cash flow ÷ profit", ratio(val), f"> {cf_thr:g}×", "pass" if val > cf_thr else "fail",
-                f"fiscal year ended {fy['period_end_date']} (annual; cash flow isn't reported quarterly)")
+                f"fiscal year ended {fy['period_end_date']} (annual; cash flow isn't reported quarterly)", raw=val)
         else:
             add("cfo_pat", "Operating cash flow ÷ profit", None, f"> {cf_thr:g}×", "unknown", f"net profit for the year ended {fy['period_end_date']} isn't positive")
     else:

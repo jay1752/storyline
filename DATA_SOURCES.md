@@ -134,6 +134,10 @@ SQLite runs with a rollback journal (not WAL) and **one writer at a time**: run 
 
 Tracked positions, anchors, snapshots, rules overrides, profile, community posts, import staging, and the user's own AI provider keys (Fernet-encrypted with `APP_MASTER_KEY`) live in `users.db`. Broker statements are parsed in-app (ISIN-first matching, price-consistency check against the trade-date close). The AI providers are bring-your-own-key; no market data comes from them.
 
+### 3.9 Discovery (derived, no external source)
+
+`stock_metrics` (market.db) holds one row per stock with fundamentals (11,047): the number behind each Investment rule plus P/E, 3-year sales CAGR, 3-year average ROCE, dividend payout and cash conversion. It is computed by `app.discovery.build_metrics()` with the same `evaluate_framework` the story page uses (verified identical on 400 stocks, default and custom thresholds), takes about 30 seconds, and rebuilds itself in the background when older than 3 days. The Analytics landing screens ("Passes your rules", Steady compounders, Fast growers, Debt-free, Cash-rich, Dividend payers, Big and stable, Cheap vs own history) judge these numbers against the signed-in user's own thresholds at request time.
+
 ---
 
 ## 4. Refresh
