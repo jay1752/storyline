@@ -113,6 +113,14 @@
   <div class="page-actions">
     <a class="btn" href="/analytics/{{ pos.symbol }}"><svg class="icon icon-sm"><use href="#i-analytics"/></svg>Fundamentals</a>
     {% if pos.status == 'active' %}
+    <label class="story-mode" title="Whether this stock's story runs automatically each morning. It follows your Investment rules unless you choose here.">
+      <span>Daily story</span>
+      <select class="form-input" id="story-mode" data-id="{{ pos.id }}" aria-label="Daily story for this stock">
+        <option value="" {{ 'selected' if story_over is none else '' }}>Follow my rules ({{ story_default }})</option>
+        <option value="1" {{ 'selected' if story_over == 1 else '' }}>Always run</option>
+        <option value="0" {{ 'selected' if story_over == 0 else '' }}>Never run</option>
+      </select>
+    </label>
     <button class="btn btn-primary" type="button" id="run-btn" data-id="{{ pos.id }}" data-running="{{ 1 if running else 0 }}"><svg class="icon icon-sm"><use href="#i-refresh"/></svg><span>{{ 'Run analysis again' if latest else 'Run analysis now' }}</span></button>
     {% endif %}
   </div>

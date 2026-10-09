@@ -25,12 +25,42 @@
   </table>
 </div>
 {% endmacro %}
+{% macro story_table(rows, scope) %}
+<div class="table-wrap">
+  <table class="fin rules-table" data-scope="{{ scope }}">
+    <thead><tr><th>Setting</th><th>Value</th><th>Where it comes from</th><th></th></tr></thead>
+    <tbody>
+      {% for d in story_defs %}{% set r = rows[d.key] %}
+      <tr data-key="{{ d.key }}" data-base="{{ r.reset_value }}">
+        <td>{{ d.label }}<span class="row-sub">{{ d.note }}</span></td>
+        <td class="rule-edit">
+          {% if d.kind == 'choice' %}
+          <select class="form-input rule-val" aria-label="{{ d.label }}">{% for v, lbl in d.choices %}<option value="{{ v }}" {{ 'selected' if v == r.value|int else '' }}>{{ lbl }}</option>{% endfor %}</select>
+          {% else %}
+          <input type="number" class="form-input rule-val" step="1" value="{{ '%g' % r.value }}" aria-label="{{ d.label }}"> <span class="rule-unit">{{ d.unit }}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if r.customised %}<span class="badge accent">{{ 'Your setting' if scope == 'user' else 'Platform setting' }}</span>
+          {% else %}<span class="badge neutral">{{ {'built-in': 'Built-in default', 'platform': 'Platform default', 'user': 'Your default'}[r.source] }}</span>{% endif %}
+        </td>
+        <td class="rule-actions">
+          <button type="button" class="btn btn-sm btn-primary rule-save" disabled>Save</button>
+          <button type="button" class="btn btn-sm rule-reset" {{ '' if r.customised else 'disabled' }} title="Back to {{ 'the platform default' if scope == 'user' else 'the built-in default' }}">↺ Reset</button>
+          <span class="rule-msg" role="status"></span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}
 {% block content %}
 <div class="page-head">
   <div class="page-head-main">
     <span class="eyebrow">System</span>
     <h1 class="page-title">Investment rules</h1>
-    <p class="page-sub">The thresholds behind the Fundamentals scan on every stock's story page. They apply in three layers: the <b>platform</b> default, <b>your</b> defaults, and an override for a <b>single stock</b>. Anything you don't change inherits from the layer above, and ↺ Reset sends it back.</p>
+    <p class="page-sub">The thresholds behind the Fundamentals scan on every stock's story page, and which of your stocks get a story automatically each day. They apply in three layers: the <b>platform</b> default, <b>your</b> defaults, and an override for a <b>single stock</b>. Anything you don't change inherits from the layer above, and ↺ Reset sends it back.</p>
   </div>
 </div>
 
@@ -40,6 +70,13 @@
     <button type="button" class="btn btn-sm" id="reset-all-user">↺ Reset all to the platform defaults</button>
   </div>
   {{ rule_table(mine, 'user') }}
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <div><h2 class="section-title">Daily story</h2><span class="section-note">which of your tracked stocks get an AI story every morning · you can also switch one stock on or off from its own story page</span></div>
+  </div>
+  {{ story_table(story_mine, 'user') }}
 </section>
 
 <section class="section">
@@ -58,6 +95,13 @@
     <button type="button" class="btn btn-sm" id="reset-all-platform">↺ Reset all to built-in</button>
   </div>
   {{ rule_table(platform, 'platform') }}
+</section>
+{% endif %}
+
+{% if story_platform %}
+<section class="section">
+  <div class="section-head"><div><h2 class="section-title">Platform daily story <span class="badge accent">admin</span></h2><span class="section-note">the default for every user until they set their own</span></div></div>
+  {{ story_table(story_platform, 'platform') }}
 </section>
 {% endif %}
 

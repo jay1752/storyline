@@ -113,3 +113,21 @@
     });
   });
 })();
+
+// Per-stock daily story switch: "Follow my rules" (no override) / Always run / Never run
+(function () {
+  const sel = document.getElementById("story-mode");
+  if (!sel) return;
+  sel.addEventListener("change", async () => {
+    const v = sel.value;
+    try {
+      const r = await fetch("/management/" + sel.dataset.id + "/rules/" + (v === "" ? "reset" : "save"), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(v === "" ? { key: "story_stock" } : { key: "story_stock", value: Number(v), enabled: true }),
+      });
+      if (!r.ok) { const o = await r.json().catch(() => ({})); throw new Error(o.error || "Couldn't save that."); }
+      sel.classList.add("saved");
+      setTimeout(() => sel.classList.remove("saved"), 900);
+    } catch (e) { alert(e.message); location.reload(); }
+  });
+})();

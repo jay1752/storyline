@@ -42,7 +42,7 @@ JOBS = {
     },
     "insights": {
         "label": "Daily stock analysis", "source": "insights", "hm": 8 * 60 + 30, "days": ALL_DAYS,
-        "desc": "Each user's per-stock story and flags (users with tracked stocks, a usable AI model, and automatic analysis on).",
+        "desc": "Each user's per-stock story and flags (users with tracked stocks, a usable AI model, and automatic analysis on). Which stocks run follows each user's Investment rules: platform default, own setting, per-stock switch.",
     },
 }
 

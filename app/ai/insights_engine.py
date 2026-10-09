@@ -513,14 +513,22 @@ def _analyse(user_id: int, position_id: int, trigger: str) -> None:
 # ---------------------------------------------------------------------------- batch (daily job / "analyse all")
 
 def run_insights_for_user(user_id: int, progress=None, trigger: str = "daily", skip_fresh_hours: int = 18) -> int:
-    """Analyse every active tracked stock of one user, one after another. Stocks analysed within `skip_fresh_hours`
+    """Analyse the active tracked stocks of one user, one after another: every stock for a manual run, the stocks the user's Investment
+    rules select (scope, per-stock switch, daily cap) for the daily run. Stocks analysed within `skip_fresh_hours`
     are skipped, so a re-run after a partial day only does what is left. Stops early (without error) when every model
     is out of quota — remaining stocks are picked up by the next run. Returns how many analyses were written."""
     current_user_id.set(user_id)
+    with get_users_conn() as u:
+        positions = u.execute("SELECT id, symbol, anchor_type FROM tracked_positions WHERE user_id = ? AND status = 'active' ORDER BY anchor_type, symbol", (user_id,)).fetchall()
+        if trigger == "daily":  # the automatic run follows the user's Investment rules (platform default, own override, per-stock switch)
+            plan = framework_rules.story_plan(u, user_id)
+            positions = framework_rules.story_select(plan, positions)
+            skip_fresh_hours = plan["fresh"]
+    if trigger == "daily" and not positions:
+        return 0
     if not build_chain(user_id):
         raise AnalysisError("No usable AI model: add an API key in AI settings first.")
     with get_users_conn() as u:
-        positions = u.execute("SELECT id FROM tracked_positions WHERE user_id = ? AND status = 'active' ORDER BY anchor_type, symbol", (user_id,)).fetchall()
         fresh_cut = (datetime.now(timezone.utc) - timedelta(hours=skip_fresh_hours)).strftime("%Y-%m-%d %H:%M:%S")
         fresh = {r["position_id"] for r in u.execute(
             "SELECT DISTINCT position_id FROM position_snapshots WHERE analysis_json IS NOT NULL AND checked_at > ?", (fresh_cut,))}

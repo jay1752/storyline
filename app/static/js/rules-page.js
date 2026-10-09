@@ -14,14 +14,15 @@
     table.querySelectorAll("tbody tr").forEach((row) => {
       const val = row.querySelector(".rule-val"), on = row.querySelector(".rule-on");
       const save = row.querySelector(".rule-save"), reset = row.querySelector(".rule-reset"), msg = row.querySelector(".rule-msg");
-      const startVal = val.value, startOn = on.checked;
+      const startVal = val.value, startOn = on ? on.checked : true;  // daily-story rows have no On switch
       const say = (t, bad) => { msg.textContent = t || ""; msg.classList.toggle("bad", !!bad); };
-      const changed = () => { save.disabled = val.value === startVal && on.checked === startOn; say(""); };
+      const changed = () => { save.disabled = val.value === startVal && (on ? on.checked : true) === startOn; say(""); };
       val.addEventListener("input", changed);
-      on.addEventListener("change", changed);
+      val.addEventListener("change", changed);  // <select>
+      if (on) on.addEventListener("change", changed);
       save.addEventListener("click", async () => {
         save.disabled = true;
-        try { await post("/rules/save", { scope, key: row.dataset.key, value: val.value, enabled: on.checked }); location.reload(); }
+        try { await post("/rules/save", { scope, key: row.dataset.key, value: val.value, enabled: on ? on.checked : true }); location.reload(); }
         catch (e) { say(e.message, true); save.disabled = false; }
       });
       reset.addEventListener("click", async () => {

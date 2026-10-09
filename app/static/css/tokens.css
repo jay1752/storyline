@@ -1515,3 +1515,9 @@ html[data-perf="annual"] [data-pane="quarterly"], html[data-perf="quarterly"] [d
 .vchip.warn { background: var(--badge-accent-bg); color: var(--accent); }
 .vlink { font-size: 0.78rem; margin-left: 0.4rem; }
 @media (max-width: 720px) { .viewbar-presets { width: 100%; } }
+
+/* ---- daily story switch on a stock's story page ---- */
+.story-mode { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.78rem; color: var(--muted); }
+.story-mode select { width: auto; min-width: 11rem; }
+.story-mode select.saved { border-color: var(--pos); }
+.rule-edit select.rule-val { width: auto; min-width: 16rem; }

@@ -35,6 +35,20 @@ DEFS = [
 BY_KEY = {d["key"]: d for d in DEFS}
 SCOPES = ("platform", "user", "stock")
 
+# Daily story settings: same layering and storage as the scan rules (framework_overrides), kept in their own list so the Fundamentals
+# scan never sees them. `story_stock` is the per-stock switch (no default row = follow the user's scope): 1 = always run, 0 = never.
+STORY_DEFS = [
+    {"key": "story_scope", "label": "Daily story runs for", "kind": "choice", "default": 2, "lo": 0, "hi": 2,
+     "choices": [(0, "No stocks (I run it myself)"), (1, "My positions only"), (2, "Positions and watchlist")],
+     "note": "which of your tracked stocks get an AI story automatically each morning"},
+    {"key": "story_max", "label": "Stocks per daily run", "kind": "number", "default": 50, "unit": "stocks", "lo": 1, "hi": 500,
+     "note": "upper limit, positions first; the rest wait for the next day. Keeps AI usage predictable"},
+    {"key": "story_fresh", "label": "Skip a stock analysed within", "kind": "number", "default": 18, "unit": "hours", "lo": 1, "hi": 168,
+     "note": "avoids re-running a story that is still fresh"},
+]
+STORY_BY_KEY = {d["key"]: d for d in STORY_DEFS}
+STORY_STOCK_KEY = "story_stock"
+
 
 def _blank() -> dict:
     return {d["key"]: {**d, "value": d["default"], "enabled": True, "source": "built-in"} for d in DEFS}
@@ -91,7 +105,7 @@ class RuleError(ValueError):
 
 
 def validate(key: str, value) -> float:
-    d = BY_KEY.get(key)
+    d = BY_KEY.get(key) or STORY_BY_KEY.get(key) or ({"key": key, "label": "Daily story", "lo": 0, "hi": 1} if key == STORY_STOCK_KEY else None)
     if not d:
         raise RuleError("Unknown rule.")
     try:
@@ -108,9 +122,14 @@ def save(u, scope: str, user_id: int, symbol: str, key: str, value, enabled: boo
         raise RuleError("Unknown scope.")
     v = validate(key, value)
     uid, sym = (0 if scope == "platform" else user_id), (symbol if scope == "stock" else "")
-    base = _blank() if scope == "platform" else (resolve_platform(u) if scope == "user" else resolve(u, user_id, None))
+    if key in STORY_BY_KEY:
+        base = _story_blank() if scope == "platform" else story_resolve(u, user_id if scope == "stock" else 0, None, platform_only=(scope == "user"))
+    elif key == STORY_STOCK_KEY:
+        base = {key: {"value": None, "enabled": True}}  # no layer below: "follow my default" is the absence of a row
+    else:
+        base = _blank() if scope == "platform" else (resolve_platform(u) if scope == "user" else resolve(u, user_id, None))
     # saving exactly what the layer below already says is not a customisation — drop any override instead
-    if abs(base[key]["value"] - v) < 1e-9 and bool(enabled) == base[key]["enabled"]:
+    if base[key]["value"] is not None and abs(base[key]["value"] - v) < 1e-9 and bool(enabled) == base[key]["enabled"]:
         u.execute("DELETE FROM framework_overrides WHERE scope=? AND user_id=? AND symbol=? AND key=?", (scope, uid, sym, key))
         return
     u.execute(
@@ -132,3 +151,57 @@ def stocks_with_overrides(u, user_id: int) -> list[dict]:
     return [dict(r) for r in u.execute(
         "SELECT o.symbol, COUNT(*) n, s.name FROM framework_overrides o LEFT JOIN market.stocks s ON s.symbol = o.symbol "
         "WHERE o.scope='stock' AND o.user_id=? GROUP BY o.symbol ORDER BY o.symbol", (user_id,))]
+
+
+# ---------------------------------------------------------------------------- daily story
+
+def _story_blank() -> dict:
+    return {d["key"]: {**d, "value": d["default"], "enabled": True, "source": "built-in"} for d in STORY_DEFS}
+
+
+def story_resolve(u, user_id: int | None, symbol: str | None = None, platform_only: bool = False) -> dict:
+    """Effective daily-story settings: built-in < platform < the user's own. (`platform_only` = what a user reset falls back to.)"""
+    out = _story_blank()
+    rows = u.execute("SELECT scope, key, value, enabled FROM framework_overrides WHERE scope = 'platform' "
+                     "OR (scope = 'user' AND user_id = ?)", (user_id or 0,)).fetchall()
+    for scope in ("platform",) if platform_only else ("platform", "user"):
+        _apply(out, rows, scope)
+    return out
+
+
+def story_layers(u, user_id: int) -> dict:
+    eff = story_resolve(u, user_id)
+    parent = story_resolve(u, user_id, platform_only=True)
+    return {k: {**v, "reset_value": parent[k]["value"], "reset_enabled": True, "reset_source": parent[k]["source"], "customised": v["source"] == "user"}
+            for k, v in eff.items()}
+
+
+def story_platform_layers(u) -> dict:
+    eff = story_resolve(u, 0, platform_only=True)
+    return {k: {**v, "reset_value": STORY_BY_KEY[k]["default"], "reset_enabled": True, "reset_source": "built-in", "customised": v["source"] == "platform"}
+            for k, v in eff.items()}
+
+
+def story_stock_override(u, user_id: int, symbol: str):
+    """1 = always run this stock's daily story, 0 = never, None = follow the user's setting."""
+    r = u.execute("SELECT value FROM framework_overrides WHERE scope='stock' AND user_id=? AND symbol=? AND key=?", (user_id, symbol, STORY_STOCK_KEY)).fetchone()
+    return None if r is None else int(r["value"])
+
+
+def story_plan(u, user_id: int) -> dict:
+    s = story_resolve(u, user_id)
+    over = {r["symbol"]: int(r["value"]) for r in u.execute(
+        "SELECT symbol, value FROM framework_overrides WHERE scope='stock' AND user_id=? AND key=?", (user_id, STORY_STOCK_KEY))}
+    return {"scope": int(s["story_scope"]["value"]), "max": int(s["story_max"]["value"]), "fresh": int(s["story_fresh"]["value"]), "over": over}
+
+
+def story_select(plan: dict, positions) -> list:
+    """Tracked stocks (rows with symbol + anchor_type, positions listed before watchlist) whose daily story should run, capped at plan['max']."""
+    chosen = []
+    for p in positions:
+        o = plan["over"].get(p["symbol"])
+        if o == 0:
+            continue
+        if o == 1 or plan["scope"] == 2 or (plan["scope"] == 1 and p["anchor_type"] == "position"):
+            chosen.append(p)
+    return chosen[: plan["max"]]

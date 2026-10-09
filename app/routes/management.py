@@ -145,6 +145,8 @@ def management_story(request: Request, position_id: int, all: int = 0):
         run = u.execute("SELECT * FROM insight_runs WHERE position_id = ? ORDER BY id DESC LIMIT 1", (position_id,)).fetchone()
         scan = live_scan(u, user_id, pos["symbol"])           # recomputed now, from the user's current rules
         rule_layers = fw.layers(u, user_id, pos["symbol"])
+        story_over = fw.story_stock_override(u, user_id, pos["symbol"])
+        story_scope = fw.story_layers(u, user_id)["story_scope"]
     more = len(snaps) > limit
     snaps = snaps[:limit]
     entries, analysed = [], []
@@ -173,6 +175,7 @@ def management_story(request: Request, position_id: int, all: int = 0):
             "saved": request.query_params.get("saved"),
             "latest": latest, "history": [e for e in entries if e is not latest and (e["analysis"] or (e["legacy"] and not e["legacy"][0].startswith("Just added")))],
             "scan": scan, "rule_layers": rule_layers,
+            "story_over": story_over, "story_default": dict(fw.STORY_BY_KEY["story_scope"]["choices"]).get(int(story_scope["value"]), ""),
             "run": run, "running": bool(run and run["status"] in ("queued", "running")),
             "total_entries": total, "more": more,
         },

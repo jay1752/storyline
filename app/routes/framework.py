@@ -23,8 +23,11 @@ def rules_page(request: Request):
         mine = fw.layers(u, user_id)
         platform = fw.platform_layers(u) if request.state.is_admin else None
         stocks = fw.stocks_with_overrides(u, user_id)
+        story_mine = fw.story_layers(u, user_id)
+        story_platform = fw.story_platform_layers(u) if request.state.is_admin else None
     return templates.TemplateResponse("rules.html", {
-        "request": request, "active_nav": "rules", "defs": fw.DEFS, "mine": mine, "platform": platform, "stocks": stocks})
+        "request": request, "active_nav": "rules", "defs": fw.DEFS, "mine": mine, "platform": platform, "stocks": stocks,
+        "story_defs": fw.STORY_DEFS, "story_mine": story_mine, "story_platform": story_platform})
 
 
 async def _payload(request: Request) -> dict:
