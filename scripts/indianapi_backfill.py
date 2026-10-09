@@ -133,7 +133,11 @@ def identity_ok(t: str, m: sqlite3.Connection):
     q = json.loads(p.read_text()).get("quarter_results") or {}
     sales = q.get("Sales") or q.get("Revenue") or {}
     abbr = {mn: i for i, mn in enumerate(calendar.month_abbr) if mn}
-    ours = {r[0]: r[1] for r in m.execute("SELECT period_end_date, revenue_cr FROM quarterly_data WHERE symbol=? AND source='bse'", (f"NSE:{t}",))}
+    ours = {r[0]: r[1] for r in m.execute("SELECT period_end_date, revenue_cr FROM quarterly_data WHERE symbol=? AND source IN ('bse','nse')", (f"NSE:{t}",))}
+    try:  # rows already replaced by IndianAPI: compare against the archived BSE originals
+        ours.update({r[0]: r[1] for r in m.execute("SELECT period_end_date, revenue_cr FROM quarterly_data_original WHERE symbol=? AND quarter_label LIKE 'Q ending%'", (f"NSE:{t}",))})
+    except sqlite3.OperationalError:
+        pass
     diffs = []
     for lab, v in sales.items():
         try:

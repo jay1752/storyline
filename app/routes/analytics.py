@@ -300,6 +300,28 @@ def _balance_table(period_rows, money_unit, eps_unit, bank=False):
     return {"columns": [_period_label(r["period_end_date"], r["quarter_label"]) for r in cols], "ends": [r["period_end_date"] for r in cols], "rows": rows}
 
 
+_ANNUAL_BS = [
+    ("Equity capital", "equity_capital_cr", _money, "money"), ("Reserves", "reserves_cr", _money, "money"), ("Borrowings", "borrowings_cr", _money, "money"),
+    ("Other liabilities", "other_liabilities_cr", _money, "money"), ("Total liabilities", "total_liabilities_cr", _money, "money"),
+    ("Fixed assets", "fixed_assets_cr", _money, "money"), ("Capital work in progress", "cwip_cr", _money, "money"), ("Investments", "investments_cr", _money, "money"),
+    ("Other assets", "other_assets_cr", _money, "money"), ("Total assets", "total_assets_cr", _money, "money"),
+    ("ROCE", "roce_pct", _pct1, "%"), ("Debtor days", "debtor_days", _int, "days"), ("Inventory days", "inventory_days", _int, "days"),
+    ("Days payable", "days_payable", _int, "days"), ("Cash conversion cycle", "cash_conversion_cycle", _int, "days"), ("Working capital days", "working_capital_days", _int, "days"),
+    ("Dividend payout", "dividend_payout_pct", _pct1, "%"),
+]
+
+
+def _annual_balance_table(annual_rows, money_unit):
+    """Fiscal-year balance sheet and efficiency ratios (IndianAPI annual statements). Only years/rows that have a value."""
+    g = lambda r, k: r[k] if k in r.keys() else None  # older MoneyControl annual rows (sqlite Rows) have none of these columns
+    cols = [r for r in annual_rows if any(g(r, k) is not None for _, k, _, _ in _ANNUAL_BS)]
+    if not cols:
+        return None
+    unit = {"money": money_unit, "%": "%", "days": "days"}
+    rows = [x for x in (_row(lbl, [g(r, k) for r in cols], fmt, unit[u], spark=False) for lbl, k, fmt, u in _ANNUAL_BS) if x]
+    return {"columns": [_period_label(r["period_end_date"], r["quarter_label"]) for r in cols], "ends": [r["period_end_date"] for r in cols], "rows": rows} if rows else None
+
+
 def _ownership_table(quarter_rows):
     def pct(v):
         return None if v is None else f"{v:,.2f}%"
@@ -825,10 +847,15 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
         "quarterly": _pl_table(q_window, quarter_all, money_unit, eps_unit, with_qoq=True, bank=bank) if q_window else None,
         "annual": _pl_table(annual_all[-12:], annual_all, money_unit, eps_unit, with_qoq=False, bank=bank) if annual_all else None,
         "balance": _balance_table(all_rows[-14:], money_unit, eps_unit, bank=bank),
+        "annual_balance": _annual_balance_table(annual_all[-10:], money_unit) if stock["market"] == "IN" else None,
         "ownership": _ownership_table(q_window) if q_window else None,
     }
 
     # The explorer gets the whole stored history, not just the window the page tables show.
+    from app.ia_panels import analyst_panel, company_panel  # IndianAPI consensus + company panels (None when not loaded)
+    last_px = price_summary["last"] if price_summary else None
+    ia_analyst = analyst_panel(stock["symbol"], last_px) if stock["market"] == "IN" else None
+    ia_company = company_panel(stock["symbol"]) if stock["market"] == "IN" else None
     full_q = _pl_table(quarter_all, quarter_all, money_unit, eps_unit, with_qoq=True, bank=bank) if quarter_all else None
     full_a = _pl_table(annual_all, annual_all, money_unit, eps_unit, with_qoq=False, bank=bank) if annual_all else None
 
@@ -874,6 +901,8 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
             "has_ratios": has_ratios,
             "kpis": kpis,
             "raw": raw,
+            "ia_analyst": ia_analyst,
+            "ia_company": ia_company,
             "explorer": explorer,
             "n_quarters": len([r for r in all_rows if not _is_annual(r)]),
             "n_annual": len(annual_all),

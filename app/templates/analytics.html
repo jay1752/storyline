@@ -42,10 +42,13 @@
 
 <nav class="subnav" id="subnav" aria-label="On this page">
   <a href="#overview" class="active">Overview</a>
+  {% if ia_analyst %}<a href="#analysts">Analyst view</a>{% endif %}
   {% if raw.quarterly %}<a href="#quarterly">Quarterly</a>{% endif %}
   {% if raw.annual %}<a href="#annual">Annual</a>{% endif %}
   {% if raw.balance %}<a href="#balance">Balance sheet</a>{% endif %}
+  {% if raw.annual_balance %}<a href="#annual-balance">Annual balance sheet</a>{% endif %}
   {% if raw.ownership or matrix.institutional_holders is not none %}<a href="#ownership">Ownership</a>{% endif %}
+  {% if ia_company %}<a href="#company">Company</a>{% endif %}
   <a href="#lens">Quality lens</a>
 </nav>
 
@@ -85,6 +88,83 @@
   </div>
 </section>
 
+{% if ia_analyst %}
+{% set A = ia_analyst %}
+{% set cur = price_summary.currency if price_summary else '₹' %}
+<section class="section" id="analysts">
+  <div class="section-head"><div><h2 class="section-title">Analyst view</h2><span class="section-note">Consensus via IndianAPI · analyst-basis figures (exclude one-offs) · indicative, not filed results</span></div></div>
+  <div class="kpi-grid">
+    {% if A.target %}
+    <div class="kpi"><span class="kpi-label">Mean target</span><span class="kpi-value">{{ cur }}{{ "{:,.0f}".format(A.target.mean) }}</span><span class="kpi-sub">{{ A.target.n }} analysts · {{ "{:,.0f}".format(A.target.low) }}–{{ "{:,.0f}".format(A.target.high) }}</span></div>
+    {% if A.target.upside is not none %}<div class="kpi"><span class="kpi-label">Upside to mean</span><span class="kpi-value {{ 'pos' if A.target.upside >= 0 else 'neg' }}">{{ "%+.1f"|format(A.target.upside) }}%</span><span class="kpi-sub">vs last price</span></div>{% endif %}
+    {% if A.target.drift is not none %}<div class="kpi"><span class="kpi-label">Target drift</span><span class="kpi-value {{ 'pos' if A.target.drift >= 0 else 'neg' }}">{{ "%+.1f"|format(A.target.drift) }}%</span><span class="kpi-sub">since {{ A.target.trend[0].label }}</span></div>{% endif %}
+    {% endif %}
+    {% if A.recos %}<div class="kpi"><span class="kpi-label">Consensus rating</span><span class="kpi-value">{{ A.recos.label }}</span><span class="kpi-sub">{{ A.recos.n }} analysts · {{ A.recos.avg }} (1 = Strong Buy, 5 = Strong Sell)</span></div>{% endif %}
+    {% if A.risk %}<div class="kpi"><span class="kpi-label">Risk profile</span><span class="kpi-value" style="font-size:1.15rem">{{ A.risk.label }}</span><span class="kpi-sub">std dev {{ A.risk.std }}</span></div>{% endif %}
+  </div>
+
+  <div class="ia-grid">
+    {% if A.target or A.recos %}
+    <div class="card">
+      <div class="card-head"><h3 class="card-title">Target range &amp; ratings</h3></div>
+      <div class="card-body">
+        {% if A.target %}
+        <div class="ia-range" aria-label="Analyst target range">
+          <div class="ia-track"></div>
+          {% if A.target.price_pos is not none %}<span class="ia-mark price" style="left:{{ A.target.price_pos }}%"><i></i><b>{{ 'Price (outside range)' if A.target.price_out else 'Price' }}</b></span>{% endif %}
+          <span class="ia-mark mean" style="left:{{ A.target.mean_pos }}%"><i></i><b>Mean</b></span>
+          <div class="ia-ends"><span>Low {{ "{:,.0f}".format(A.target.low) }}</span><span>High {{ "{:,.0f}".format(A.target.high) }}</span></div>
+        </div>
+        {% if A.target.trend|length > 1 %}
+        <div class="ia-trend"><span class="section-note">Mean target</span>
+          {% for t in A.target.trend %}<span class="ia-trend-pt"><em>{{ t.label }}</em> {{ "{:,.0f}".format(t.mean) }}</span>{% endfor %}
+          <span class="ia-trend-pt"><em>now</em> <b>{{ "{:,.0f}".format(A.target.mean) }}</b></span>
+        </div>
+        {% endif %}
+        {% endif %}
+        {% if A.recos %}
+        <div class="ia-recos" role="img" aria-label="Analyst ratings split">
+          {% for b in A.recos.bars %}{% if b.n %}<span style="width:{{ b.pct }}%;background:{{ b.color }}" title="{{ b.name }}: {{ b.n }}"></span>{% endif %}{% endfor %}
+        </div>
+        <div class="ia-legend">{% for b in A.recos.bars %}<span><i style="background:{{ b.color }}"></i>{{ b.name }} <b>{{ b.n }}</b></span>{% endfor %}</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if A.estimates %}
+    <div class="card">
+      <div class="card-head"><h3 class="card-title">Consensus estimates</h3><span class="section-note">mean · analysts · range</span></div>
+      <div class="table-wrap"><table class="fin ia-est">
+        <thead><tr><th>Metric</th>{% for c in A.estimates.columns %}<th>{{ c }}E</th>{% endfor %}</tr></thead>
+        <tbody>{% for r in A.estimates.rows %}
+          <tr><td>{{ r.label }}<span class="row-sub">{{ r.unit }}</span></td>
+          {% for c in r.cells %}<td>{% if c %}<b>{{ c.v }}</b><small>{{ c.sub }}</small>{% else %}<span class="stub">—</span>{% endif %}</td>{% endfor %}</tr>
+        {% endfor %}</tbody>
+      </table></div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if A.nextq or A.surprises %}
+  <div class="ia-grid">
+    {% if A.nextq %}
+    <div class="card"><div class="card-head"><h3 class="card-title">Next quarters · EPS consensus</h3><span class="section-note">₹ per share</span></div>
+      <div class="table-wrap"><table class="fin"><thead><tr><th>Quarter</th><th>Mean</th><th>Analysts</th><th>Range</th></tr></thead><tbody>
+        {% for q in A.nextq %}<tr><td>{{ q.label }}</td><td><b>{{ q.v }}</b></td><td>{{ q.n }}</td><td>{{ "%.2f"|format(q.lo) }}–{{ "%.2f"|format(q.hi) }}</td></tr>{% endfor %}
+      </tbody></table></div></div>
+    {% endif %}
+    {% if A.surprises %}
+    <div class="card"><div class="card-head"><h3 class="card-title">Reported vs consensus · EPS</h3><span class="section-note">surprise = reported vs mean estimate</span></div>
+      <div class="table-wrap"><table class="fin"><thead><tr><th>Quarter</th><th>Reported</th><th>Surprise</th></tr></thead><tbody>
+        {% for s in A.surprises %}<tr><td>{{ s.label }}</td><td>{{ "%.2f"|format(s.actual) }}</td><td><span class="{{ 'val-pos' if s.surprise >= 0 else 'val-neg' }}">{{ "%+.1f"|format(s.surprise) }}%</span></td></tr>{% endfor %}
+      </tbody></table></div></div>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
 {% if raw.quarterly %}
 <section class="section" id="quarterly">
   <div class="section-head">
@@ -117,6 +197,13 @@
 </section>
 {% endif %}
 
+{% if raw.annual_balance %}
+<section class="section" id="annual-balance">
+  <div class="section-head"><div><h2 class="section-title">Annual balance sheet &amp; efficiency</h2><span class="section-note">fiscal years · {{ raw.money_unit }} unless stated · IndianAPI annual statements</span></div></div>
+  {{ period_table(raw.annual_balance, 'annual_balance') }}
+</section>
+{% endif %}
+
 {% if raw.balance %}
 <section class="section" id="balance">
   <div class="section-head"><div><h2 class="section-title">Balance sheet &amp; ratios</h2><span class="section-note">only periods with reported values · {{ raw.money_unit }} unless stated</span></div></div>
@@ -146,6 +233,63 @@
 {% endif %}
 
 {% set has_lens = matrix.has_layer2 or (matrix.guidance|select|list|length) or (matrix.sector_momentum|select|list|length) or matrix.has_layer5 %}
+{% if ia_company %}
+{% set C = ia_company %}
+<section class="section" id="company">
+  <div class="section-head"><div><h2 class="section-title">Company</h2><span class="section-note">profile, peers and reference data via IndianAPI</span></div></div>
+  <div class="card"><div class="card-body">
+    {% if C.description %}<p class="ia-desc">{{ C.description }}</p>{% endif %}
+    <div class="stat-row">
+      {% if C.industry %}<div class="stat-cell"><div class="stat-label">Industry</div><div class="stat-val" style="font-size:1.05rem">{{ C.industry }}</div></div>{% endif %}
+      {% if C.isin %}<div class="stat-cell"><div class="stat-label">ISIN</div><div class="stat-val" style="font-size:1.05rem">{{ C.isin }}</div></div>{% endif %}
+      {% for metric, hz in C.growth.items() %}{% if metric in ('Compounded Sales Growth', 'Compounded Profit Growth', 'Stock Price CAGR') %}
+      <div class="stat-cell"><div class="stat-label">{{ metric }}</div><div class="stat-val" style="font-size:1.05rem">{% for k in ('10Y','5Y','3Y','TTM') %}{% if hz.get(k) is not none %}<span class="ia-hz">{{ k }} <b>{{ "%g"|format(hz[k]) }}%</b></span>{% endif %}{% endfor %}</div></div>
+      {% endif %}{% endfor %}
+    </div>
+    {% if C.ma %}<div class="ia-ma"><span class="section-note">Moving averages</span>{% for m in C.ma %}<span><em>{{ m.days }}d</em> {{ "{:,.1f}".format(m.price) }}</span>{% endfor %}</div>{% endif %}
+  </div></div>
+
+  <div class="ia-grid">
+    {% if C.officers %}
+    <div class="card"><div class="card-head"><h3 class="card-title">Leadership</h3></div>
+      <div class="table-wrap"><table class="fin ia-text"><thead><tr><th>Name</th><th>Role</th><th>Age</th></tr></thead><tbody>
+        {% for o in C.officers %}<tr><td>{{ o.name }}</td><td>{{ o.title }}</td><td>{{ o.age or '—' }}</td></tr>{% endfor %}
+      </tbody></table></div></div>
+    {% endif %}
+    {% if C.peers %}
+    <div class="card"><div class="card-head"><h3 class="card-title">Peers</h3><span class="section-note">market cap in ₹ Cr</span></div>
+      <div class="table-wrap"><table class="fin"><thead><tr><th>Company</th><th>P/E</th><th>P/B</th><th>Mkt cap</th><th>Day</th></tr></thead><tbody>
+        {% for p in C.peers %}<tr><td>{% if p.symbol %}<a href="/analytics/{{ p.symbol }}">{{ p.name }}</a>{% else %}{{ p.name }}{% endif %}</td>
+          <td>{{ "%.1f"|format(p.pe) if p.pe else '—' }}</td><td>{{ "%.2f"|format(p.pb) if p.pb else '—' }}</td><td>{{ "{:,.0f}".format(p.mcap) if p.mcap else '—' }}</td>
+          <td>{% if p.chg is not none %}<span class="{{ 'val-pos' if p.chg >= 0 else 'val-neg' }}">{{ "%+.2f"|format(p.chg) }}%</span>{% else %}—{% endif %}</td></tr>{% endfor %}
+      </tbody></table></div></div>
+    {% endif %}
+  </div>
+
+  <div class="ia-grid">
+    <div class="card"><div class="card-head"><h3 class="card-title">Corporate actions</h3></div><div class="card-body ia-list">
+      {% if C.actions.meetings %}<h4>Board meetings</h4><ul>{% for m in C.actions.meetings %}<li><time>{{ m.date }}</time> {{ m.text }}</li>{% endfor %}</ul>{% endif %}
+      {% if C.actions.dividends %}<h4>Dividends</h4><ul>{% for d in C.actions.dividends %}<li><time>{{ d.date }}</time> {{ d.text }}</li>{% endfor %}</ul>{% endif %}
+      {% if C.actions.other %}<h4>Splits, bonus, rights</h4><ul>{% for d in C.actions.other %}<li><time>{{ d.date }}</time> {{ d.kind }} · {{ d.text }}</li>{% endfor %}</ul>{% endif %}
+      {% if not (C.actions.meetings or C.actions.dividends or C.actions.other) %}<span class="stub">No corporate actions on file.</span>{% endif %}
+    </div></div>
+    <div class="card"><div class="card-head"><h3 class="card-title">Recent news</h3></div><div class="card-body ia-list">
+      {% if C.news %}<ul>{% for n in C.news %}<li><time>{{ n.date }}</time> {{ n.headline }}</li>{% endfor %}</ul>{% else %}<span class="stub">No recent headlines.</span>{% endif %}
+    </div></div>
+  </div>
+
+  {% if C.metrics %}
+  <div class="card ia-metrics"><div class="card-head"><h3 class="card-title">Key metrics</h3><span class="section-note">values as provided by IndianAPI (mixed units)</span></div><div class="card-body">
+    {% for g in C.metrics %}
+    <details><summary>{{ g.title }} <span class="section-note">{{ g.rows|length }}</span></summary>
+      <dl>{% for r in g.rows %}<div><dt>{{ r.name }}</dt><dd>{{ r.value }}</dd></div>{% endfor %}</dl>
+    </details>
+    {% endfor %}
+  </div></div>
+  {% endif %}
+</section>
+{% endif %}
+
 {% if has_lens %}
 <section class="section" id="lens">
   <div class="section-head">

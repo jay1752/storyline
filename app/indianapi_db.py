@@ -74,6 +74,29 @@ CREATE TABLE IF NOT EXISTS ia_estimate (    -- consensus estimates and reported 
     PRIMARY KEY (symbol, measure, freq, fiscal_type, fiscal_year, kind)
 );
 
+CREATE TABLE IF NOT EXISTS ia_stmt (        -- the second, Refinitiv-style statement set from /stock (INR millions; analyst-normalised line items)
+    symbol TEXT NOT NULL, period_end TEXT NOT NULL,
+    freq TEXT NOT NULL,                     -- 'A' annual | 'I' interim (quarter / half)
+    statement TEXT NOT NULL,                -- INC | BAL | CAS
+    key TEXT NOT NULL, label TEXT, value REAL,
+    PRIMARY KEY (symbol, period_end, freq, statement, key)
+);
+
+CREATE TABLE IF NOT EXISTS ia_peer (
+    symbol TEXT NOT NULL, peer_name TEXT NOT NULL, peer_ticker_id TEXT,
+    pe REAL, pb REAL, market_cap REAL, price REAL, pct_change REAL, rating TEXT,
+    PRIMARY KEY (symbol, peer_name)
+);
+
+CREATE TABLE IF NOT EXISTS ia_quote (       -- snapshot at fetch time (our own price history stays the price source of truth)
+    symbol TEXT PRIMARY KEY, nse REAL, bse REAL, pct_change REAL, year_high REAL, year_low REAL, fetched_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS ia_technical (   -- moving-average levels
+    symbol TEXT NOT NULL, days INTEGER NOT NULL, nse_price REAL, bse_price REAL,
+    PRIMARY KEY (symbol, days)
+);
+
 CREATE TABLE IF NOT EXISTS ia_profile (
     symbol TEXT PRIMARY KEY,
     description TEXT, industry TEXT, isin TEXT, nse_code TEXT, bse_code TEXT,

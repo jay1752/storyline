@@ -135,6 +135,40 @@ def load_profile(c, sym: str, s: dict) -> int:
     return 1
 
 
+def load_stock_extras(c, sym: str, s: dict) -> int:
+    """Everything else /stock carries: the Refinitiv-style statement set, peers, quote snapshot, moving averages, finer shareholding."""
+    n = 0
+    for blk in s.get("financials") or []:
+        pe = blk.get("EndDate")
+        freq = "A" if blk.get("Type") == "Annual" else "I"
+        for stmt, items in (blk.get("stockFinancialMap") or {}).items():
+            for it in items or []:
+                v = num(it.get("value"))
+                if pe and v is not None:
+                    c.execute("INSERT OR REPLACE INTO ia_stmt VALUES (?,?,?,?,?,?,?)", (sym, pe, freq, stmt, it.get("key"), (it.get("displayName") or "").strip(), v))
+                    n += 1
+    for p in (s.get("companyProfile") or {}).get("peerCompanyList") or []:
+        c.execute("INSERT OR REPLACE INTO ia_peer VALUES (?,?,?,?,?,?,?,?,?)",
+                  (sym, p.get("companyName"), p.get("tickerId"), num(p.get("priceToEarningsValueRatio")), num(p.get("priceToBookValueRatio")),
+                   num(p.get("marketCap")), num(p.get("price")), num(p.get("percentChange")), p.get("overallRating")))
+        n += 1
+    cp = s.get("currentPrice") or {}
+    c.execute("INSERT OR REPLACE INTO ia_quote VALUES (?,?,?,?,?,?,?)",
+              (sym, num(cp.get("NSE")), num(cp.get("BSE")), num(s.get("percentChange")), num(s.get("yearHigh")), num(s.get("yearLow")),
+               datetime.now(timezone.utc).isoformat(timespec="seconds")))
+    for t in s.get("stockTechnicalData") or []:
+        if t.get("days") is not None:
+            c.execute("INSERT OR REPLACE INTO ia_technical VALUES (?,?,?,?)", (sym, t["days"], num(t.get("nsePrice")), num(t.get("bsePrice"))))
+            n += 1
+    for cat in s.get("shareholding") or []:
+        for pt in cat.get("categories") or []:
+            pe, v = pt.get("holdingDate"), num(pt.get("percentage"))
+            if pe and v is not None:
+                c.execute("INSERT OR REPLACE INTO ia_holding VALUES (?,?,?,?,?)", (sym, pe[:10], "Q", "stock:" + (cat.get("displayName") or cat.get("categoryName") or "?"), v))
+                n += 1
+    return n
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
@@ -154,7 +188,7 @@ def main() -> None:
             continue
         ident = fetcher.identity_ok(t, market)
         status = "held_out" if ident is False else ("loaded" if ident else "unchecked")
-        for tbl in ("ia_fact", "ia_holding", "ia_growth", "ia_target", "ia_target_snapshot", "ia_estimate", "ia_profile"):
+        for tbl in ("ia_fact", "ia_holding", "ia_growth", "ia_target", "ia_target_snapshot", "ia_estimate", "ia_profile", "ia_stmt", "ia_peer", "ia_quote", "ia_technical"):
             c.execute(f"DELETE FROM {tbl} WHERE symbol = ?", (sym,))
         if status == "held_out":
             c.execute("INSERT OR REPLACE INTO ia_stock (symbol, status, identity_ok) VALUES (?,?,0)", (sym, "held_out"))
@@ -167,6 +201,7 @@ def main() -> None:
         if isinstance(prof, dict) and prof.get("companyName"):
             has_prof = load_profile(c, sym, prof)
             tally["profiles"] += 1
+            tally["stock_extras"] = tally.get("stock_extras", 0) + load_stock_extras(c, sym, prof)
         name = (prof or {}).get("companyName") if isinstance(prof, dict) else None
         c.execute("INSERT OR REPLACE INTO ia_stock (symbol, ia_name, layout, status, identity_ok, has_profile) VALUES (?,?,?,?,?,?)",
                   (sym, name, layout, status, None if ident is None else 1, has_prof))
