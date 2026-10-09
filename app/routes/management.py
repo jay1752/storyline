@@ -146,6 +146,7 @@ def management_story(request: Request, position_id: int, all: int = 0):
         scan = live_scan(u, user_id, pos["symbol"])           # recomputed now, from the user's current rules
         rule_layers = fw.layers(u, user_id, pos["symbol"])
         story_over = fw.story_stock_override(u, user_id, pos["symbol"])
+        sizing = fw.sizing_plan(u, user_id)
         story_scope = fw.story_layers(u, user_id)["story_scope"]
     more = len(snaps) > limit
     snaps = snaps[:limit]
@@ -167,6 +168,10 @@ def management_story(request: Request, position_id: int, all: int = 0):
         "exit_ret_pct": (pos["exit_price"] / avg - 1) * 100 if pos["exit_price"] and avg else None,
     }
     default_price = round(price, 2) if price else None
+    from app.ai.insights_engine import position_weight
+    with get_users_conn() as _u:
+        weight = position_weight(_u, pos, price) if pos["status"] == "active" else None
+    size = {"weight": weight, "max": sizing["size_max"], "target": sizing["size_target"], "watch": sizing["size_watch"], "exit_days": sizing["exit_days"]}
     return templates.TemplateResponse(
         "management_story.html",
         {
@@ -175,7 +180,7 @@ def management_story(request: Request, position_id: int, all: int = 0):
             "saved": request.query_params.get("saved"),
             "latest": latest, "history": [e for e in entries if e is not latest and (e["analysis"] or (e["legacy"] and not e["legacy"][0].startswith("Just added")))],
             "scan": scan, "rule_layers": rule_layers,
-            "story_over": story_over, "story_default": dict(fw.STORY_BY_KEY["story_scope"]["choices"]).get(int(story_scope["value"]), ""),
+            "size": size, "story_over": story_over, "story_default": dict(fw.STORY_BY_KEY["story_scope"]["choices"]).get(int(story_scope["value"]), ""),
             "run": run, "running": bool(run and run["status"] in ("queued", "running")),
             "total_entries": total, "more": more,
         },

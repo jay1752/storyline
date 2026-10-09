@@ -63,7 +63,7 @@
   <div class="table-wrap">
     <table class="positions">
       <thead>
-        <tr><th>Stock</th><th>Type</th><th>Anchor</th><th>Since anchor</th><th>1-yr</th><th>Bucket</th><th>Verdict</th><th>Latest story</th><th></th></tr>
+        <tr><th>Stock</th><th>Type</th><th>Anchor</th><th>Since anchor</th><th>1-yr</th><th>Latest story</th><th></th></tr>
       </thead>
       <tbody>
         {% for p in positions %}
@@ -76,15 +76,6 @@
           <td>{{ p.anchor_date }}{% if p.buy_price %}<span class="row-sub">{{ "%g"|format(p.buy_price) }} avg{% if p.quantity %} · {{ "%g"|format(p.quantity) }} sh{% endif %}</span>{% else %}<span class="row-sub">added</span>{% endif %}</td>
           <td>{% if p.since_anchor_pct is not none %}<span class="{{ 'val-pos' if p.since_anchor_pct >= 0 else 'val-neg' }}">{{ "%+.1f"|format(p.since_anchor_pct) }}%</span>{% else %}<span class="stub">—</span>{% endif %}</td>
           <td>{% if p.one_yr_pct is not none %}<span class="{{ 'val-pos' if p.one_yr_pct >= 0 else 'val-neg' }}">{{ "%+.0f"|format(p.one_yr_pct) }}%</span>{% else %}<span class="stub">—</span>{% endif %}</td>
-          <td>{% if p.analysed_at %}{{ p.valuation_label }}{% else %}<span class="stub">—</span>{% endif %}</td>
-          <td>
-            {% if not p.analysed_at %}<span class="badge neutral">Not analysed</span>
-            {% elif p.signal == 'buy_consider' %}<span class="badge pos badge-dot">Buy / add</span>
-            {% elif p.signal == 'hold' %}<span class="badge pos badge-dot">Hold</span>
-            {% elif p.signal == 'trim_consider' %}<span class="badge accent badge-dot">Trim</span>
-            {% elif p.signal == 'exit_consider' %}<span class="badge neg badge-dot">Exit</span>
-            {% else %}<span class="badge neutral badge-dot">Watch</span>{% endif %}
-          </td>
           <td>
             {% if p.run_status in ('queued', 'running') %}<span class="badge accent">Analysing…</span>
             {% elif p.run_status == 'failed' %}<span class="badge neg" title="{{ p.run_error }}">Last run failed</span>

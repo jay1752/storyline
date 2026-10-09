@@ -1521,3 +1521,50 @@ html[data-perf="annual"] [data-pane="quarterly"], html[data-perf="quarterly"] [d
 .story-mode select { width: auto; min-width: 11rem; }
 .story-mode select.saved { border-color: var(--pos); }
 .rule-edit select.rule-val { width: auto; min-width: 16rem; }
+
+/* ---- Story page: answer first, details on demand ---- */
+.tabbar { display: flex; gap: 0.3rem; margin: 1.2rem 0 0; border-bottom: 1px solid var(--border); }
+.tabbar button { font: inherit; font-size: 0.88rem; font-weight: 500; color: var(--muted); background: none; border: none; border-bottom: 2px solid transparent; padding: 0.55rem 0.9rem; cursor: pointer; margin-bottom: -1px; }
+.tabbar button:hover { color: var(--ink); }
+.tabbar button.on { color: var(--structure); border-bottom-color: var(--structure); }
+.tabbar .count { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); margin-left: 0.2rem; }
+html.tabs-ready .tabpanel { display: none; }
+html.tabs-ready .tabpanel.on { display: block; }
+
+.answer { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--card); padding: 1.1rem 1.3rem; }
+.answer-top { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem 1.2rem; flex-wrap: wrap; }
+.answer-verdict { display: flex; align-items: center; gap: 0.6rem; }
+.vword { font-size: 1.9rem; font-weight: 600; letter-spacing: -0.02em; line-height: 1; }
+.vdot { width: 12px; height: 12px; border-radius: 50%; background: var(--muted); }
+.tone-pos .vdot { background: var(--pos); } .tone-accent .vdot { background: var(--accent); } .tone-neg .vdot { background: var(--neg); }
+.tone-pos .vword { color: var(--pos); } .tone-accent .vword { color: var(--accent); } .tone-neg .vword { color: var(--neg); }
+.answer-meta { display: flex; gap: 0.4rem 1rem; flex-wrap: wrap; font-family: var(--font-mono); font-size: 0.74rem; color: var(--muted); }
+.answer-do { margin: 0.8rem 0 0; font-size: 1.05rem; font-weight: 500; }
+.answer-line { margin: 0.5rem 0 0; max-width: 72ch; line-height: 1.55; color: var(--muted); }
+.glance { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15.5rem), 1fr)); gap: 0.8rem; margin-top: 0.8rem; }
+.glance-card { border: 1px solid var(--border); border-radius: var(--r-md); background: var(--card); padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-start; }
+.glance-label { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.glance-big { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.glance-big span { font-size: 0.8rem; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+.glance-big.pos { color: var(--pos); } .glance-big.neg { color: var(--neg); }
+.glance-sub, .glance-ok { margin: 0; font-size: 0.78rem; color: var(--muted); }
+.flag-list.tight { margin: 0; display: grid; gap: 0.45rem; }
+.flag.extra { display: none; } .flag.extra.shown { display: flex; }
+.speeds-mini { display: grid; gap: 0.35rem; width: 100%; }
+.speeds-mini > div { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; font-size: 0.8rem; color: var(--muted); }
+.size-meter { position: relative; width: 100%; height: 8px; border-radius: 4px; background: var(--bar-track); }
+.size-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--pos); }
+.size-fill.warn { background: var(--accent); } .size-fill.over { background: var(--neg); }
+.size-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: 0.55; }
+.size-mark.limit { opacity: 1; }
+.linklike.show-more, .linklike.open-det { font-size: 0.78rem; }
+.dets { margin-top: 0.8rem; display: grid; gap: 0.5rem; }
+.det { border: 1px solid var(--border); border-radius: var(--r-md); background: var(--card); }
+.det > summary { cursor: pointer; padding: 0.7rem 1rem; font-weight: 500; list-style: none; display: flex; align-items: baseline; gap: 0.6rem; }
+.det > summary::-webkit-details-marker { display: none; }
+.det > summary::before { content: "▸"; color: var(--muted); font-size: 0.8rem; }
+.det[open] > summary::before { content: "▾"; }
+.det-body { padding: 0 1rem 1rem; }
+.det-body h4 { margin: 0.9rem 0 0.3rem; font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.speeds-mini > div { flex-direction: column; align-items: flex-start; gap: 0.15rem; }
+.speeds-mini > div > span:first-child { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.04em; text-transform: uppercase; }

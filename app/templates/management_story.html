@@ -98,6 +98,123 @@
 </div>
 {%- endmacro %}
 
+{% macro scan_block(a) -%}
+<table class="an-table scan-table" id="scan-table" data-id="{{ pos.id }}">
+  <thead><tr><th>Filter</th><th>Your stock</th><th>Needs</th><th></th><th></th></tr></thead>
+  <tbody>
+    {% for f in (scan.filters if scan else a.filters) %}
+    <tr {% if f.rule %}data-rule="{{ f.rule }}"{% endif %}><td>{{ f.label }}{% if f.note %}<span class="row-sub">{{ f.note }}</span>{% endif %}</td>
+        <td class="num">{{ f.value if f.value else '—' }}</td>
+        <td class="num muted needs-cell">{{ f.threshold }}{% if f.source == 'stock' %} <span class="badge accent" title="This stock has its own rule">this stock</span>{% elif f.source == 'user' %} <span class="badge neutral" title="Your default rule">yours</span>{% endif %}</td>
+        <td>{% if f.status == 'pass' %}<span class="badge pos">✓ Pass</span>{% elif f.status == 'fail' %}<span class="badge neg">✗ Fail</span>{% elif f.status == 'off' %}<span class="badge neutral">Off</span>{% else %}<span class="badge neutral">Unknown</span>{% endif %}</td>
+        <td class="scan-edit">{% if f.rule %}<button type="button" class="icon-btn scan-edit-btn" aria-label="Edit the {{ f.label }} rule for this stock" title="Edit this rule for this stock"><svg class="icon icon-sm"><use href="#i-edit"/></svg></button>{% endif %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% if rule_layers %}<script id="rule-layers" type="application/json">{{ rule_layers | tojson }}</script>{% endif %}
+{%- endmacro %}
+
+{% macro answer_view(a) -%}
+{% set tone = {'BUY': 'pos', 'HOLD': 'pos', 'TRIM': 'accent', 'EXIT': 'neg', 'WATCH': 'neutral'}[a.verdict] %}
+{% set fl = (scan.filters if scan else a.filters) %}
+{% set failing = fl|selectattr('status', 'equalto', 'fail')|list %}
+{% set checked = fl|selectattr('status', 'in', ['pass', 'fail'])|list %}
+{% set attn = (a.story_flags or [])|selectattr('level', 'in', ['warning', 'alert', 'watch'])|list %}
+<div class="answer tone-{{ tone }}">
+  <div class="answer-top">
+    <div class="answer-verdict"><span class="vdot"></span><span class="vword">{{ {'BUY': 'Buy / add', 'HOLD': 'Hold', 'TRIM': 'Trim', 'EXIT': 'Exit', 'WATCH': 'Watch'}[a.verdict] }}</span></div>
+    <div class="answer-meta">
+      <span>{{ a.bucket }}</span>
+      {% if a.target_weight_pct is not none %}<span>Target weight {{ "%g"|format(a.target_weight_pct) }}%</span>{% endif %}
+      <span title="How sure the model is, given the data it had">Confidence {{ a.confidence }}</span>
+    </div>
+  </div>
+  <p class="answer-do">
+    {% if a.verdict == 'TRIM' %}{% if size.weight %}Bring it from {{ "%.1f"|format(size.weight) }}% toward {{ "%g"|format(size.target) }}% of your book.{% else %}Trim part of the position.{% endif %}
+    {% elif a.verdict == 'EXIT' %}Exit the position{% if a.speed2.status == 'two_quarter_confirmed' %} — within {{ "%g"|format(size.exit_days) }} days of the confirmation{% endif %}.
+    {% elif a.verdict == 'HOLD' %}No action needed — keep holding.
+    {% elif a.verdict == 'BUY' %}Consider adding, within your sizing limits.
+    {% else %}Not actionable yet — keep watching.{% endif %}
+  </p>
+  <p class="answer-line">{{ a.what_changed }}</p>
+</div>
+
+<div class="glance">
+  <div class="glance-card">
+    <div class="glance-label">Needs your attention</div>
+    {% if attn %}
+    <ul class="flag-list tight">
+      {% for f in attn %}<li class="flag lvl-{{ f.level }}{{ ' extra' if loop.index > 3 else '' }}"><span class="flag-lvl">{{ {'watch': 'Watch', 'warning': 'Warning', 'alert': 'Alert'}[f.level] }}</span><span>{{ f.text }}</span></li>{% endfor %}
+    </ul>
+    {% if attn|length > 3 %}<button type="button" class="linklike show-more" data-more="{{ attn|length - 3 }}">Show {{ attn|length - 3 }} more</button>{% endif %}
+    {% else %}<p class="glance-ok">Nothing needs your attention.</p>{% endif %}
+  </div>
+  <div class="glance-card">
+    <div class="glance-label">Your rules</div>
+    <div class="glance-big {{ 'pos' if checked and not failing else '' }}">{{ checked|length - failing|length }} of {{ checked|length }} <span>pass</span></div>
+    {% if failing %}<div class="chip-row">{% for f in failing[:4] %}<span class="vchip neg">{{ f.label }}</span>{% endfor %}{% if failing|length > 4 %}<span class="vchip">+{{ failing|length - 4 }}</span>{% endif %}</div>{% endif %}
+    <button type="button" class="linklike open-det" data-det="det-scan">See every rule</button>
+  </div>
+  <div class="glance-card">
+    <div class="glance-label">Exit check</div>
+    <div class="speeds-mini">
+      <div><span>Now</span>{{ status_chip(a.speed1.status) }}</div>
+      <div><span>2 quarters</span>{{ status_chip(a.speed2.status) }}</div>
+      <div><span>12–18 months</span>{{ status_chip(a.speed3.status) }}</div>
+    </div>
+    <button type="button" class="linklike open-det" data-det="det-exit">What each means</button>
+  </div>
+  {% if size.weight is not none %}
+  <div class="glance-card">
+    <div class="glance-label">Position size</div>
+    <div class="glance-big {{ 'neg' if size.weight > size.max else '' }}">{{ "%.1f"|format(size.weight) }}% <span>of your book</span></div>
+    <div class="size-meter" role="img" aria-label="Position size against your limits">
+      {% set scale = [size.max * 1.5, size.weight * 1.1]|max %}
+      <i class="size-fill {{ 'over' if size.weight > size.max else ('warn' if size.weight > size.watch else '') }}" style="width:{{ [size.weight / scale * 100, 100]|min }}%"></i>
+      <b class="size-mark" style="left:{{ size.target / scale * 100 }}%" title="Target {{ '%g'|format(size.target) }}%"></b>
+      <b class="size-mark limit" style="left:{{ size.max / scale * 100 }}%" title="Limit {{ '%g'|format(size.max) }}%"></b>
+    </div>
+    <div class="glance-sub">target {{ "%g"|format(size.target) }}% · your limit {{ "%g"|format(size.max) }}%</div>
+    <a class="linklike" href="/rules">Change my sizing rules</a>
+  </div>
+  {% endif %}
+</div>
+
+<div class="dets">
+  <details class="det" id="det-scan"><summary>Fundamentals scan <span class="section-note">computed from reported data, not by the AI</span></summary>
+    <div class="det-body"><p class="section-note"><a href="/rules">Edit my default rules →</a></p>{{ scan_block(a) }}</div></details>
+  <details class="det" id="det-exit"><summary>Exit check in detail</summary>
+    <div class="det-body speeds">
+      <div><b>Now · immediate</b>{{ status_chip(a.speed1.status) }}<p>{{ a.speed1.note }}</p></div>
+      <div><b>Two quarters</b>{{ status_chip(a.speed2.status) }}<p>{{ a.speed2.note }}</p></div>
+      <div><b>12–18 months</b>{{ status_chip(a.speed3.status) }}<p>{{ a.speed3.note }}</p></div>
+    </div></details>
+  <details class="det"><summary>Growth, quality and moat <span class="section-note">the AI's judgement, not computed from your data</span></summary>
+    <div class="det-body"><p>{{ a.growth_hook }}</p>
+      <dl class="tri">
+        <div><dt>Lynch category</dt><dd>{{ a.triangulation.lynch_category }}</dd></div>
+        <div><dt>Mayer 100-bagger</dt><dd>{{ a.triangulation.mayer_probability }} — {{ a.triangulation.mayer_reason }}</dd></div>
+        <div><dt>Mukherjea Coffee Can</dt><dd>{{ a.triangulation.coffee_can }} — {{ a.triangulation.coffee_can_note }}</dd></div>
+        <div><dt>Dorsey moat</dt><dd>{{ a.triangulation.moat_type }} · {{ a.triangulation.moat_durability }}</dd></div>
+      </dl></div></details>
+  <details class="det"><summary>Sizing and what to watch next</summary>
+    <div class="det-body"><p>{{ a.sizing_note }}</p>
+      <dl class="tri">
+        <div><dt>Next check</dt><dd>{{ a.next_check }}</dd></div>
+        <div><dt>Metrics to watch</dt><dd>{{ a.metrics_to_watch|join(' · ') }}</dd></div>
+        <div><dt>What would re-rate it</dt><dd>{{ a.rerate_trigger }}</dd></div>
+      </dl></div></details>
+  <details class="det"><summary>Why this verdict{% if a.news %} · {{ a.news|length }} headlines{% endif %}</summary>
+    <div class="det-body"><p>{{ a.verdict_reasoning }}</p>
+      {% if a.user_story %}<h4>Your story</h4><p>{{ a.user_story }}</p>{% endif %}
+      {% if a.news_takeaways %}<h4>From the news</h4><ul class="plain">{% for t in a.news_takeaways %}<li>{{ t }}</li>{% endfor %}</ul>{% endif %}
+      {% if a.news %}<ol class="news">{% for n in a.news %}<li value="{{ n.n }}"><a href="{{ n.url }}" target="_blank" rel="noopener noreferrer nofollow">{{ n.title }}</a> <span class="muted">— {{ n.source }}</span></li>{% endfor %}</ol>{% endif %}
+      {% if a.valuation %}<p class="section-note">Price {{ a.valuation.price }}{% if a.valuation.pe_current %} · P/E {{ a.valuation.pe_current }}x (3-yr {{ a.valuation.pe_3y_low }}–{{ a.valuation.pe_3y_high }}x){% endif %}</p>{% endif %}
+      {% if a.data_gaps %}<p class="section-note">Not in our data: {{ a.data_gaps|join(', ') }}</p>{% endif %}</div></details>
+</div>
+<p class="section-note an-disc">⚠ {{ a.disclaimer }} · {{ a.model }}</p>
+{%- endmacro %}
+
 {% block content %}
 
 <div class="page-head">
@@ -106,7 +223,6 @@
     <h1 class="page-title">{{ pos.company_name }}</h1>
     <div class="chip-row">
       <span class="badge neutral mono">{{ pos.symbol }}</span>
-      {% if latest %}{{ verdict_badge(latest.analysis.verdict) }}<span class="badge neutral">{{ latest.analysis.bucket }}</span>{% endif %}
       {% if pos.status == 'exited' %}<span class="badge neutral">Closed {{ pos.closed_at }}</span>{% endif %}
     </div>
   </div>
@@ -140,26 +256,33 @@
   <div class="kpi"><span class="kpi-label">You hold</span><span class="kpi-value">{{ "%g"|format(live.qty) if live.qty else '—' }}</span><span class="kpi-sub">{{ 'shares' if live.qty else 'no quantity recorded' }}</span></div>
   <div class="kpi"><span class="kpi-label">{{ 'Average cost' if pos.anchor_type == 'position' else 'Watching since' }}</span><span class="kpi-value">{{ (live.cur ~ ("%g"|format(live.avg))) if live.avg else (pos.anchor_date if pos.anchor_type == 'watchlist' else '—') }}</span><span class="kpi-sub">{{ ('since ' ~ pos.anchor_date) if live.avg else ('log a purchase below to turn this into a position' if pos.anchor_type == 'watchlist' else '') }}</span></div>
   <div class="kpi"><span class="kpi-label">Return on cost</span><span class="kpi-value {{ 'pos' if live.ret_pct is not none and live.ret_pct >= 0 else ('neg' if live.ret_pct is not none else '') }}">{{ "%+.1f"|format(live.ret_pct) + '%' if live.ret_pct is not none else '—' }}</span><span class="kpi-sub">{{ (live.cur ~ "{:,.0f}".format(live.value) ~ ' current value') if live.value else '' }}</span></div>
+  {% if size.weight is not none %}<div class="kpi"><span class="kpi-label">Share of your book</span><span class="kpi-value {{ 'neg' if size.weight > size.max else '' }}">{{ "%.1f"|format(size.weight) }}%</span><span class="kpi-sub">limit {{ "%g"|format(size.max) }}%</span></div>{% endif %}
   {% endif %}
 </div>
 
-<section class="section" id="analysis">
+<div class="tabbar" id="tabbar" role="tablist" aria-label="Story sections">
+  <button type="button" role="tab" data-tab="analysis" class="on">Today</button>
+  <button type="button" role="tab" data-tab="journal">Journal{% if events %} <span class="count">{{ events|length }}</span>{% endif %}</button>
+  {% if history %}<button type="button" role="tab" data-tab="story">History <span class="count">{{ total_entries }}</span></button>{% endif %}
+</div>
+
+<section class="section tabpanel on" id="analysis" data-panel="analysis">
   <div class="section-head">
     <div><h2 class="section-title">Latest analysis</h2>
       <span class="section-note">{% if latest %}<time data-utc="{{ latest.at }}">{{ latest.at }}</time> · {{ 'daily run' if latest.trigger == 'interval' else 'run on demand' }}{% else %}not run yet{% endif %}</span></div>
   </div>
   {% if latest %}
-  <div class="card card-pad">{{ analysis_view(latest.analysis) }}</div>
+  {{ answer_view(latest.analysis) }}
   {% else %}
   <div class="card"><div class="empty">
     <svg class="icon"><use href="#i-analytics"/></svg>
     <h3>No analysis yet</h3>
-    <p>Run it once to get this stock's verdict in your framework. After that it updates itself every morning and builds the story below.</p>
+    <p>Run it once to get this stock's verdict in your framework. After that it updates itself every morning and builds the story.</p>
   </div></div>
   {% endif %}
 </section>
 
-<section class="section" id="journal">
+<section class="section tabpanel" id="journal" data-panel="journal">
   <div class="section-head">
     <div><h2 class="section-title">Your journal <span class="muted" style="font-weight:400;">· optional</span></h2>
       <span class="section-note">Log what you do. The daily analysis reads it and flags where your actions fit — or break — your own rules.</span></div>
@@ -208,7 +331,7 @@
 </section>
 
 {% if history %}
-<section class="section" id="story">
+<section class="section tabpanel" id="story" data-panel="story">
   <div class="section-head">
     <div><h2 class="section-title">The story so far</h2><span class="section-note">{{ total_entries }} {{ 'analysis' if total_entries == 1 else 'analyses' }} · newest first</span></div>
   </div>

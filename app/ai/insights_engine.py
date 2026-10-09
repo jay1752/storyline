@@ -221,6 +221,21 @@ def _quarter_table(rows: list[dict]) -> list[dict]:
     } for r in rows]
 
 
+def position_weight(u, pos, price) -> float | None:
+    """This position's share of the user's book (%), at latest prices; None for a watchlist stock or when quantity/price is unknown."""
+    qty, sym = pos["quantity"], pos["symbol"]
+    if pos["anchor_type"] != "position" or not qty or not price:
+        return None
+    total = 0.0
+    with get_market_conn() as m:
+        for p in u.execute("SELECT symbol, quantity FROM tracked_positions WHERE user_id = ? AND anchor_type = 'position' AND status = 'active' AND quantity IS NOT NULL", (pos["user_id"],)):
+            row = m.execute("SELECT close FROM price_history WHERE symbol = ? ORDER BY date DESC LIMIT 1", (p["symbol"],)).fetchone()
+            if row:
+                total += p["quantity"] * row["close"] * (FX_INR_PER_USD if not p["symbol"].startswith("NSE:") else 1.0)
+    mine = qty * price * (FX_INR_PER_USD if not sym.startswith("NSE:") else 1.0)
+    return round(mine / total * 100, 1) if total else None
+
+
 def _gather(u, pos) -> dict:
     """Everything the analysis needs about one tracked stock, computed in code. `u` is a users-DB connection."""
     from app.routes.analytics import _compute_pe, _yoy  # reuse the exact valuation / growth logic the Analytics page shows
@@ -266,16 +281,7 @@ def _gather(u, pos) -> dict:
 
     # the user's own position in this stock, and how big it is in their book
     qty, buy = pos["quantity"], pos["buy_price"]
-    weight = None
-    if pos["anchor_type"] == "position" and qty and price:
-        total = 0.0
-        with get_market_conn() as m:
-            for p in u.execute("SELECT symbol, quantity FROM tracked_positions WHERE user_id = ? AND anchor_type = 'position' AND status = 'active' AND quantity IS NOT NULL", (pos["user_id"],)):
-                row = m.execute("SELECT close FROM price_history WHERE symbol = ? ORDER BY date DESC LIMIT 1", (p["symbol"],)).fetchone()
-                if row:
-                    total += p["quantity"] * row["close"] * (FX_INR_PER_USD if not p["symbol"].startswith("NSE:") else 1.0)
-        mine = qty * price * (FX_INR_PER_USD if not sym.startswith("NSE:") else 1.0)
-        weight = round(mine / total * 100, 1) if total else None
+    weight = position_weight(u, pos, price)
     position = {
         "type": pos["anchor_type"], "since": pos["anchor_date"], "quantity": qty, "avg_buy_price": buy,
         "return_since_buy_pct": _r((price / buy - 1) * 100) if price and buy else None, "weight_of_book_pct": weight,

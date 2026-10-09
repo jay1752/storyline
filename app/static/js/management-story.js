@@ -131,3 +131,33 @@
     } catch (e) { alert(e.message); location.reload(); }
   });
 })();
+
+// Story page tabs (Today / Journal / History), "show more" flags, and the links that open a detail section
+(function () {
+  const bar = document.getElementById("tabbar");
+  if (!bar) return;
+  document.documentElement.classList.add("tabs-ready");
+  const panels = Array.from(document.querySelectorAll(".tabpanel"));
+  const tabs = Array.from(bar.querySelectorAll("[data-tab]"));
+  function show(name, push) {
+    if (!panels.some((p) => p.dataset.panel === name)) name = "analysis";
+    panels.forEach((p) => p.classList.toggle("on", p.dataset.panel === name));
+    tabs.forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
+    if (push) history.replaceState(null, "", "#" + name);
+  }
+  tabs.forEach((b) => b.addEventListener("click", () => show(b.dataset.tab, true)));
+  const fromHash = () => { const h = location.hash.slice(1); if (h) show(h, false); };
+  fromHash();
+  window.addEventListener("hashchange", fromHash);
+
+  document.querySelectorAll(".show-more").forEach((b) => b.addEventListener("click", () => {
+    b.closest(".glance-card").querySelectorAll(".flag.extra").forEach((li) => li.classList.add("shown"));
+    b.remove();
+  }));
+  document.querySelectorAll(".open-det").forEach((b) => b.addEventListener("click", () => {
+    const d = document.getElementById(b.dataset.det);
+    if (!d) return;
+    d.open = true;
+    d.scrollIntoView({ behavior: "smooth", block: "start" });
+  }));
+})();
