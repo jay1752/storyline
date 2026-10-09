@@ -102,7 +102,7 @@ def signup_submit(email: str = Form(...), password: str = Form(...), confirm_pas
     send_verification_email(email, token)
 
     session_id = create_session(user_id)
-    resp = RedirectResponse("/analytics", status_code=303)
+    resp = RedirectResponse("/home", status_code=303)
     _set_session_cookie(resp, session_id)
     return resp
 
@@ -128,7 +128,7 @@ def login_submit(email: str = Form(...), password: str = Form(...)):
         return RedirectResponse(generic_error, status_code=303)
 
     session_id = create_session(user["id"])
-    resp = RedirectResponse("/analytics", status_code=303)
+    resp = RedirectResponse("/home", status_code=303)
     _set_session_cookie(resp, session_id)
     return resp
 

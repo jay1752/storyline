@@ -125,7 +125,7 @@ def google_callback(request: Request, code: str | None = None, state: str | None
         u.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))  # housekeeping: expired sessions were never purged
         u.commit()
 
-    resp = RedirectResponse("/analytics", status_code=303)
+    resp = RedirectResponse("/home", status_code=303)
     resp.delete_cookie(STATE_COOKIE, path="/auth/google")
     _set_session_cookie(resp, create_session(user_id))
     return resp

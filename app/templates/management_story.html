@@ -119,7 +119,11 @@
 {% set fl = (scan.filters if scan else a.filters) %}
 {% set failing = fl|selectattr('status', 'equalto', 'fail')|list %}
 {% set checked = fl|selectattr('status', 'in', ['pass', 'fail'])|list %}
-{% set attn = (a.story_flags or [])|selectattr('level', 'in', ['warning', 'alert', 'watch'])|list %}
+{% set stored = (a.story_flags or [])|selectattr('level', 'in', ['warning', 'alert', 'watch'])|rejectattr('kind', 'equalto', 'size')|list %}
+{% set live_size = [] %}
+{% if size.weight is not none and size.weight > size.max %}{% set _ = live_size.append({'level': 'alert', 'text': 'This is ' ~ ('%.1f'|format(size.weight)) ~ '% of your book. Your rule: above ' ~ ('%g'|format(size.max)) ~ '% trim back toward ' ~ ('%g'|format(size.target)) ~ '%.'}) %}
+{% elif size.weight is not none and size.weight > size.watch %}{% set _ = live_size.append({'level': 'watch', 'text': 'This is ' ~ ('%.1f'|format(size.weight)) ~ '% of your book, over your ' ~ ('%g'|format(size.watch)) ~ '% yellow-flag line.'}) %}{% endif %}
+{% set attn = live_size + stored %}
 <div class="answer tone-{{ tone }}">
   <div class="answer-top">
     <div class="answer-verdict"><span class="vdot"></span><span class="vword">{{ {'BUY': 'Buy / add', 'HOLD': 'Hold', 'TRIM': 'Trim', 'EXIT': 'Exit', 'WATCH': 'Watch'}[a.verdict] }}</span></div>

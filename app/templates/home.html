@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <title>Stocktale · Stock research for India and the US</title>
-  <meta name="description" content="Every reported quarter, the price and who owns the stock, for India and the US, plus a daily AI read on the stocks you track.">
+  <title>Stocktale · Research, rules and portfolio for India and the US</title>
+  <meta name="description" content="Research any stock, test it against your own rules, and manage what you own, for India and the US. Every reported quarter, ownership, and a daily read on what you track.">
   {% include "_head.html" %}
   <link rel="stylesheet" href="/static/css/home.css?v={{ asset_version('css/home.css') }}">
   <script src="/static/js/shell.js?v={{ asset_version('js/shell.js') }}" defer></script>
@@ -27,7 +27,7 @@
         <button class="icon-btn" type="button" id="palette-toggle" title="Palette" aria-label="Change palette"><svg class="icon"><use href="#i-palette"/></svg></button>
         <button class="icon-btn" type="button" id="theme-toggle" title="Theme: system" aria-label="Change theme"><svg class="icon"><use href="#i-monitor"/></svg></button>
         {% if user %}
-        <a class="btn btn-primary btn-sm" href="/analytics">Open Stocktale <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
+        <a class="btn btn-primary btn-sm" href="/home">Open Stocktale <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
         {% else %}
         <a class="btn btn-ghost btn-sm hm-login" href="/login">Log in</a>
         <a class="btn btn-primary btn-sm" href="/signup">Get started</a>
@@ -40,13 +40,13 @@
     <!-- Hero -->
     <section class="hm-hero hm-wrap">
       <div class="hm-hero-copy">
-        <span class="eyebrow">Stock research · India + US</span>
-        <h1 class="hm-h1">Read the <em>story</em> behind the numbers.</h1>
-        <p class="hm-lede">Stocktale lines up every reported quarter, the price history and who owns the company, then keeps an AI eye on the stocks you hold and tells you when the story changes.</p>
+        <span class="eyebrow">Research · Rules · Portfolio · India + US</span>
+        <h1 class="hm-h1">Research any stock. Test it against <em>your rules</em>. Manage what you own.</h1>
+        <p class="hm-lede">Stocktale lines up every reported quarter, the price history and who owns the company. It checks each stock against the thresholds and position sizes you set, then keeps an eye on what you track and tells you when the story changes.</p>
         <div class="hm-cta">
           {% if user %}
-          <a class="btn btn-primary hm-btn" href="/analytics">Open Analytics <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
-          <a class="btn hm-btn" href="/portfolio">Your portfolio</a>
+          <a class="btn btn-primary hm-btn" href="/home">Open Home <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
+          <a class="btn hm-btn" href="/analytics">Research a stock</a>
           {% else %}
           <a class="btn btn-primary hm-btn" href="/signup">Create your account <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
           <a class="btn hm-btn" href="#how">See how it works</a>
@@ -110,7 +110,7 @@
     <section class="hm-sec hm-wrap" id="product">
       <div class="hm-sec-head">
         <span class="eyebrow">What's inside</span>
-        <h2 class="hm-h2">One place to research, track and keep up.</h2>
+        <h2 class="hm-h2">One place to research, decide and manage.</h2>
       </div>
 
       <div class="hm-feature">
@@ -147,7 +147,7 @@
           <h3>A daily story for every stock you track</h3>
           <p>Add a position or a watchlist stock. Each morning an AI reads the new filings, the price move and the news against your thesis and writes a short update. Add a buy, a trim or a note and the next read takes it into account.</p>
           <ul class="hm-ticks">
-            <li>Rule-based flags from the numbers, plus the AI's own read</li>
+            <li>Rule-based flags from your own thresholds and sizing limits, plus the AI's own read</li>
             <li>Optional journal: entries, exits and notes shape the story</li>
             <li>Importing a broker statement PDF through chat fills in your positions</li>
           </ul>
@@ -197,12 +197,12 @@
       <div class="hm-wrap">
         <div class="hm-sec-head">
           <span class="eyebrow">How it works</span>
-          <h2 class="hm-h2">From a ticker to a story in three steps.</h2>
+          <h2 class="hm-h2">From a first look to a managed position.</h2>
         </div>
         <ol class="hm-steps">
-          <li><span class="hm-step-n">1</span><h3>Search any stock</h3><p>Type a symbol or company name. Press ⌘K from anywhere in the app.</p></li>
-          <li><span class="hm-step-n">2</span><h3>Read the raw data</h3><p>Scan the quarterly matrix, open any chart full-size, and check ownership and balance sheet before you form a view.</p></li>
-          <li><span class="hm-step-n">3</span><h3>Track it and get the story</h3><p>Add it to your watchlist or positions. Stocktale reads it every morning and flags what changed.</p></li>
+          <li><span class="hm-step-n">1</span><h3>Research any stock</h3><p>Search a symbol or company name (⌘K from anywhere). Scan the quarterly matrix, open any chart full-size, and check cash flow, ownership and the balance sheet before you form a view.</p></li>
+          <li><span class="hm-step-n">2</span><h3>Test it against your rules</h3><p>Set your own bars for ROCE, debt, pledge, growth and margins, and how big a position may get. Every stock shows how many of your rules it passes.</p></li>
+          <li><span class="hm-step-n">3</span><h3>Track it and manage it</h3><p>Add it to your watchlist or positions. Each morning Stocktale tells you what needs attention: trim, hold or exit, sized by your limits.</p></li>
         </ol>
       </div>
     </section>
@@ -224,10 +224,10 @@
     <!-- Final CTA -->
     <section class="hm-wrap hm-final">
       <div class="hm-final-in">
-        <h2 class="hm-h2">Start with a stock you already own.</h2>
+        <h2 class="hm-h2">Start with any stock.</h2>
         <div class="hm-cta">
           {% if user %}
-          <a class="btn btn-primary hm-btn" href="/analytics">Open Stocktale <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
+          <a class="btn btn-primary hm-btn" href="/home">Open Home <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
           {% else %}
           <a class="btn btn-primary hm-btn" href="/signup">Create your account <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
           <a class="btn hm-btn" href="/login">I already have one</a>
