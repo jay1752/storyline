@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -7,14 +9,30 @@ from app.auth.middleware import AuthMiddleware
 from app.db import ensure_platform_admin, get_market_conn, get_users_conn, init_db
 from app.ingestion.runner import start_worker
 from app.scheduler import start_scheduler
-from app.routes import admin, analytics, auth, chat, community, home, management, portfolio, search, settings
+from app.routes import admin, analytics, auth, chat, community, framework, google_auth, home, management, portfolio, profile, search, settings
 from app.tracking import already_tracked, create_tracked_position
 
-app = FastAPI(title="Storyline")
+app = FastAPI(title="Stocktale")
 app.add_middleware(AuthMiddleware)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    resp = await call_next(request)
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if os.environ.get("COOKIE_SECURE", "false").lower() == "true":  # only meaningful (and safe) once served over HTTPS
+        resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return resp
+
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 app.include_router(auth.router)
+app.include_router(google_auth.router)
+app.include_router(framework.router)
+app.include_router(profile.router)
 app.include_router(home.router)
 app.include_router(analytics.router)
 app.include_router(management.router)

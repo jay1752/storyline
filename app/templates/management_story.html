@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ pos.symbol }} story · Management · Storyline{% endblock %}
+{% block title %}{{ pos.symbol }} story · Management · Stocktale{% endblock %}
 
 {% macro verdict_badge(v) -%}
 <span class="badge {{ {'BUY': 'pos', 'HOLD': 'pos', 'TRIM': 'accent', 'EXIT': 'neg', 'WATCH': 'neutral'}[v] }} badge-dot">{{ {'BUY': 'Buy / add', 'HOLD': 'Hold', 'TRIM': 'Trim', 'EXIT': 'Exit', 'WATCH': 'Watch'}[v] }}</span>
@@ -35,17 +35,21 @@
 
   {% if full %}
   <div class="an-block">
-    <h3>Fundamentals scan <span class="section-note">computed from reported data — not by the AI</span></h3>
-    <table class="an-table">
-      <thead><tr><th>Filter</th><th>Your stock</th><th>Needs</th><th></th></tr></thead>
+    <h3>Fundamentals scan <span class="section-note">computed from reported data — not by the AI</span>
+      <a class="section-note scan-rules-link" href="/rules">Edit my default rules →</a></h3>
+    <table class="an-table scan-table" id="scan-table" data-id="{{ pos.id }}">
+      <thead><tr><th>Filter</th><th>Your stock</th><th>Needs</th><th></th><th></th></tr></thead>
       <tbody>
-        {% for f in a.filters %}
-        <tr><td>{{ f.label }}{% if f.note %}<span class="row-sub">{{ f.note }}</span>{% endif %}</td>
-            <td class="num">{{ f.value if f.value else '—' }}</td><td class="num muted">{{ f.threshold }}</td>
-            <td>{% if f.status == 'pass' %}<span class="badge pos">✓ Pass</span>{% elif f.status == 'fail' %}<span class="badge neg">✗ Fail</span>{% else %}<span class="badge neutral">Unknown</span>{% endif %}</td></tr>
+        {% for f in (scan.filters if scan else a.filters) %}
+        <tr {% if f.rule %}data-rule="{{ f.rule }}"{% endif %}><td>{{ f.label }}{% if f.note %}<span class="row-sub">{{ f.note }}</span>{% endif %}</td>
+            <td class="num">{{ f.value if f.value else '—' }}</td>
+            <td class="num muted needs-cell">{{ f.threshold }}{% if f.source == 'stock' %} <span class="badge accent" title="This stock has its own rule">this stock</span>{% elif f.source == 'user' %} <span class="badge neutral" title="Your default rule">yours</span>{% endif %}</td>
+            <td>{% if f.status == 'pass' %}<span class="badge pos">✓ Pass</span>{% elif f.status == 'fail' %}<span class="badge neg">✗ Fail</span>{% elif f.status == 'off' %}<span class="badge neutral">Off</span>{% else %}<span class="badge neutral">Unknown</span>{% endif %}</td>
+            <td class="scan-edit">{% if f.rule %}<button type="button" class="icon-btn scan-edit-btn" aria-label="Edit the {{ f.label }} rule for this stock" title="Edit this rule for this stock"><svg class="icon icon-sm"><use href="#i-settings"/></svg></button>{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>
+    {% if rule_layers %}<script id="rule-layers" type="application/json">{{ rule_layers | tojson }}</script>{% endif %}
   </div>
 
   <div class="an-block">

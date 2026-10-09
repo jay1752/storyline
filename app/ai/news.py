@@ -81,7 +81,7 @@ import xml.etree.ElementTree as ET
 from datetime import timezone
 from email.utils import parsedate_to_datetime
 
-_UA = {"User-Agent": "Mozilla/5.0 (compatible; StorylineBot/1.0)"}
+_UA = {"User-Agent": "Mozilla/5.0 (compatible; StocktaleBot/1.0)"}
 
 
 def _clean_title(t: str) -> str:

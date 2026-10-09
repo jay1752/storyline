@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS quarterly_data (
     dii_pct              REAL,
     promoter_pct         REAL,
     promoter_pledge      TEXT,          -- e.g. "No pledge"
+    promoter_pledge_pct  REAL,          -- pledged shares as % of the promoter group's own holding (India, from the shareholding XBRL)
     sector_momentum      TEXT,          -- favor | neutral | out
     total_debt_cr        REAL,          -- NULL except last 4 quarters (matches Details view)
     net_debt_cr          REAL,
@@ -101,6 +102,19 @@ CREATE TABLE IF NOT EXISTS quarterly_data (
 -- quarter, not a single company's own filing. shares_qoq_change_pct is the real
 -- signal (net institutional buying/selling); no pct-of-shares-outstanding here —
 -- that would need a 4th data source, deliberately out of scope for v1.
+CREATE TABLE IF NOT EXISTS annual_data (
+    symbol TEXT NOT NULL,
+    period_end_date TEXT NOT NULL,          -- fiscal-year end (India: March)
+    source TEXT NOT NULL DEFAULT 'indianapi',
+    revenue_cr REAL, expenses_cr REAL, operating_profit_cr REAL, opm_pct REAL, other_income_cr REAL,
+    finance_cost_cr REAL, depreciation_cr REAL, pbt_cr REAL, tax_pct REAL, net_profit_cr REAL, eps REAL, dividend_payout_pct REAL,
+    equity_capital_cr REAL, reserves_cr REAL, borrowings_cr REAL, other_liabilities_cr REAL, total_liabilities_cr REAL,
+    fixed_assets_cr REAL, cwip_cr REAL, investments_cr REAL, other_assets_cr REAL, total_assets_cr REAL,
+    cfo_cr REAL, cfi_cr REAL, cff_cr REAL, net_cash_flow_cr REAL, fcf_cr REAL, cfo_to_op REAL,
+    debtor_days REAL, inventory_days REAL, days_payable REAL, cash_conversion_cycle REAL, working_capital_days REAL, roce_pct REAL,
+    PRIMARY KEY (symbol, period_end_date)
+);
+
 CREATE TABLE IF NOT EXISTS institutional_holdings (
     symbol                TEXT NOT NULL REFERENCES stocks(symbol),
     period_end_date       TEXT NOT NULL,      -- 13F reporting quarter-end, e.g. "2026-06-30"
@@ -213,6 +227,31 @@ CREATE TABLE IF NOT EXISTS insight_runs (
     finished_at  TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_insight_runs_pos ON insight_runs(position_id, id);
+
+-- Admin overrides for the in-app scheduler's jobs (time/days/on-off). A row exists only where an admin changed
+-- something; deleting it restores the defaults in app/scheduler.py JOBS.
+CREATE TABLE IF NOT EXISTS job_settings (
+    key         TEXT PRIMARY KEY,
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    hm          INTEGER NOT NULL,                -- minute of day, IST
+    days        TEXT NOT NULL,                   -- e.g. "0,1,2,3,4" (Mon=0)
+    updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- The investment-rule thresholds behind the Fundamentals scan (ROCE > 25 ...). Three layers over the built-in
+-- defaults in app/framework.py: platform (admin) < user < stock. A row only exists where something was CHANGED;
+-- deleting it is "reset" (the value then comes from the layer below).
+CREATE TABLE IF NOT EXISTS framework_overrides (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    scope       TEXT NOT NULL CHECK (scope IN ('platform', 'user', 'stock')),
+    user_id     INTEGER NOT NULL DEFAULT 0,      -- 0 for the platform layer
+    symbol      TEXT NOT NULL DEFAULT '',        -- '' unless scope = 'stock'
+    key         TEXT NOT NULL,
+    value       REAL NOT NULL,
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (scope, user_id, symbol, key)
+);
 
 -- BYOK settings (AI chat + Insights). One row per user, created on first /settings POST
 -- (see app/ai/providers.py's get_user_settings for the "no row yet" default).
@@ -487,7 +526,16 @@ def init_db() -> None:
             m.execute("ALTER TABLE quarterly_data ADD COLUMN eps_adjusted REAL")
         if "equity_share_capital_cr" not in qd_cols:
             m.execute("ALTER TABLE quarterly_data ADD COLUMN equity_share_capital_cr REAL")
+        # Inputs for the scan's interest-coverage / current / quick / CFO-to-PAT rows (₹ Cr for India, $ M for US).
+        for col in ("finance_cost_cr", "current_assets_cr", "current_liabilities_cr", "inventory_cr", "cfo_cr"):
+            if col not in qd_cols:
+                m.execute(f"ALTER TABLE quarterly_data ADD COLUMN {col} REAL")
+        if "promoter_pledge_pct" not in qd_cols:
+            m.execute("ALTER TABLE quarterly_data ADD COLUMN promoter_pledge_pct REAL")
         stocks_cols = {row["name"] for row in m.execute("PRAGMA table_info(stocks)").fetchall()}
+        if "isin" not in stocks_cols:
+            m.execute("ALTER TABLE stocks ADD COLUMN isin TEXT")  # authoritative security id on broker statements (India)
+        m.execute("CREATE INDEX IF NOT EXISTS idx_stocks_isin ON stocks(isin) WHERE isin IS NOT NULL")
         if "cap_tier" not in stocks_cols:
             m.execute("ALTER TABLE stocks ADD COLUMN cap_tier TEXT")
         _backfill_cap_tiers(m)
@@ -517,6 +565,13 @@ def init_db() -> None:
                 u.execute(f"ALTER TABLE users ADD COLUMN {col} {decl}")
         if "display_name" not in {row["name"] for row in u.execute("PRAGMA table_info(users)").fetchall()}:
             u.execute("ALTER TABLE users ADD COLUMN display_name TEXT")
+        have = {row["name"] for row in u.execute("PRAGMA table_info(users)").fetchall()}
+        for col in ("phone", "contact_email", "country", "city", "about"):  # the Profile page
+            if col not in have:
+                u.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
+        if "google_sub" not in {row["name"] for row in u.execute("PRAGMA table_info(users)").fetchall()}:
+            u.execute("ALTER TABLE users ADD COLUMN google_sub TEXT")  # Google account id (OIDC `sub`) for "Sign in with Google"
+        u.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL")
         us_cols = {row["name"] for row in u.execute("PRAGMA table_info(user_settings)").fetchall()}
         for col in ("fallback_provider", "fallback_model"):
             if col not in us_cols:

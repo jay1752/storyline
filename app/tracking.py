@@ -23,7 +23,7 @@ def create_tracked_position(conn, user_id, symbol, company_name, anchor_type, an
         """INSERT INTO position_snapshots
         (position_id, price_at_check, since_anchor_pct, one_yr_pct, valuation_label, signal, reasoning_json, trigger_type)
         VALUES (?,?,?,?,?,?,?,?)""",
-        (position_id, buy_price, 0.0, 0.0, "Not yet assessed", "watch",
+        (position_id, buy_price, None, None, "Not yet assessed", "watch",
          json.dumps(["Just added — first loop check pending"]), "interval"),
     )
     return position_id

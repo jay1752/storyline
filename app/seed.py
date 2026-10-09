@@ -9,7 +9,7 @@ from app.db import get_market_conn, get_users_conn, init_db
 from app.ingestion.mock_data import STOCKS
 from app.ingestion.mock_source import MockSource
 
-USER_EMAIL = "kuamrjaydeep175@gmail.com"
+USER_EMAIL = "kumarjaydeep1752@gmail.com"
 
 # quantity chosen so USD-equivalent value hits the target book weights (32/26/24/18%)
 # used in the Position Desk mockup: NVDA 1127sh, HDFCBANK 6062sh, TATAMOTORS 11166sh, AAPL 462sh.

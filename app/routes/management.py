@@ -1,11 +1,12 @@
 import json
-from datetime import date
+from datetime import timedelta, date
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app import journal as journal_mod
-from app.ai.insights_engine import queue_run
+from app import framework as fw
+from app.ai.insights_engine import live_scan, queue_run
 from app.db import get_market_conn, get_users_conn
 from app.ingestion.runner import enqueue_insights, enqueue_position_analysis
 from app.templates_config import templates
@@ -56,9 +57,30 @@ def management_screen(request: Request, focus: int | None = None, imported: int 
         settings = u.execute("SELECT auto_insights FROM user_settings WHERE user_id = ?", (user_id,)).fetchone()
         closed = u.execute("SELECT * FROM tracked_positions WHERE user_id = ? AND status = 'exited' ORDER BY closed_at DESC", (user_id,)).fetchall()
 
+    # Returns come from live prices, not the stored snapshot: a freshly imported/added stock only has the placeholder
+    # snapshot (0.0% / 0%) until its first analysis runs, which made every new row read "+0.0%".
+    live = {}
+    with get_users_conn() as u2:
+        for r in positions:
+            rows = u2.execute("SELECT date, close FROM market.price_history WHERE symbol = ? ORDER BY date DESC LIMIT 1", (r["symbol"],)).fetchone()
+            if not rows or not rows["close"]:
+                continue
+            last_d, last_c = rows["date"], rows["close"]
+            base = r["buy_price"]
+            if not base:  # watchlist: price on/after the day tracking started
+                b = u2.execute("SELECT close FROM market.price_history WHERE symbol = ? AND date >= ? ORDER BY date LIMIT 1", (r["symbol"], r["anchor_date"])).fetchone()
+                base = b["close"] if b else None
+            yago = (date.fromisoformat(last_d) - timedelta(days=365)).isoformat()
+            y = u2.execute("SELECT close FROM market.price_history WHERE symbol = ? AND date <= ? ORDER BY date DESC LIMIT 1", (r["symbol"], yago)).fetchone()
+            live[r["id"]] = {
+                "since_anchor_pct": round((last_c / base - 1) * 100, 1) if base else None,
+                "one_yr_pct": round((last_c / y["close"] - 1) * 100, 0) if y and y["close"] else None,
+            }
+
     enriched = []
     for r in positions:
         d = dict(r)
+        d.update(live.get(r["id"], {}))
         a = json.loads(d.pop("analysis_json")) if r["analysis_json"] else None
         flags = (a or {}).get("story_flags") or []
         d["bad_flags"] = sum(1 for f in flags if f["level"] in ("warning", "alert"))
@@ -121,6 +143,8 @@ def management_story(request: Request, position_id: int, all: int = 0):
         snaps = u.execute("SELECT * FROM position_snapshots WHERE position_id = ? ORDER BY id DESC LIMIT ?", (position_id, limit + 1)).fetchall()
         total = u.execute("SELECT COUNT(*) FROM position_snapshots WHERE position_id = ? AND analysis_json IS NOT NULL", (position_id,)).fetchone()[0]
         run = u.execute("SELECT * FROM insight_runs WHERE position_id = ? ORDER BY id DESC LIMIT 1", (position_id,)).fetchone()
+        scan = live_scan(u, user_id, pos["symbol"])           # recomputed now, from the user's current rules
+        rule_layers = fw.layers(u, user_id, pos["symbol"])
     more = len(snaps) > limit
     snaps = snaps[:limit]
     entries, analysed = [], []
@@ -148,6 +172,7 @@ def management_story(request: Request, position_id: int, all: int = 0):
             "today": journal_mod.today_ist().isoformat(), "default_price": default_price, "error": request.query_params.get("error"),
             "saved": request.query_params.get("saved"),
             "latest": latest, "history": [e for e in entries if e is not latest and (e["analysis"] or (e["legacy"] and not e["legacy"][0].startswith("Just added")))],
+            "scan": scan, "rule_layers": rule_layers,
             "run": run, "running": bool(run and run["status"] in ("queued", "running")),
             "total_entries": total, "more": more,
         },

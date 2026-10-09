@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Profile · Stocktale{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="page-head-main">
+    <span class="eyebrow">System</span>
+    <h1 class="page-title">Your profile</h1>
+    <p class="page-sub">How you appear in Stocktale and how to reach you. Everything here is optional except what's marked.</p>
+  </div>
+</div>
+
+{% if saved %}<div class="alert" role="status"><svg class="icon icon-sm"><use href="#i-check"/></svg> Profile saved.</div>{% endif %}
+{% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+
+<form method="post" action="/profile" class="form-card">
+  <div class="form-grid">
+    <div class="form-field">
+      <label for="display_name">Name</label>
+      <input class="form-input" id="display_name" name="display_name" maxlength="60" value="{{ me.display_name or '' }}" autocomplete="name">
+      <span class="hint">Shown on your Community posts and in the sidebar.</span>
+    </div>
+
+    <div class="form-field">
+      <label for="signin_email">Sign-in email</label>
+      <input class="form-input" id="signin_email" value="{{ me.email }}" disabled>
+      <span class="hint">
+        {% if me.google_sub %}Managed by your Google account — it's how you sign in.{% else %}This is your account's identity, so it can't be changed here yet; changing it safely needs email verification.{% endif %}
+        {% if me.email_verified_at %} <span class="badge pos">verified</span>{% endif %}
+      </span>
+    </div>
+
+    <div class="form-field">
+      <label for="contact_email">Contact email</label>
+      <input class="form-input" type="email" id="contact_email" name="contact_email" maxlength="120" value="{{ me.contact_email or '' }}" autocomplete="email" placeholder="Where we should reach you, if different">
+      <span class="hint">Optional. Use it if you want alerts or notices at a different address than you sign in with.</span>
+    </div>
+
+    <div class="form-field">
+      <label for="phone">Phone number</label>
+      <input class="form-input" type="tel" id="phone" name="phone" maxlength="20" value="{{ me.phone or '' }}" autocomplete="tel" placeholder="+91 98765 43210">
+      <span class="hint">Include the country code. Not verified, and never shown to other users.</span>
+    </div>
+
+    <div class="form-field">
+      <label for="country">Country</label>
+      <select class="form-input" id="country" name="country">
+        <option value="">—</option>
+        {% for c in countries %}<option value="{{ c }}" {{ 'selected' if me.country == c else '' }}>{{ c }}</option>{% endfor %}
+      </select>
+    </div>
+
+    <div class="form-field">
+      <label for="city">City</label>
+      <input class="form-input" id="city" name="city" maxlength="60" value="{{ me.city or '' }}" autocomplete="address-level2">
+    </div>
+
+    <div class="form-field form-field-wide">
+      <label for="about">About you</label>
+      <textarea class="form-input" id="about" name="about" rows="3" maxlength="300" placeholder="How you invest, what you follow — a line or two">{{ me.about or '' }}</textarea>
+      <span class="hint">Up to 300 characters. Only you see this for now.</span>
+    </div>
+  </div>
+  <div class="form-actions"><button class="btn btn-primary" type="submit">Save profile</button></div>
+</form>
+{% endblock %}

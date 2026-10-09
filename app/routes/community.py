@@ -91,7 +91,7 @@ def _serialize(rows, me: int, counts: dict, reactions: dict) -> list[dict]:
             "parent_id": r["parent_id"],
             "kind": r["kind"],
             "bot": bot,
-            "author": "Storyline AI" if bot else _handle(r["user_id"], r["display_name"]),
+            "author": "Stocktale AI" if bot else _handle(r["user_id"], r["display_name"]),
             "mine": (r["user_id"] == me) and not deleted and not bot,
             "body": "" if deleted else r["body"],
             "deleted": deleted,

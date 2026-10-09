@@ -39,7 +39,7 @@
   });
 
   // ---------- Palette: storyline <-> paperclip ----------
-  const PALETTES = [{ id: "storyline", label: "Storyline" }, { id: "paperclip", label: "Paperclip" }];
+  const PALETTES = [{ id: "storyline", label: "Stocktale" }, { id: "paperclip", label: "Paperclip" }];
   function currentPalette() { return store.get("palette") === "paperclip" ? "paperclip" : "storyline"; }
   function applyPalette(p) {
     if (p === "paperclip") root.setAttribute("data-palette", "paperclip");
@@ -95,7 +95,9 @@
     { label: "Management — tracked stocks", href: "/management", icon: "i-management" },
     { label: "Track a stock", href: "/management/add", icon: "i-plus" },
     { label: "Portfolio", href: "/portfolio", icon: "i-portfolio" },
+    { label: "Investment rules", href: "/rules", icon: "i-check" },
     { label: "AI settings", href: "/settings", icon: "i-settings" },
+    { label: "Your profile", href: "/profile", icon: "i-smile" },
     { label: "Data ingestion", href: "/admin", icon: "i-admin", admin: true },
   ].filter((p) => !p.admin || palette.dataset.admin === "1");
 

@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.db import get_market_conn, get_users_conn
 from app.ingestion.runner import SOURCES, TARGETS, enqueue_community_briefing, enqueue_ingestion, enqueue_insights
+from app import scheduler as sched
 from app.templates_config import templates
 
 router = APIRouter()
@@ -114,6 +115,7 @@ def admin_dashboard(request: Request):
             "macro_markets": macro_markets,
             "sources": list(SOURCES.keys()),
             "targets": TARGETS,
+            "jobs": sched.jobs_view(),
         },
     )
 
@@ -163,3 +165,64 @@ def trigger_community_briefing(request: Request, force: str = Form("")):
     """Generate today's Community briefing now (force=1 regenerates it in place if one already exists)."""
     enqueue_community_briefing(force=bool(force))
     return RedirectResponse("/admin", status_code=303)
+
+
+# ---------- Scheduled jobs (in-app scheduler: app/scheduler.py) ----------
+
+async def _json(request: Request) -> dict:
+    try:
+        return await request.json()
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+@router.post("/admin/jobs/{key}/save")
+async def job_save(request: Request, key: str):
+    from fastapi.responses import JSONResponse
+    d = await _json(request)
+    if key not in sched.JOBS:
+        return JSONResponse({"error": "Unknown job."}, status_code=404)
+    try:
+        hm = sched.parse_hm(str(d.get("time", "")))
+        days = [int(x) for x in d.get("days", [])]
+        sched.save_job(key, bool(d.get("enabled", True)), hm, days)
+    except (ValueError, AttributeError):
+        return JSONResponse({"error": "Enter a time like 19:00 and pick at least one weekday."}, status_code=400)
+    return {"ok": True}
+
+
+@router.post("/admin/jobs/{key}/reset")
+def job_reset(key: str):
+    from fastapi.responses import JSONResponse
+    if key not in sched.JOBS:
+        return JSONResponse({"error": "Unknown job."}, status_code=404)
+    sched.reset_job(key)
+    return {"ok": True}
+
+
+@router.post("/admin/jobs/{key}/run")
+def job_run(key: str):
+    """Run a scheduled job right now, regardless of its time/days/pause state (a paused job still runs when asked)."""
+    from fastapi.responses import JSONResponse
+    if key not in sched.JOBS:
+        return JSONResponse({"error": "Unknown job."}, status_code=404)
+    last = sched.last_runs([key])[key]["last"]
+    if last and last["status"] in ("queued", "running"):
+        return JSONResponse({"error": "That job is already running."}, status_code=409)
+    if key == "community_briefing":
+        enqueue_community_briefing(force=False)
+        return {"ok": True, "started": "Community briefing"}
+    if key == "insights":
+        from app.ai.providers import build_chain
+        with get_users_conn() as u:
+            users = [r[0] for r in u.execute("SELECT DISTINCT user_id FROM tracked_positions WHERE status = 'active'")]
+        n = 0
+        for uid in users:
+            if build_chain(uid):
+                enqueue_insights(uid, trigger="manual")
+                n += 1
+        if not n:
+            return JSONResponse({"error": "No user has tracked stocks and a usable AI model right now."}, status_code=400)
+        return {"ok": True, "started": f"analysis for {n} user(s)"}
+    enqueue_ingestion(sched.JOBS[key]["source"], "prices")
+    return {"ok": True, "started": sched.JOBS[key]["label"]}

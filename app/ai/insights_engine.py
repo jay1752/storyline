@@ -21,9 +21,10 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.ai import errors
+from app import framework as framework_rules
 from app.ai.checklist import evaluate_framework
 from app.ai.news import company_news
 from app.ai.providers import build_chain
@@ -38,7 +39,7 @@ DISCLAIMER = ("Not SEBI-registered advice. This is your own framework applied by
 FX_INR_PER_USD = 83.0  # same fixed rate the Portfolio page uses for its combined view
 VERDICT_TO_SIGNAL = {"BUY": "buy_consider", "HOLD": "hold", "TRIM": "trim_consider", "EXIT": "exit_consider", "WATCH": "watch"}
 
-SYSTEM_PROMPT = """You are the analyst inside Storyline, applying the user's personal stock-investment-analysis framework
+SYSTEM_PROMPT = """You are the analyst inside Stocktale, applying the user's personal stock-investment-analysis framework
 (Anil Sanadhya's approach: Indian equities, business-driven, buy great companies, build slowly, hold long) to ONE stock per
 run, and continuing that stock's running story from the prior entries you are shown.
 
@@ -125,7 +126,44 @@ class StoryFlag(BaseModel):
     text: str
 
 
+_SPEED_NOTE_ALIASES = ("details", "detail", "reason", "summary", "explanation", "comment", "text")
+
+
+def _coerce_analysis(data):
+    """Weaker / free models follow the JSON schema loosely: `details` instead of `note`, a sentence where an object belongs,
+    too many list items. Normalise those here (the real fields and meanings are unchanged) rather than failing the whole run."""
+    if not isinstance(data, dict):
+        return data
+    d = dict(data)
+    for k in ("speed1", "speed2", "speed3"):
+        v = d.get(k)
+        if isinstance(v, str):
+            d[k] = {"status": "monitor", "note": v}
+        elif isinstance(v, dict):
+            v = dict(v)
+            if not v.get("note"):
+                v["note"] = next((v.pop(a) for a in _SPEED_NOTE_ALIASES if v.get(a)), "")
+            if isinstance(v.get("status"), str):
+                v["status"] = v["status"].strip().lower().replace(" ", "_").replace("-", "_")
+            d[k] = v
+    t = d.get("triangulation")
+    if isinstance(t, str):
+        d["triangulation"] = {"lynch_category": "Unknown", "mayer_probability": "UNKNOWN", "mayer_reason": t, "coffee_can": "UNKNOWN",
+                              "coffee_can_note": "", "moat_type": "Unknown", "moat_durability": "Unknown"}
+    for k, n in (("metrics_to_watch", 4), ("news_takeaways", 4), ("data_gaps", 6), ("story_flags", 3)):
+        if isinstance(d.get(k), list):
+            d[k] = d[k][:n]
+    if isinstance(d.get("verdict"), str):
+        d["verdict"] = d["verdict"].strip().upper()
+    return d
+
+
 class Analysis(BaseModel):
+    @model_validator(mode="before")
+    @classmethod
+    def _tolerant(cls, data):
+        return _coerce_analysis(data)
+
     verdict: Literal["BUY", "HOLD", "TRIM", "EXIT", "WATCH"]
     bucket: Literal["Core", "Steady", "Emerging", "Reserve", "Trim-Exit"]
     target_weight_pct: float | None = Field(None, description="Target portfolio weight at cost, percent; null if not applicable")
@@ -193,7 +231,10 @@ def _gather(u, pos) -> dict:
             d["revenue_growth_pct"] = _yoy(r, by_end, stored=False)
         q_dicts.append(d)
 
-    framework = evaluate_framework(q_dicts, stock["sector"])
+    from app.annual import annual_rows
+    with get_market_conn() as _am:
+        annual = annual_rows(_am, sym)
+    framework = evaluate_framework(q_dicts, stock["sector"], framework_rules.resolve(u, pos["user_id"], sym), annual=annual)
 
     with get_market_conn() as m:
         closes = m.execute("SELECT date, close FROM price_history WHERE symbol = ? ORDER BY date DESC LIMIT 400", (sym,)).fetchall()
@@ -338,9 +379,15 @@ def _new_ai_flags(ai_flags, rule_flags: list[dict]) -> list[dict]:
     return out
 
 
+def _structured_output_problem(e: Exception) -> bool:
+    t = (type(e).__name__ + " " + str(e)).lower()
+    return any(w in t for w in ("tool_use_failed", "tool call validation", "did not match schema", "unexpectedmodelbehavior",
+                                "validation error", "does not support tool", "no endpoints found that support", "tool use"))
+
+
 def _generate(chain: list[dict], prompt: str) -> tuple[Analysis, dict]:
     """Walk the user's model chain; transient errors get retries, anything else moves to the next model."""
-    from pydantic_ai import Agent
+    from pydantic_ai import Agent, PromptedOutput
 
     if not chain:
         raise AnalysisError("No usable AI model: add an API key in AI settings first.")
@@ -348,7 +395,16 @@ def _generate(chain: list[dict], prompt: str) -> tuple[Analysis, dict]:
     for link in chain:
         for attempt in range(3):
             try:
-                result = Agent(model=link["model"], system_prompt=SYSTEM_PROMPT, output_type=Analysis).run_sync(prompt)
+                try:
+                    result = Agent(model=link["model"], system_prompt=SYSTEM_PROMPT, output_type=Analysis).run_sync(prompt)
+                except Exception as first:  # noqa: BLE001
+                    # Some models/providers (Groq's gpt-oss, assorted free OpenRouter models) reject or botch tool-call
+                    # output ("tool call validation failed", wrong field names). Ask for plain JSON text instead and validate
+                    # it ourselves, with the tolerant coercion above.
+                    if not _structured_output_problem(first):
+                        raise
+                    logger.info("insights: %s can't do tool-call output (%s); retrying as prompted JSON", link["label"], type(first).__name__)
+                    result = Agent(model=link["model"], system_prompt=SYSTEM_PROMPT, output_type=PromptedOutput(Analysis)).run_sync(prompt)
                 return result.output, link
             except Exception as e:  # noqa: BLE001
                 logger.warning("insights: %s failed (attempt %d): %s: %s", link["label"], attempt + 1, type(e).__name__, str(e)[:200])
@@ -484,3 +540,26 @@ def run_insights_for_user(user_id: int, progress=None, trigger: str = "daily", s
             break
         time.sleep(1.0)
     return written
+
+
+def live_scan(u, user_id: int, symbol: str) -> dict | None:
+    """The Fundamentals scan recomputed right now from stored data and the user's CURRENT rules — no AI, no stored snapshot,
+    so editing a threshold on the story page changes the table immediately (the AI's own read updates at its next run)."""
+    from app.routes.analytics import _yoy
+
+    stock = u.execute("SELECT sector FROM market.stocks WHERE symbol = ?", (symbol,)).fetchone()
+    allq = u.execute("SELECT * FROM market.quarterly_data WHERE symbol = ? ORDER BY period_end_date", (symbol,)).fetchall()
+    quarterly = [r for r in allq if "annual" not in (r["quarter_label"] or "").lower()]
+    if not stock or not quarterly:
+        return None
+    by_end = {r["period_end_date"]: r for r in quarterly}
+    rows = []
+    for r in quarterly[-8:]:
+        d = dict(r)
+        if d.get("revenue_growth_pct") is None:
+            d["revenue_growth_pct"] = _yoy(r, by_end, stored=False)
+        rows.append(d)
+    from app.annual import annual_rows
+    with get_market_conn() as _am:
+        annual = annual_rows(_am, symbol)
+    return evaluate_framework(rows, stock["sector"], framework_rules.resolve(u, user_id, symbol), annual=annual)

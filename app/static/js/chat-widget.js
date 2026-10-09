@@ -466,9 +466,17 @@ function _renderProposal(p) {
   for (const r of p.rows) {
     const row = _el("div", "chat-card-row");
     const head = _el("div", "chat-card-head");
+    if (r.needs_review) row.classList.add("needs-review");
     head.append(_el("strong", null, r.symbol), _el("span", null, _fmt(r.quantity, 4) + " sh @ " + (r.avg_price === null ? "price unknown" : _fmt(r.avg_price, 2))));
-    row.append(head, _el("div", "chat-card-sub", _actionText(r) + " · since " + r.anchor_date + " · " + r.txn_count + " row" + (r.txn_count === 1 ? "" : "s")));
+    row.append(head, _el("div", "chat-card-sub", r.company_name + " · " + _actionText(r) + " · since " + r.anchor_date + " · " + r.txn_count + " row" + (r.txn_count === 1 ? "" : "s")));
+    if (r.last_price !== null && r.last_price !== undefined) {
+      const pct = r.return_pct === null || r.return_pct === undefined ? "" : " · " + (r.return_pct >= 0 ? "+" : "") + r.return_pct + "% vs your average";
+      row.appendChild(_el("div", "chat-card-sub", "Now " + _fmt(r.last_price, 2) + " (" + r.last_price_date + ")" + pct));
+    }
+    if (r.match && r.match.note) row.appendChild(_el("div", "chat-card-sub", r.match.note));
+    if (r.price_check && r.price_check.status === "verified") row.appendChild(_el("div", "chat-card-ok", "✓ " + r.price_check.text));
     for (const w of r.warnings || []) row.appendChild(_el("div", "chat-card-warn", "⚠ " + w));
+    if (r.needs_review) row.appendChild(_el("div", "chat-card-warn", "⚠ Needs your review before you confirm."));
     card.appendChild(row);
   }
 
@@ -482,7 +490,8 @@ function _renderProposal(p) {
   const status = _el("div", "chat-card-status");
   if (p.rows.length) {
     const actions = _el("div", "chat-card-actions");
-    const confirm = _el("button", null, "Confirm import");
+    const review = p.rows.filter((r) => r.needs_review).length;
+    const confirm = _el("button", null, review ? "Confirm import (" + review + " to review)" : "Confirm import");
     confirm.type = "button";
     const cancel = _el("button", "secondary", "Cancel");
     cancel.type = "button";

@@ -63,3 +63,53 @@
     t.title = d.toString();
   });
 })();
+
+// Fundamentals scan: edit one rule for THIS stock (override), or send it back to the user's default with ↺.
+(function () {
+  const table = document.getElementById("scan-table");
+  const layersEl = document.getElementById("rule-layers");
+  if (!table || !layersEl) return;
+  let layers;
+  try { layers = JSON.parse(layersEl.textContent); } catch (e) { return; }
+  const id = table.dataset.id;
+
+  async function post(path, body) {
+    const r = await fetch("/management/" + id + "/rules/" + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    let out = {};
+    try { out = await r.json(); } catch (e) { /* ignore */ }
+    if (!r.ok) throw new Error(out.error || "Couldn't save that.");
+  }
+
+  table.querySelectorAll("tr[data-rule]").forEach((row) => {
+    const btn = row.querySelector(".scan-edit-btn");
+    const rule = layers[row.dataset.rule];
+    if (!btn || !rule) return;
+    btn.addEventListener("click", () => {
+      const cell = row.querySelector(".needs-cell");
+      if (cell.dataset.editing) return;
+      cell.dataset.editing = "1";
+      cell.textContent = "";
+      const op = document.createElement("span"); op.textContent = rule.op + " ";
+      const input = document.createElement("input");
+      input.type = "number"; input.step = "any"; input.value = rule.value; input.className = "form-input scan-input"; input.setAttribute("aria-label", rule.label + " threshold");
+      const unit = document.createElement("span"); unit.textContent = " " + rule.unit;
+      const lab = document.createElement("label"); lab.className = "scan-on";
+      const on = document.createElement("input"); on.type = "checkbox"; on.checked = rule.enabled;
+      lab.append(on, document.createTextNode(" use"));
+      const save = document.createElement("button"); save.type = "button"; save.className = "btn btn-sm btn-primary"; save.textContent = "Save";
+      const reset = document.createElement("button"); reset.type = "button"; reset.className = "btn btn-sm"; reset.textContent = "↺ Reset";
+      reset.title = "Back to " + (rule.reset_source === "built-in" ? "the built-in default" : rule.reset_source === "platform" ? "the platform default" : "your default") + ": " + rule.op + " " + rule.reset_value + rule.unit;
+      reset.disabled = !rule.customised;
+      const cancel = document.createElement("button"); cancel.type = "button"; cancel.className = "btn btn-sm btn-ghost"; cancel.textContent = "Cancel";
+      const msg = document.createElement("div"); msg.className = "rule-msg"; msg.setAttribute("role", "status");
+      const row1 = document.createElement("div"); row1.className = "scan-editor"; row1.append(op, input, unit, lab);
+      const row2 = document.createElement("div"); row2.className = "scan-editor"; row2.append(save, reset, cancel);
+      cell.append(row1, row2, msg);
+      input.focus();
+      const fail = (e) => { msg.textContent = e.message; msg.classList.add("bad"); };
+      save.onclick = async () => { try { await post("save", { key: row.dataset.rule, value: input.value, enabled: on.checked }); location.reload(); } catch (e) { fail(e); } };
+      reset.onclick = async () => { try { await post("reset", { key: row.dataset.rule }); location.reload(); } catch (e) { fail(e); } };
+      cancel.onclick = () => location.reload();
+    });
+  });
+})();

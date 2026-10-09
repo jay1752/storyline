@@ -464,7 +464,12 @@ class MoneyControlSource(DataSource):
                         equity_share_capital_cr = COALESCE(excluded.equity_share_capital_cr, equity_share_capital_cr),
                         revenue_growth_pct = COALESCE(excluded.revenue_growth_pct, revenue_growth_pct),
                         operating_profit_cr = COALESCE(excluded.operating_profit_cr, operating_profit_cr),
-                        opm_pct = COALESCE(excluded.opm_pct, opm_pct)""",
+                        opm_pct = COALESCE(excluded.opm_pct, opm_pct)
+                    -- A March ANNUAL figure shares (symbol, period_end_date) with the March QUARTER row. Validated
+                    -- against BSE's own filing: TCS Mar-2026 quarter stored operating profit 66,838 and OPM 25.03%
+                    -- (= FY26 / FY revenue), where the quarter's true figures are 19,276 and 27.3%. Only rows this
+                    -- source wrote itself (annual) may be updated; a BSE/NSE quarter row must never take annual values.
+                    WHERE quarterly_data.source = 'moneycontrol'""",
                     # ON CONFLICT only ever fires for a period already in
                     # needs_backfill (a genuinely new period can't conflict) — and
                     # even then touches ONLY these five fields, deliberately, so a

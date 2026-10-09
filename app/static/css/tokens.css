@@ -1393,3 +1393,55 @@ ol.news { margin: 0.4rem 0 0; padding-left: 1.4rem; font-size: 0.84rem; display:
 .mgmt-flag { font-size: 0.7rem; }
 .dot-state { display: inline-block; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--muted); margin-right: 0.45rem; }
 .dot-state.on { background: var(--pos); box-shadow: 0 0 0 3px var(--badge-pos-bg); }
+
+/* ---------- Sign in with Google ---------- */
+.btn-google { display: flex; width: 100%; justify-content: center; align-items: center; gap: 0.6rem; background: #fff; color: #1f1f1f; border: 1px solid #dadce0; font-weight: 500; padding: 0.7rem 1rem; text-decoration: none; }
+.btn-google:hover { background: #f8f9fa; color: #1f1f1f; border-color: #d2e3fc; }
+.auth-divider { display: flex; align-items: center; gap: 0.8rem; margin: 1.1rem 0; color: var(--muted); font-size: 0.78rem; }
+.auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.auth-note { margin-top: 0.9rem; }
+
+/* ---------- Investment rules + profile ---------- */
+.rules-table td { vertical-align: middle; }
+.rule-edit { white-space: nowrap; }
+.rule-op { font-family: var(--font-mono); color: var(--muted); display: inline-block; min-width: 1.2rem; }
+.rule-val, .scan-input { width: 6.2rem; padding: 0.35rem 0.5rem; display: inline-block; font-variant-numeric: tabular-nums; }
+.rule-unit { color: var(--muted); font-size: 0.82rem; }
+.rule-actions { white-space: nowrap; }
+.rule-msg { display: inline-block; font-size: 0.74rem; color: var(--muted); margin-left: 0.4rem; }
+.rule-msg.bad { color: var(--neg); }
+.switch { position: relative; display: inline-block; width: 2.3rem; height: 1.3rem; }
+.switch input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
+.switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--bar-track); border: 1px solid var(--border-strong); transition: background 0.15s; }
+.switch span::after { content: ""; position: absolute; top: 2px; left: 2px; width: calc(1.3rem - 8px); height: calc(1.3rem - 8px); border-radius: 50%; background: var(--paper); box-shadow: var(--shadow-sm); transition: transform 0.15s; }
+.switch input:checked + span { background: var(--structure); border-color: var(--structure); }
+.switch input:checked + span::after { transform: translateX(1rem); }
+.switch input:focus-visible + span { outline: 2px solid var(--structure); outline-offset: 2px; }
+.scan-edit { width: 2.2rem; text-align: right; }
+.scan-edit-btn { opacity: 0.55; } .scan-table tr:hover .scan-edit-btn, .scan-edit-btn:focus-visible { opacity: 1; }
+.scan-rules-link { margin-left: 0.8rem; font-weight: 400; }
+.scan-editor { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.4rem; }
+.scan-on { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.78rem; color: var(--muted); }
+.needs-cell .badge { margin-left: 0.3rem; font-size: 0.6rem; }
+.user-link { display: flex; align-items: center; gap: 0.6rem; min-width: 0; flex: 1; color: inherit; text-decoration: none; border-radius: var(--r-md); }
+.user-link:hover .user-email { text-decoration: underline; }
+.form-field-wide { grid-column: 1 / -1; }
+.form-actions { display: flex; gap: 0.6rem; }
+textarea.form-input { resize: vertical; min-height: 4.5rem; font-family: inherit; line-height: 1.5; }
+@media (max-width: 720px) { .rules-table .rule-actions { white-space: normal; } }
+
+/* ---------- Admin: scheduled jobs ---------- */
+.jobs-table td { vertical-align: top; }
+.job-actions { white-space: nowrap; }
+.job-err { color: var(--neg); display: block; max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job-next { font-size: 0.82rem; white-space: nowrap; }
+.job-editor td { background: var(--paper-sunken); }
+.job-edit-form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.7rem; padding: 0.4rem 0; }
+.job-edit-form input[type="time"] { width: 7.5rem; }
+.day-chip { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.55rem; border: 1px solid var(--border-strong); border-radius: 999px; font-size: 0.78rem; cursor: pointer; }
+.day-chip:has(input:checked) { background: var(--structure); color: var(--on-structure); border-color: var(--structure); }
+.day-chip input { accent-color: var(--accent); }
+.jobs-table td:first-child { min-width: 14rem; }
+.jobs-table .row-sub { white-space: normal; max-width: 30rem; line-height: 1.4; }
+.jobs-table .job-err { white-space: nowrap; }
+.jobs-table .job-sched { white-space: nowrap; }

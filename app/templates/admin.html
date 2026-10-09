@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Data ingestion · Storyline{% endblock %}
+{% block title %}Data ingestion · Stocktale{% endblock %}
 {% block content %}
 
 <div class="page-head">
@@ -9,6 +9,35 @@
     <p class="page-sub">Run sources, watch jobs, and check coverage across the stock universe.</p>
   </div>
 </div>
+
+<details class="expandable" open>
+  <summary><span class="summary-title">Scheduled jobs</span><span class="section-note">run automatically by the app · all times IST · changes apply at the next 5-minute check</span></summary>
+  <div class="details-body">
+    <div class="table-wrap">
+      <table class="data jobs-table" id="jobs-table">
+        <thead><tr><th>Job</th><th>Schedule</th><th>On</th><th>Last run</th><th>Next run</th><th></th></tr></thead>
+        <tbody>
+          {% for j in jobs %}
+          <tr data-key="{{ j.key }}" data-time="{{ j.time }}" data-days="{{ j.days|join(',') }}" data-enabled="{{ 1 if j.enabled else 0 }}"
+              data-default-time="{{ j.default_time }}" data-default-days="{{ j.default_days|join(',') }}">
+            <td><b>{{ j.label }}</b><span class="row-sub">{{ j.desc }}</span></td>
+            <td class="job-sched">{{ j.time }} · {% set names = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}{% if j.days|length == 7 %}every day{% elif j.days == [0,1,2,3,4] %}Mon–Fri{% else %}{% for d in j.days %}{{ names[d] }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}
+              {% if j.customised %}<span class="badge accent">changed</span>{% endif %}</td>
+            <td><label class="switch"><input type="checkbox" class="job-on" {{ 'checked' if j.enabled else '' }} aria-label="Run {{ j.label }} automatically"><span></span></label></td>
+            <td>{% if j.last %}<span class="badge {{ 'pos' if j.last.status == 'success' else ('neg' if j.last.status in ('failed','not_configured') else 'neutral') }}">{{ j.last.status }}</span>
+                <span class="row-sub">{{ j.last.started_ist }}{% if j.last.took %} · {{ j.last.took }}{% endif %}{% if j.last.rows_written %} · {{ "{:,}".format(j.last.rows_written) }} rows{% endif %}</span>
+                {% if j.last.error_message %}<span class="row-sub job-err" title="{{ j.last.error_message }}">{{ j.last.error_message[:90] }}</span>{% endif %}
+                {% else %}<span class="stub">never run</span>{% endif %}</td>
+            <td class="job-next">{{ j.next }}</td>
+            <td class="job-actions"><button type="button" class="btn btn-sm job-run">Run now</button> <button type="button" class="btn btn-sm job-edit">Edit</button><span class="rule-msg job-msg" role="status"></span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">Switch a job off to pause it (it keeps its history and can still be run by hand). "Run now" ignores the schedule and the on/off switch. A job that failed is retried after 2 hours. Details of every run are in "Ingestion runs" below.</p>
+  </div>
+</details>
 
 <details class="expandable" open>
   <summary><span class="summary-title">Run ingestion</span><span class="section-note">runs in the background — refresh to see progress</span></summary>
@@ -68,7 +97,7 @@
              hx-get="/admin/stocks-rows" hx-trigger="keyup changed delay:300ms, search" hx-target="#stocks-tbody" hx-swap="innerHTML" hx-include="#stocks-filters">
       <select name="market" class="form-input" style="width:auto;" aria-label="Country"
               hx-get="/admin/stocks-rows" hx-trigger="change" hx-target="#stocks-tbody" hx-swap="innerHTML" hx-include="#stocks-filters"
-              onchange="document.getElementById('cap-tier-select').disabled = (this.value === 'US'); if(this.value==='US') document.getElementById('cap-tier-select').value='';">
+              >
         <option value="">All countries</option>
         <option value="IN">India</option>
         <option value="US">US</option>
@@ -79,9 +108,10 @@
         <option value="large">Large</option>
         <option value="mid">Mid</option>
         <option value="small">Small</option>
+        <option value="micro">Micro (US)</option>
       </select>
     </div>
-    <p class="section-note" id="stocks-shown-note">showing {{ stocks_shown }} of {{ market_counts.stocks }} (symbols with data first). Cap tier is India-only (SEBI/AMFI) — disabled when country is US.</p>
+    <p class="section-note" id="stocks-shown-note">showing {{ stocks_shown }} of {{ market_counts.stocks }} (symbols with data first). Cap tier: India by SEBI/AMFI rank, US by market cap (large ≥ $10B, mid ≥ $2B, small ≥ $300M, micro below).</p>
     <div class="table-wrap">
       <table class="data">
         <thead><tr><th>Symbol</th><th>Name</th><th>Market</th><th>Cap</th><th>L1 · Company</th><th>L2 · Relative</th><th>L3 · Institutional</th><th>L4 · Momentum</th><th>L5 · Macro</th></tr></thead>
@@ -102,4 +132,5 @@
   </div>
 </details>
 
+<script src="/static/js/admin-jobs.js?v={{ asset_version('js/admin-jobs.js') }}" defer></script>
 {% endblock %}

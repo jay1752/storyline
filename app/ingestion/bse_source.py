@@ -267,6 +267,13 @@ def _extract_facts(html: str) -> dict[str, str]:
                     value = str(num * (10 ** (int(scale) - 7)))
                 except ValueError:
                     pass
+        # Inline XBRL prints a loss as its absolute value and carries the minus in a `sign='-'` attribute.
+        # Ignoring it stored every loss as a profit: 0 of 24,459 BSE quarter rows had a negative net profit
+        # (MoneyControl rows: ~17% negative). Verified on SUNDARMFIN FY26 CFO: raw '5,892.23' with sign='-'.
+        if attrs.get("sign") == "-":
+            neg = _num(value)
+            if neg is not None:
+                value = str(-neg)
         if tag not in facts or ctx == "OneD":
             facts[tag] = value
     return facts
@@ -565,11 +572,19 @@ class BseSource(DataSource):
                  roe_pct, roce_pct, debt_equity, pbt_cr, tax_pct, book_value_per_share, equity_share_capital_cr)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(symbol, period_end_date) DO UPDATE SET
-                    quarter_label=excluded.quarter_label, source=excluded.source,
-                    revenue_cr=excluded.revenue_cr, operating_profit_cr=excluded.operating_profit_cr,
-                    opm_pct=excluded.opm_pct, other_income_cr=excluded.other_income_cr,
-                    net_profit_cr=excluded.net_profit_cr, eps=excluded.eps,
-                    pbt_cr=excluded.pbt_cr, tax_pct=excluded.tax_pct,
+                    -- A row sourced from IndianAPI (normalised, the source of record where it has the quarter - see
+                    -- scripts/apply_indianapi_quarterly.py) keeps its P&L columns; only the balance-sheet-type columns
+                    -- below (debt, cash, ROE ...) keep updating from the filing.
+                    quarter_label=CASE WHEN quarterly_data.source='indianapi' THEN quarterly_data.quarter_label ELSE excluded.quarter_label END,
+                    source=CASE WHEN quarterly_data.source='indianapi' THEN 'indianapi' ELSE excluded.source END,
+                    revenue_cr=CASE WHEN quarterly_data.source='indianapi' THEN quarterly_data.revenue_cr ELSE excluded.revenue_cr END,
+                    operating_profit_cr=CASE WHEN quarterly_data.source='indianapi' THEN quarterly_data.operating_profit_cr ELSE excluded.operating_profit_cr END,
+                    opm_pct=CASE WHEN quarterly_data.source='indianapi' THEN quarterly_data.opm_pct ELSE excluded.opm_pct END,
+                    other_income_cr=CASE WHEN quarterly_data.source='indianapi' THEN quarterly_data.other_income_cr ELSE excluded.other_income_cr END,
+                    net_profit_cr=CASE WHEN quarterly_data.source='indianapi' THEN quarterly_data.net_profit_cr ELSE excluded.net_profit_cr END,
+                    eps=CASE WHEN quarterly_data.source='indianapi' THEN COALESCE(quarterly_data.eps, excluded.eps) ELSE excluded.eps END,
+                    pbt_cr=CASE WHEN quarterly_data.source='indianapi' THEN quarterly_data.pbt_cr ELSE excluded.pbt_cr END,
+                    tax_pct=CASE WHEN quarterly_data.source='indianapi' THEN quarterly_data.tax_pct ELSE excluded.tax_pct END,
                     -- Real regression found live (HDFCBANK, MCX): BSE's own filing-list
                     -- endpoint only returns a capped recent window (confirmed: 20 entries,
                     -- consumed fast by a heavy filer's standalone/consolidated/half-yearly/
@@ -588,7 +603,7 @@ class BseSource(DataSource):
                     -- whichever row is CURRENTLY "latest_period" at fetch time, so a later
                     -- run whose latest_period has moved forward would otherwise null out
                     -- an older row's already-correct values the exact same way.
-                    revenue_growth_pct=COALESCE(excluded.revenue_growth_pct, revenue_growth_pct),
+                    revenue_growth_pct=CASE WHEN quarterly_data.source='indianapi' THEN revenue_growth_pct ELSE COALESCE(excluded.revenue_growth_pct, revenue_growth_pct) END,
                     total_debt_cr=COALESCE(excluded.total_debt_cr, total_debt_cr),
                     net_debt_cr=COALESCE(excluded.net_debt_cr, net_debt_cr),
                     cash_cr=COALESCE(excluded.cash_cr, cash_cr),

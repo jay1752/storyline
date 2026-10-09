@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <title>{% block title %}Storyline{% endblock %}</title>
+  <title>{% block title %}Stocktale{% endblock %}</title>
   {% include "_head.html" %}
   <link rel="stylesheet" href="/static/css/chat-widget.css?v={{ asset_version('css/chat-widget.css') }}">
   <script src="/static/js/htmx.min.js?v={{ asset_version('js/htmx.min.js') }}"></script>
@@ -13,9 +13,9 @@
   {% set user = request.state.user %}
   <div class="shell" id="shell" data-sidebar="expanded">
     <aside class="sidebar" id="sidebar" aria-label="Primary">
-      <a class="brand" href="/analytics" title="Storyline">
+      <a class="brand" href="/analytics" title="Stocktale">
         <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--structure)"/><path d="M8 21l5-6 4 3 7-9" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span class="brand-name">Storyline</span>
+        <span class="brand-name">Stocktale</span>
       </a>
 
       {% if user %}
@@ -32,6 +32,7 @@
         <a class="nav-item {{ 'active' if active_nav == 'management' else '' }}" href="/management" title="Management"><svg class="icon"><use href="#i-management"/></svg><span class="label">Management</span></a>
         <a class="nav-item {{ 'active' if active_nav == 'portfolio' else '' }}" href="/portfolio" title="Portfolio"><svg class="icon"><use href="#i-portfolio"/></svg><span class="label">Portfolio</span></a>
         <div class="side-label">System</div>
+        <a class="nav-item {{ 'active' if active_nav == 'rules' else '' }}" href="/rules" title="Investment rules"><svg class="icon"><use href="#i-check"/></svg><span class="label">Investment rules</span></a>
         <a class="nav-item {{ 'active' if active_nav == 'settings' else '' }}" href="/settings" title="AI settings"><svg class="icon"><use href="#i-settings"/></svg><span class="label">AI settings</span></a>
         {% if request.state.is_admin %}<a class="nav-item {{ 'active' if active_nav == 'admin' else '' }}" href="/admin" title="Data ingestion (admin)"><svg class="icon"><use href="#i-admin"/></svg><span class="label">Data ingestion</span></a>{% endif %}
       </nav>
@@ -46,11 +47,13 @@
         </div>
         {% if user %}
         <div class="user-chip">
-          <span class="avatar">{{ user.email[0] }}</span>
-          <div class="user-meta">
-            <div class="user-email" title="{{ user.email }}">{{ user.email }}</div>
-            <div class="user-sub">{{ 'verified' if user.email_verified_at else 'unverified' }}</div>
-          </div>
+          <a class="user-link" href="/profile" title="Your profile" aria-label="Your profile">
+            <span class="avatar">{{ (user.display_name or user.email)[0]|upper }}</span>
+            <div class="user-meta">
+              <div class="user-email" title="{{ user.email }}">{{ user.display_name or user.email }}</div>
+              <div class="user-sub">{{ user.email if user.display_name else ('verified' if user.email_verified_at else 'unverified') }}</div>
+            </div>
+          </a>
           <form method="post" action="/logout"><button class="icon-btn" type="submit" title="Log out" aria-label="Log out"><svg class="icon"><use href="#i-logout"/></svg></button></form>
         </div>
         {% else %}
@@ -63,7 +66,7 @@
     <div class="main">
       <header class="mobilebar">
         <button class="icon-btn" type="button" id="drawer-open" aria-label="Open menu"><svg class="icon"><use href="#i-menu"/></svg></button>
-        <a class="brand" href="/analytics"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--structure)"/><path d="M8 21l5-6 4 3 7-9" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="brand-name">Storyline</span></a>
+        <a class="brand" href="/analytics"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--structure)"/><path d="M8 21l5-6 4 3 7-9" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="brand-name">Stocktale</span></a>
         {% if user %}<button class="icon-btn" type="button" data-open-palette aria-label="Search"><svg class="icon"><use href="#i-search"/></svg></button>{% else %}<span></span>{% endif %}
       </header>
 

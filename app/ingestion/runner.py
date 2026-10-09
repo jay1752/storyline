@@ -49,6 +49,9 @@ from app.ingestion.moneycontrol_source import MoneyControlSource
 from app.ingestion.nse_bhavcopy_source import NseBhavcopySource
 from app.ingestion.nse_results_source import NseResultsSource
 from app.ingestion.sec13f_source import Sec13FSource
+from app.ingestion.bse_ratio_inputs_source import BseRatioInputsSource
+from app.ingestion.daily_prices_source import DailyPriceSource
+from app.ingestion.nse_integrated_source import NseIntegratedSource
 from app.ingestion.sec_edgar_source import SecEdgarSource
 from app.ingestion.tiingo_source import TiingoSource
 from app.ingestion.worldbank_source import WorldBankSource
@@ -59,6 +62,10 @@ SOURCES = {
     "5paisa": FivePaisaSource(),
     "kite": KiteSource(),
     "sec_edgar": SecEdgarSource(),
+    "nse_integrated": NseIntegratedSource(),
+    "bse_ratios": BseRatioInputsSource(),
+    "daily_prices_in": DailyPriceSource("IN"),
+    "daily_prices_us": DailyPriceSource("US"),
     "tiingo": TiingoSource(),
     "yfinance": YFinanceSource(),
     "nse_bhavcopy": NseBhavcopySource(),

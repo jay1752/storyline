@@ -25,6 +25,7 @@ from app.templates_config import templates
 router = APIRouter()
 
 COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "false").lower() == "true"
+PASSWORD_SIGNUP_OPEN = os.environ.get("PASSWORD_SIGNUP_OPEN", "false").lower() == "true"
 
 # In-memory login lockout — a cheap brute-force friction, not a hardened rate limiter
 # (resets on restart, per the plan's explicit v1 scope). {email: [timestamp, ...]}
@@ -56,13 +57,24 @@ def _set_session_cookie(response, session_id: str) -> None:
     )
 
 
+def _auth_ctx(request: Request, **extra) -> dict:
+    from app.auth.email import RESEND_API_KEY
+    from app.routes.google_auth import google_enabled
+    return {"request": request, "google_enabled": google_enabled(), "can_reset": bool(RESEND_API_KEY), **extra}
+
+
 @router.get("/signup", response_class=HTMLResponse)
 def signup_screen(request: Request, error: str | None = None):
-    return templates.TemplateResponse("signup.html", {"request": request, "error": error})
+    return templates.TemplateResponse("signup.html", _auth_ctx(request, error=error))
 
 
 @router.post("/signup")
 def signup_submit(email: str = Form(...), password: str = Form(...), confirm_password: str = Form(...)):
+    # Password signup is closed while email delivery isn't set up: an unverified password account could squat on
+    # anyone's address, and the old "claim an account that has no password" path was an account-takeover risk.
+    # New accounts come through Google (see routes/google_auth.py), whose emails are already verified.
+    if not PASSWORD_SIGNUP_OPEN:
+        return RedirectResponse("/signup?error=Please+sign+up+with+Google", status_code=303)
     email = email.strip().lower()
     if len(password) < 8:
         return RedirectResponse("/signup?error=Password+must+be+at+least+8+characters", status_code=303)
@@ -71,7 +83,7 @@ def signup_submit(email: str = Form(...), password: str = Form(...), confirm_pas
 
     with get_users_conn() as u:
         existing = u.execute("SELECT id, password_hash FROM users WHERE email = ?", (email,)).fetchone()
-        if existing and existing["password_hash"]:
+        if existing:
             return RedirectResponse("/signup?error=An+account+with+this+email+already+exists", status_code=303)
 
         password_hash = hash_password(password)
@@ -97,7 +109,7 @@ def signup_submit(email: str = Form(...), password: str = Form(...), confirm_pas
 
 @router.get("/login", response_class=HTMLResponse)
 def login_screen(request: Request, error: str | None = None):
-    return templates.TemplateResponse("login.html", {"request": request, "error": error})
+    return templates.TemplateResponse("login.html", _auth_ctx(request, error=error))
 
 
 @router.post("/login")

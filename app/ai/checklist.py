@@ -82,64 +82,150 @@ def _f(v):
     return None if v is None else float(v)
 
 
-def evaluate_framework(q_rows: list, sector: str | None) -> dict:
-    """`q_rows`: quarterly (non-annual) quarterly_data rows, oldest first, latest last.
-    Returns {"filters": [...], "facts": {...}, "bucket_guess": str, "not_available": [...]}.
-    Each filter: {key, label, value, threshold, status: pass|fail|unknown, note}. A filter whose data we don't hold is
-    'unknown' — never guessed and never counted against the stock."""
+def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None, annual: list | None = None) -> dict:
+    """`q_rows`: quarterly (non-annual) quarterly_data rows, oldest first, latest last. `th`: the resolved rules from
+    app.framework.resolve() (built-in defaults when omitted). Returns {"filters": [...], "facts": {...}, "bucket_guess",
+    "not_available"}. Each filter: {key, label, value, threshold, status: pass|fail|unknown|off, note, ...}. A filter whose data
+    we don't hold is 'unknown' (never guessed, never counted against the stock); one the user switched off is 'off'.
+    `annual`: optional fiscal-year rows (app.annual.annual_rows), oldest first - the operating-cash-flow rule falls back to the
+    latest year that has both cash flow and a positive profit when the quarters carry no cash flow (India reports it yearly)."""
+    from app import framework
+
+    th = th or framework.builtin()
     rows = [dict(r) for r in q_rows]
     latest = rows[-1] if rows else {}
     bank = is_bank_or_financial(sector)
     filters: list[dict] = []
 
-    def add(key, label, value, threshold, status, note=None):
-        filters.append({"key": key, "label": label, "value": value, "threshold": threshold, "status": status, "note": note})
+    def add(rule, label, value, threshold, status, note=None):
+        r = th[rule]
+        if not r["enabled"]:
+            status, note = "off", "switched off for this scan"
+        filters.append({"key": rule, "label": label, "value": value, "threshold": threshold, "status": status, "note": note,
+                        "rule": rule, "op": r["op"], "limit": r["value"], "unit": r["unit"], "enabled": bool(r["enabled"]), "source": r["source"]})
 
     # ROCE (ROE for banks/financials)
+    rk = "roe" if bank else "roce"
+    thr = th[rk]["value"]
     v = _f(latest.get("roe_pct" if bank else "roce_pct"))
-    thr = 18.0 if bank else 25.0
-    add("roce", "ROE" if bank else "ROCE", None if v is None else f"{v:.1f}%", f"> {thr:g}%",
+    add(rk, "ROE" if bank else "ROCE", None if v is None else f"{v:.1f}%", f"> {thr:g}%",
         "unknown" if v is None else ("pass" if v > thr else "fail"),
         "banks/financials use ROE instead of ROCE" if bank else None)
     # Debt / equity
     de = _f(latest.get("debt_equity"))
-    if bank:
-        add("de", "Debt / equity", "n/a", "< 0.25", "unknown", "rule does not apply to banks/financials")
+    de_thr = th["de"]["value"]
+    # Banks and lenders are exempt by default (their debt IS the business). An exchange or asset manager is also labelled
+    # "Financial Services" yet has a perfectly good D/E, so a rule the user set for THIS stock is applied regardless.
+    if bank and th["de"]["source"] != "stock":
+        add("de", "Debt / equity", "n/a", f"< {de_thr:g}", "unknown",
+            "rule skipped for banks/financials — set your own rule for this stock (gear icon) to apply it" if de is not None else
+            "rule does not apply to banks/financials")
     else:
-        add("de", "Debt / equity", None if de is None else f"{de:.2f}", "< 0.25",
-            "unknown" if de is None else ("pass" if de < 0.25 else "fail"))
-    # Promoter pledge
-    pledge = latest.get("promoter_pledge")
-    add("pledge", "Promoter pledge", pledge if pledge else None, "< 10%",
-        "unknown" if not pledge else ("fail" if pledge == "Pledged" else "pass"),
-        "only 'pledged / no pledge' is stored, not the exact %" if pledge == "Pledged" else None)
+        add("de", "Debt / equity", None if de is None else f"{de:.2f}", f"< {de_thr:g}",
+            "unknown" if de is None else ("pass" if de < de_thr else "fail"))
+    # Promoter pledge — the exact % where we hold it (India shareholding filings), else the pledged / no-pledge flag
+    pl_thr = th["pledge"]["value"]
+    pct, flag = _f(latest.get("promoter_pledge_pct")), latest.get("promoter_pledge")
+    if pct is not None:
+        add("pledge", "Promoter pledge", f"{pct:.1f}%", f"< {pl_thr:g}%", "pass" if pct < pl_thr else "fail")
+    else:
+        add("pledge", "Promoter pledge", flag if flag else None, f"< {pl_thr:g}%", "unknown" if not flag else ("fail" if flag == "Pledged" else "pass"),
+            "only 'pledged / no pledge' is stored, not the exact %" if flag == "Pledged" else None)
     # Sales growth, last 4 quarters
+    sg = th["sales_growth"]["value"]
     growth = [_f(r.get("revenue_growth_pct")) for r in rows[-4:]]
     known = [g for g in growth if g is not None]
-    g_status = "unknown" if not known else ("pass" if all(g > 30 for g in known) else "fail")
+    g_status = "unknown" if not known else ("pass" if all(g > sg for g in known) else "fail")
     add("sales_growth", "Sales growth (YoY, last 4Q)",
-        None if not known else " → ".join(f"{g:.0f}%" for g in known), "> 30%", g_status,
+        None if not known else " → ".join(f"{g:.0f}%" for g in known), f"> {sg:g}%", g_status,
         None if len(known) == 4 or not known else f"only {len(known)} of 4 quarters have a YoY figure")
     # Operating margin
+    om = th["opm"]["value"]
     opm = _f(latest.get("opm_pct"))
-    add("opm", "Operating margin", None if opm is None else f"{opm:.1f}%", "> 30%",
-        "unknown" if opm is None else ("pass" if opm > 30 else "fail"), "framework threshold is for high-margin businesses")
-    # Promoter holding: high and non-decreasing
+    add("opm", "Operating margin", None if opm is None else f"{opm:.1f}%", f"> {om:g}%",
+        "unknown" if opm is None else ("pass" if opm > om else "fail"),
+        "framework threshold is for high-margin businesses" if om >= 25 else None)
+    # Promoter holding: high and not falling by more than the tolerance
+    tol = th["promoter"]["value"]
     prom = [_f(r.get("promoter_pct")) for r in rows[-5:]]
     prom_k = [p for p in prom if p is not None]
     if len(prom_k) >= 2:
         chg = prom_k[-1] - prom_k[0]
-        add("promoter", "Promoter holding (non-decreasing)", f"{prom_k[-1]:.1f}% ({chg:+.1f} pp)", "not falling",
-            "fail" if chg < -0.5 else "pass")
+        add("promoter", "Promoter holding (non-decreasing)", f"{prom_k[-1]:.1f}% ({chg:+.1f} pp)", f"falls ≤ {tol:g} pp",
+            "fail" if chg < -tol else "pass")
     else:
-        add("promoter", "Promoter holding (non-decreasing)", None if not prom_k else f"{prom_k[-1]:.1f}%", "not falling", "unknown")
-    # Not stored anywhere — said out loud rather than skipped
-    not_available = ["Interest coverage (> 10)", "Current ratio (> 1.5)", "Quick ratio (> 1)", "CFO / PAT (> 0.6)"]
-    for label in not_available:
-        add(label.split(" (")[0].lower().replace(" ", "_").replace("/", ""), label.split(" (")[0], None, label.split("(")[1].rstrip(")"),
-            "unknown", "not in our data yet")
+        add("promoter", "Promoter holding (non-decreasing)", None if not prom_k else f"{prom_k[-1]:.1f}%", f"falls ≤ {tol:g} pp", "unknown")
+    # ---- Coverage, liquidity and cash conversion (inputs stored by the SEC and BSE ingestion; see quarterly_data) ----
+    india = str(latest.get("symbol") or "").startswith("NSE:")
+    last4 = rows[-4:]
 
-    evaluated = [f for f in filters if f["status"] != "unknown"]
+    def lender_exempt(rule):  # banks/lenders have no classified balance sheet and their interest IS the business
+        return bank and th[rule]["source"] != "stock"
+
+    def ratio(x):
+        return None if x is None else f"{x:.1f}×"
+
+    # Interest coverage = (PBT + interest) / interest, summed over the last 4 quarters (or the latest quarter if that is all we have)
+    ic_thr = th["interest_cover"]["value"]
+    if lender_exempt("interest_cover"):
+        add("interest_cover", "Interest coverage", "n/a", f"> {ic_thr:g}×", "unknown", "rule does not apply to banks/lenders")
+    else:
+        pairs = [(_f(r.get("pbt_cr")), _f(r.get("finance_cost_cr"))) for r in last4]
+        full = len(pairs) == 4 and all(p is not None and f is not None for p, f in pairs)
+        use = pairs if full else [pairs[-1]] if pairs and pairs[-1][0] is not None and pairs[-1][1] is not None else []
+        if not use:
+            add("interest_cover", "Interest coverage", None, f"> {ic_thr:g}×", "unknown", "interest expense isn't reported/stored for this company")
+        else:
+            pbt, fc = sum(p for p, _ in use), sum(f for _, f in use)
+            if fc <= 0:
+                add("interest_cover", "Interest coverage", "no interest cost", f"> {ic_thr:g}×", "pass")
+            else:
+                cov = (pbt + fc) / fc
+                add("interest_cover", "Interest coverage", ratio(cov), f"> {ic_thr:g}×", "pass" if cov > ic_thr else "fail",
+                    None if full else "latest quarter only (fewer than 4 quarters of interest data)")
+
+    # Current / quick ratio from the most recent balance sheet we hold (India: latest fiscal year-end; US: every quarter)
+    bs = next((r for r in reversed(rows[-8:]) if _f(r.get("current_assets_cr")) is not None and _f(r.get("current_liabilities_cr"))), None)
+    for rule, label, qk in (("current_ratio", "Current ratio", False), ("quick_ratio", "Quick ratio", True)):
+        thr_v = th[rule]["value"]
+        if lender_exempt(rule):
+            add(rule, label, "n/a", f"> {thr_v:g}×", "unknown", "rule does not apply to banks/lenders")
+        elif not bs:
+            add(rule, label, None, f"> {thr_v:g}×", "unknown", "no balance sheet with current assets/liabilities for this company")
+        else:
+            ca, cl, inv = _f(bs["current_assets_cr"]), _f(bs["current_liabilities_cr"]), _f(bs.get("inventory_cr"))
+            val = (ca - (inv or 0)) / cl if qk else ca / cl
+            note = f"balance sheet as of {bs['period_end_date']}" + ("; no inventory reported, treated as nil" if qk and inv is None else "")
+            add(rule, label, ratio(val), f"> {thr_v:g}×", "pass" if val > thr_v else "fail", note)
+
+    # Operating cash flow / net profit over the last 4 quarters
+    cf_thr = th["cfo_pat"]["value"]
+    cf = [_f(r.get("cfo_cr")) for r in last4]
+    npf = [_f(r.get("net_profit_cr")) for r in last4]
+    if lender_exempt("cfo_pat"):  # a bank's operating cash flow is dominated by loan and deposit flows, not earnings quality
+        add("cfo_pat", "Operating cash flow ÷ profit", "n/a", f"> {cf_thr:g}×", "unknown", "not meaningful for banks/lenders")
+    elif len(last4) == 4 and all(c is not None for c in cf) and all(n is not None for n in npf):
+        tot_np = sum(npf)
+        if tot_np > 0:
+            val = sum(cf) / tot_np
+            add("cfo_pat", "Operating cash flow ÷ profit", ratio(val), f"> {cf_thr:g}×", "pass" if val > cf_thr else "fail")
+        else:
+            add("cfo_pat", "Operating cash flow ÷ profit", None, f"> {cf_thr:g}×", "unknown", "net profit over the last 4 quarters isn't positive")
+    elif (fy := next((a for a in reversed(annual or []) if _f(a.get("cfo_cr")) is not None and _f(a.get("net_profit_cr")) is not None), None)) is not None:
+        np_fy = _f(fy.get("net_profit_cr"))
+        if np_fy > 0:
+            val = _f(fy.get("cfo_cr")) / np_fy
+            add("cfo_pat", "Operating cash flow ÷ profit", ratio(val), f"> {cf_thr:g}×", "pass" if val > cf_thr else "fail",
+                f"fiscal year ended {fy['period_end_date']} (annual; cash flow isn't reported quarterly)")
+        else:
+            add("cfo_pat", "Operating cash flow ÷ profit", None, f"> {cf_thr:g}×", "unknown", f"net profit for the year ended {fy['period_end_date']} isn't positive")
+    else:
+        add("cfo_pat", "Operating cash flow ÷ profit", None, f"> {cf_thr:g}×", "unknown",
+            "no annual operating cash flow stored for this company yet" if india else "operating cash flow isn't reported for 4 quarters")
+
+    not_available: list[str] = []
+
+    evaluated = [f for f in filters if f["status"] not in ("unknown", "off")]
     passed = sum(1 for f in evaluated if f["status"] == "pass")
     if not evaluated:
         guess = "Reserve"

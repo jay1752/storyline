@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from pydantic_ai import Agent
 
 from app import positions as positions_mod
+from app.price_fetch import ensure_prices
 from app.auth.middleware import current_user_id
 from app.db import get_market_conn, get_users_conn
 
@@ -38,7 +39,7 @@ def _note_tool(name: str, arg: str | None = None) -> None:
     if used is not None:
         used.append({"name": name, "arg": arg})
 
-SYSTEM_PROMPT = """You are Storyline's in-app assistant, answering questions about stocks \
+SYSTEM_PROMPT = """You are Stocktale's in-app assistant, answering questions about stocks \
 and the user's own tracked positions/watchlist using the app's own data via your tools — \
 never from general knowledge or memory, since numbers you'd recall are very likely stale.
 
@@ -63,6 +64,10 @@ average rows yourself; the tool does that arithmetic exactly. For each row:
 - quantity: shares traded, or shares currently held.
 - price: the execution price for a transaction; for a holding, the AVERAGE BUY PRICE / cost \
 basis — never the current market price, even when the statement prints both.
+- isin: the ISIN printed for that security (e.g. INE002A01018) when the statement shows one — copy it \
+exactly; it identifies the stock unambiguously.
+- amount: the row's printed trade value (net of nothing — the plain quantity × price figure) when the \
+statement shows one; the tool uses it to catch misread numbers.
 - date: that row's own date (yyyy-mm-dd) if printed. Pass the document's own reference date \
 as statement_date only if it's labelled as such — never a date-shaped number like a contract \
 or account number. Skip cash, charges, taxes, and totals rows.
@@ -70,7 +75,11 @@ If propose_positions reports a name with NO match, try search_stocks; if that fi
 answer, call propose_positions again with the `symbol` field set on those rows (resubmit the \
 full list). If it reports an AMBIGUOUS name (several stocks tie), do NOT pick one yourself — \
 list the options to the user and ask which they meant, then resubmit with their choice. A \
-wrong stock in someone's portfolio is worse than one extra question. A confirm card appears for the user — they must click it; nothing is saved by you. \
+wrong stock in someone's portfolio is worse than one extra question. The tool checks every stock against real market prices on the trade dates and fetches prices \
+from the internet if we have none; if the printed name matched the wrong stock it switches to the one the \
+prices fit, and says so. Rows marked needs_review (low-confidence match, prices that don't fit, a quantity × \
+price that disagrees with the printed amount, or no price data anywhere) must be called out to the user by \
+name with the reason — never gloss over them. A confirm card appears for the user — they must click it; nothing is saved by you. \
 Never say positions were added or updated. After the tool returns, give a short plain summary: \
 how many positions, anything skipped and why, and any warnings."""
 
@@ -116,13 +125,14 @@ def get_price_history(symbol: str, days: int = 90) -> dict:
     """Recent daily closing prices for one stock, most recent first. Use this for
     "how has the price moved" / "is it up or down" style questions."""
     _note_tool("get_price_history", symbol)
+    ensure_prices(symbol)  # stale or missing history is fetched from the internet now, not left blank
     with get_market_conn() as conn:
         rows = conn.execute(
             "SELECT date, close FROM price_history WHERE symbol = ? ORDER BY date DESC LIMIT ?",
             (symbol, days),
         ).fetchall()
     if not rows:
-        return {"error": f"no price history for {symbol!r}"}
+        return {"error": f"no price history for {symbol!r}, here or online"}
     return {"symbol": symbol, "prices": [{"date": r["date"], "close": r["close"]} for r in rows]}
 
 
@@ -184,6 +194,8 @@ class StatementRow(BaseModel):
     price: Optional[float] = None
     date: Optional[str] = None
     symbol: Optional[str] = None  # only if already resolved via search_stocks
+    isin: Optional[str] = None    # as printed on the statement, e.g. INE002A01018
+    amount: Optional[float] = None  # the row's printed trade value (quantity × price), if shown
 
 
 @agent.tool_plain
@@ -198,7 +210,7 @@ def propose_positions(rows: list[StatementRow], statement_date: Optional[str] = 
     if user_id is None:
         return {"error": "not logged in"}
     txns = [
-        positions_mod.Txn(r.company_text, r.side, r.quantity, r.price, r.date, r.symbol)
+        positions_mod.Txn(r.company_text, r.side, r.quantity, r.price, r.date, r.symbol, r.isin, r.amount)
         for r in rows
     ]
     proposal = positions_mod.propose(user_id, txns, statement_date)

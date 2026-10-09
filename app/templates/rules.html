@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Investment rules · Stocktale{% endblock %}
+{% macro rule_table(rows, scope) %}
+<div class="table-wrap">
+  <table class="fin rules-table" data-scope="{{ scope }}">
+    <thead><tr><th>Rule</th><th>Passes when</th><th>On</th><th>Where it comes from</th><th></th></tr></thead>
+    <tbody>
+      {% for d in defs %}{% set r = rows[d.key] %}
+      <tr data-key="{{ d.key }}" data-base="{{ r.reset_value }}" data-base-on="{{ 1 if r.reset_enabled else 0 }}">
+        <td>{{ d.label }}<span class="row-sub">{{ d.note }}</span></td>
+        <td class="rule-edit"><span class="rule-op">{{ d.op }}</span> <input type="number" class="form-input rule-val" step="any" value="{{ '%g' % r.value }}" aria-label="{{ d.label }} threshold"> <span class="rule-unit">{{ d.unit }}</span></td>
+        <td><label class="switch"><input type="checkbox" class="rule-on" {{ 'checked' if r.enabled else '' }} aria-label="Use this rule"><span></span></label></td>
+        <td>
+          {% if r.customised %}<span class="badge accent">{{ 'Your setting' if scope == 'user' else 'Platform setting' }}</span>
+          {% else %}<span class="badge neutral">{{ {'built-in': 'Built-in default', 'platform': 'Platform default', 'user': 'Your default'}[r.source] }}</span>{% endif %}
+        </td>
+        <td class="rule-actions">
+          <button type="button" class="btn btn-sm btn-primary rule-save" disabled>Save</button>
+          <button type="button" class="btn btn-sm rule-reset" {{ '' if r.customised else 'disabled' }} title="Back to {{ 'the platform default' if scope == 'user' else 'the built-in default' }}: {{ r.op }} {{ '%g' % r.reset_value }}{{ d.unit }}">↺ Reset</button>
+          <span class="rule-msg" role="status"></span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}
+{% block content %}
+<div class="page-head">
+  <div class="page-head-main">
+    <span class="eyebrow">System</span>
+    <h1 class="page-title">Investment rules</h1>
+    <p class="page-sub">The thresholds behind the Fundamentals scan on every stock's story page. They apply in three layers: the <b>platform</b> default, <b>your</b> defaults, and an override for a <b>single stock</b>. Anything you don't change inherits from the layer above, and ↺ Reset sends it back.</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="section-head">
+    <div><h2 class="section-title">Your defaults</h2><span class="section-note">used for every stock unless that stock has its own</span></div>
+    <button type="button" class="btn btn-sm" id="reset-all-user">↺ Reset all to the platform defaults</button>
+  </div>
+  {{ rule_table(mine, 'user') }}
+</section>
+
+<section class="section">
+  <div class="section-head"><div><h2 class="section-title">Stocks with their own rules</h2><span class="section-note">edit these from the stock's story page (Fundamentals scan → pencil)</span></div></div>
+  {% if stocks %}
+  <div class="table-wrap"><table class="fin"><thead><tr><th>Stock</th><th>Own rules</th><th></th></tr></thead><tbody>
+    {% for s in stocks %}<tr><td><span class="row-ticker">{{ s.symbol }}</span> <span class="row-sub">{{ s.name or '' }}</span></td><td>{{ s.n }} changed</td><td><a class="btn btn-sm" href="/management">Open Management</a></td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="prose">None yet — every stock follows your defaults.</p>{% endif %}
+</section>
+
+{% if platform %}
+<section class="section">
+  <div class="section-head">
+    <div><h2 class="section-title">Platform defaults <span class="badge accent">admin</span></h2><span class="section-note">what every user inherits until they set their own</span></div>
+    <button type="button" class="btn btn-sm" id="reset-all-platform">↺ Reset all to built-in</button>
+  </div>
+  {{ rule_table(platform, 'platform') }}
+</section>
+{% endif %}
+
+<script src="/static/js/rules-page.js?v={{ asset_version('js/rules-page.js') }}" defer></script>
+{% endblock %}

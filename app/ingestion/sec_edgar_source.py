@@ -33,7 +33,7 @@ import requests
 
 from app.ingestion.base import DataSource, NotConfiguredError, apply_symbol_filter, safe_growth_pct
 
-UA = os.environ.get("SEC_EDGAR_USER_AGENT")  # required by SEC's fair-use policy, e.g. "Storyline you@example.com"
+UA = os.environ.get("SEC_EDGAR_USER_AGENT")  # required by SEC's fair-use policy, e.g. "Stocktale you@example.com"
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
@@ -75,7 +75,9 @@ REVENUE_TAGS = ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues
 # summed per period ONLY where both components exist (a lone NII would understate revenue), and it is
 # net of interest expense — the same convention as RevenuesNetOfInterestExpense for the big banks.
 BANK_REVENUE_COMPONENT_TAGS = ("InterestIncomeExpenseNet", "NoninterestIncome")
-NET_INCOME_TAGS = ["NetIncomeLoss"]  # confirmed present for banks too — no substitute needed
+NET_INCOME_TAGS = ["NetIncomeLoss"]
+# Only fills periods NetIncomeLoss lacks (REITs/partnerships report these instead); never overrides it.
+NET_INCOME_FILL_TAGS = ["NetIncomeLossAvailableToCommonStockholdersBasic", "ProfitLoss"]  # confirmed present for banks too — no substitute needed
 # OperatingIncomeLoss confirmed ABSENT for every major bank checked (GS, JPM, BAC,
 # WFC, MS) — banks' income statements have no classified operating-income subtotal
 # distinct from pretax income (revenue flows straight to pretax income through a
@@ -120,8 +122,34 @@ SPLIT_DEBT_TAGS = ["SecuredDebt", "UnsecuredDebt"]
 # explicitly-combined DebtLongtermAndShorttermCombinedAmount tag) may already
 # include its current portion, so adding DebtCurrent on top there would double-count.
 CURRENT_DEBT_FALLBACK_TAG = "DebtCurrent"
+# Debt fallback (second pass, 2026-10-07 gap audit: 44% of US stocks had no total debt on their latest
+# quarter). Used ONLY for periods the tags above left empty, and only ONE tag — the newest-data one —
+# is taken, never a sum, because these are components a filer may report next to each other.
+# DebtInstrumentCarryingAmount stays excluded (per-instrument figure, see above).
+FALLBACK_DEBT_TAGS = ["LongTermNotesPayable", "NotesPayable", "ConvertibleNotesPayable", "SeniorNotes",
+                      "LongTermLineOfCredit", "LineOfCredit", "OtherBorrowings", "SubordinatedDebt",
+                      "AdvancesFromFederalHomeLoanBanks", "DebtAndCapitalLeaseObligations", "FinanceLeaseLiability"]
+# Revenue fallback for filers none of REVENUE_TAGS cover (REIT/mortgage/BDC/lessor/insurer/broker): used only
+# when the main tags give nothing or have gone stale (newest period > 100 days behind these), and it only
+# FILLS periods the main tags lack. Net-of-interest-expense convention is kept for banks via the
+# component sum above; these are each company's own top-line.
+FALLBACK_REVENUE_TAGS = ["RegulatedAndUnregulatedOperatingRevenue", "RegulatedOperatingRevenue", "ElectricUtilityRevenue", "RealEstateRevenueNet", "OperatingLeasesIncomeStatementLeaseRevenue", "OperatingLeaseLeaseIncome", "InterestAndDividendIncomeOperating",
+                         "GrossInvestmentIncomeOperating", "InterestIncomeOperating", "PremiumsEarnedNet",
+                         "RevenuesExcludingInterestAndDividends", "SalesRevenueServicesNet", "SalesRevenueGoodsNet",
+                         "RevenueMineralSales", "OilAndGasRevenue"]
+# Operating income when OperatingIncomeLoss isn't tagged: revenue - CostsAndExpenses, else GrossProfit - OperatingExpenses.
+COSTS_TAG, GROSS_PROFIT_TAG, OPEX_TAG = "CostsAndExpenses", "GrossProfit", "OperatingExpenses"
+# EPS when neither EPS tag is reported for a period: net income / weighted-average diluted (else basic) shares.
+WEIGHTED_SHARES_TAGS = ["WeightedAverageNumberOfDilutedSharesOutstanding", "WeightedAverageNumberOfSharesOutstandingBasic"]
+# Inputs for the scan's coverage / liquidity / cash-conversion rows (all optional — a filer that doesn't tag one simply gets NULL).
+INTEREST_EXPENSE_TAGS = ["InterestExpense", "InterestExpenseNonoperating", "InterestExpenseDebt", "InterestAndDebtExpense",
+                         "InterestExpenseOperating", "InterestExpenseRelatedParty"]
+CURRENT_ASSETS_TAGS = ["AssetsCurrent"]
+INVENTORY_TAGS = ["InventoryNet", "InventoryFinishedGoodsNetOfReserves", "InventoryGross"]
+CFO_TAG = "NetCashProvidedByUsedInOperatingActivities"
 CASH_TAGS = ["CashAndCashEquivalentsAtCarryingValue", "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"]
-EQUITY_TAGS = ["StockholdersEquity"]
+EQUITY_TAGS = ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+               "PartnersCapital", "MembersEquity"]
 ASSETS_TAGS = ["Assets"]
 # LiabilitiesCurrent confirmed ABSENT for every major bank checked (GS, JPM, BAC,
 # WFC, MS): banks file an unclassified, liquidity-ordered balance sheet with no
@@ -253,8 +281,8 @@ class SecEdgarSource(DataSource):
                     if f.get("form") != "10-Q" or "start" not in f or "end" not in f:
                         continue
                     start, end = date.fromisoformat(f["start"]), date.fromisoformat(f["end"])
-                    if not (75 <= (end - start).days <= 100):
-                        continue  # skip YTD-cumulative facts, keep single-quarter ones
+                    if not (70 <= (end - start).days <= 125):
+                        continue  # skip YTD-cumulative facts (>=170d), keep single quarters incl. 12/16-week retail ones
                     got[f["end"]] = f["val"]  # last filed wins if there are restatements for the same period
             for k, v in got.items():
                 out.setdefault(k, v)
@@ -279,6 +307,31 @@ class SecEdgarSource(DataSource):
                     got[f["end"]] = f["val"]
             for k, v in got.items():
                 out.setdefault(k, v)
+        return out
+
+    def _cfo_quarterly(self, facts: dict) -> dict[str, float]:
+        """Quarterly operating cash flow. 10-Qs only report it year-to-date (3, 6, 9 months from the fiscal-year start; the
+        10-K gives 12), so each quarter is the YTD figure minus the previous YTD figure that shares the same start date."""
+        node = facts.get("facts", {}).get("us-gaap", {}).get(CFO_TAG)
+        if not node:
+            return {}
+        by_start: dict[str, dict[str, float]] = {}
+        for unit_facts in node.get("units", {}).values():
+            for f in unit_facts:
+                if f.get("form") not in ("10-Q", "10-K") or "start" not in f or "end" not in f:
+                    continue
+                by_start.setdefault(f["start"], {})[f["end"]] = f["val"]  # later filings overwrite earlier (restatements)
+        out: dict[str, float] = {}
+        for start, ends in by_start.items():
+            prev_end, prev_val = None, 0.0
+            for end in sorted(ends):
+                span = (date.fromisoformat(end) - date.fromisoformat(start)).days
+                if span < 60 or span > 380:
+                    continue
+                gap = (date.fromisoformat(end) - date.fromisoformat(prev_end)).days if prev_end else span
+                if 70 <= gap <= 125:
+                    out[end] = ends[end] - prev_val
+                prev_end, prev_val = end, ends[end]
         return out
 
     def _bank_revenue_series(self, facts: dict) -> tuple[dict[str, float], dict[str, float]]:
@@ -374,11 +427,11 @@ class SecEdgarSource(DataSource):
                 points.add((f["end"], f["val"]))
         return sorted(points)
 
-    def ingest_quarterly(self, conn, limit=None, symbol=None, progress=None) -> int:
+    def ingest_quarterly(self, conn, limit=None, symbol=None, progress=None, force=False) -> int:
         symbols = [r["symbol"] for r in conn.execute("SELECT symbol FROM stocks WHERE market = 'US'").fetchall()]
         symbols = apply_symbol_filter(symbols, limit, symbol)
 
-        if not symbol:
+        if not symbol and not force:
             # Resume, don't restart: this source never had any skip logic at all —
             # every bulk trigger reprocessed the full ~10,000-symbol US universe from
             # scratch (matches the "hours-long background run" already noted in this
@@ -466,31 +519,78 @@ class SecEdgarSource(DataSource):
         rows_written = 0
         revenue = self._quarterly_series(facts, REVENUE_TAGS)
         net_income = self._quarterly_series(facts, NET_INCOME_TAGS)
+        for k, v in self._quarterly_series(facts, NET_INCOME_FILL_TAGS).items():
+            net_income.setdefault(k, v)
         op_income = self._quarterly_series(facts, OPERATING_INCOME_TAGS)
         eps = self._quarterly_series(facts, EPS_TAGS)
         other_income = self._quarterly_series(facts, OTHER_INCOME_TAGS)
         annual_revenue = None
         if not revenue:
             revenue, annual_revenue = self._bank_revenue_series(facts)
-        if not revenue:
-            return 0
         if annual_revenue is None:
             annual_revenue = self._annual_series(facts, REVENUE_TAGS)
+        # Fallback top-line tags (REIT/BDC/lessor/insurer...) — only when the main tags are empty or stale.
+        fb_rank = self._rank_tags(facts, FALLBACK_REVENUE_TAGS)
+        fb_tag = [fb_rank[0]] if fb_rank else []  # ONE tag, never a blend of components
+        fb_q = self._quarterly_series(facts, fb_tag) if fb_tag else {}
+        if fb_q:
+            newest = max(revenue) if revenue else None
+            if newest is None or max(fb_q) > (date.fromisoformat(newest) + timedelta(days=100)).isoformat():
+                for k, v in fb_q.items():
+                    revenue.setdefault(k, v)
+                for k, v in self._annual_series(facts, fb_tag).items():
+                    annual_revenue.setdefault(k, v)
+        pre_revenue = not revenue
+        if pre_revenue and not net_income:
+            return 0  # nothing to show at all (fund/trust/shell)
 
         # Derive fiscal Q4 (never in a 10-Q) from the 10-K annual figure minus the
         # other 3 quarters — done per metric since tagging consistency varies.
         derived_revenue = _derive_missing_q4(revenue, annual_revenue)
         revenue.update(derived_revenue)
-        op_income.update(_derive_missing_q4(op_income, self._annual_series(facts, OPERATING_INCOME_TAGS)))
+
+        # Operating income fallbacks (quarterly and annual built the same way so the Q4 derivation stays consistent).
+        op_annual = self._annual_series(facts, OPERATING_INCOME_TAGS)
+        costs_q, costs_a = self._quarterly_series(facts, [COSTS_TAG]), self._annual_series(facts, [COSTS_TAG])
+        gp_q, gp_a = self._quarterly_series(facts, [GROSS_PROFIT_TAG]), self._annual_series(facts, [GROSS_PROFIT_TAG])
+        opex_q, opex_a = self._quarterly_series(facts, [OPEX_TAG]), self._annual_series(facts, [OPEX_TAG])
+
+        def _fill_op(op, rev, costs, gp, opex):
+            for p, r in rev.items():
+                if p in op:
+                    continue
+                if p in costs:
+                    op[p] = r - costs[p]
+                elif p in gp and p in opex:
+                    op[p] = gp[p] - opex[p]
+        _fill_op(op_income, {k: v for k, v in revenue.items() if k not in derived_revenue}, costs_q, gp_q, opex_q)
+        _fill_op(op_annual, annual_revenue, costs_a, gp_a, opex_a)
+        op_income.update(_derive_missing_q4(op_income, op_annual))
         other_income.update(_derive_missing_q4(other_income, self._annual_series(facts, OTHER_INCOME_TAGS)))
-        net_income.update(_derive_missing_q4(net_income, self._annual_series(facts, NET_INCOME_TAGS)))
+        ni_annual = self._annual_series(facts, NET_INCOME_TAGS)
+        for k, v in self._annual_series(facts, NET_INCOME_FILL_TAGS).items():
+            ni_annual.setdefault(k, v)
+        net_income.update(_derive_missing_q4(net_income, ni_annual))
         eps.update(_derive_missing_q4(eps, self._annual_series(facts, EPS_TAGS)))
+        # EPS fallback: net income / weighted average shares, for periods no EPS tag covers.
+        wq, wa = self._quarterly_series(facts, WEIGHTED_SHARES_TAGS), self._annual_series(facts, WEIGHTED_SHARES_TAGS)
+        for p, n in net_income.items():
+            if p in eps:
+                continue
+            w = wq.get(p)
+            if not w:  # derived Q4: approximate with the fiscal year's weighted share count
+                w = next((v for k, v in wa.items() if 0 <= (date.fromisoformat(k) - date.fromisoformat(p)).days <= 3), None)
+            if w:
+                eps[p] = round(n / w, 2)
         derived_periods = set(derived_revenue.keys())
 
         pbt = self._quarterly_series(facts, PBT_TAGS)
         pbt.update(_derive_missing_q4(pbt, self._annual_series(facts, PBT_TAGS)))
         tax = self._quarterly_series(facts, TAX_TAGS)
         tax.update(_derive_missing_q4(tax, self._annual_series(facts, TAX_TAGS)))
+        for p, t in tax.items():  # pre-tax profit when no PBT tag exists: net income + tax expense (approximation)
+            if p not in pbt and p in net_income:
+                pbt[p] = net_income[p] + t
 
         debt = self._instant_series(facts, DEBT_TAGS, merge_tags=True)
         # Split-debt fallback — only fills periods DEBT_TAGS has no data for (a period
@@ -511,6 +611,16 @@ class SecEdgarSource(DataSource):
         for end_str, val in current_debt.items():
             if end_str not in debt and val is not None:
                 debt[end_str] = val
+        ranked = self._rank_tags(facts, FALLBACK_DEBT_TAGS)
+        if ranked:
+            for end_str, val in self._instant_series(facts, [ranked[0]]).items():
+                if end_str not in debt and val is not None:
+                    debt[end_str] = val
+        interest = self._quarterly_series(facts, INTEREST_EXPENSE_TAGS)
+        interest.update(_derive_missing_q4(interest, self._annual_series(facts, INTEREST_EXPENSE_TAGS)))
+        cur_assets = self._instant_series(facts, CURRENT_ASSETS_TAGS)
+        inventory = self._instant_series(facts, INVENTORY_TAGS)
+        cfo = self._cfo_quarterly(facts)
         cash = self._instant_series(facts, CASH_TAGS)
         equity = self._instant_series(facts, EQUITY_TAGS)
         assets = self._instant_series(facts, ASSETS_TAGS)
@@ -518,7 +628,7 @@ class SecEdgarSource(DataSource):
         shares_outstanding = self._instant_series(facts, SHARES_OUTSTANDING_TAGS, prefer="first")
         cover_page_shares = self._cover_page_shares_series(facts)
 
-        periods = sorted(revenue.keys())  # full history, not just recent — this was the point of this pass
+        periods = sorted(set(net_income) | set(op_income)) if pre_revenue else sorted(revenue.keys())  # full history
         latest_period = periods[-1] if periods else None
         for end_str in periods:
             end = date.fromisoformat(end_str)
@@ -604,8 +714,9 @@ class SecEdgarSource(DataSource):
                 """INSERT INTO quarterly_data
                 (symbol, period_end_date, quarter_label, source, revenue_cr, operating_profit_cr,
                  opm_pct, other_income_cr, net_profit_cr, eps, revenue_growth_pct, total_debt_cr, net_debt_cr, cash_cr,
-                 roe_pct, roce_pct, debt_equity, pbt_cr, tax_pct, book_value_per_share, shares_outstanding)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 roe_pct, roce_pct, debt_equity, pbt_cr, tax_pct, book_value_per_share, shares_outstanding,
+                 finance_cost_cr, current_assets_cr, current_liabilities_cr, inventory_cr, cfo_cr)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(symbol, period_end_date) DO UPDATE SET
                     quarter_label=excluded.quarter_label, source=excluded.source,
                     revenue_cr=excluded.revenue_cr, operating_profit_cr=excluded.operating_profit_cr,
@@ -615,6 +726,11 @@ class SecEdgarSource(DataSource):
                     roe_pct=excluded.roe_pct, roce_pct=excluded.roce_pct, debt_equity=excluded.debt_equity,
                     pbt_cr=excluded.pbt_cr, tax_pct=excluded.tax_pct, book_value_per_share=excluded.book_value_per_share,
                     shares_outstanding=excluded.shares_outstanding,
+                    finance_cost_cr=COALESCE(excluded.finance_cost_cr, finance_cost_cr),
+                    current_assets_cr=COALESCE(excluded.current_assets_cr, current_assets_cr),
+                    current_liabilities_cr=COALESCE(excluded.current_liabilities_cr, current_liabilities_cr),
+                    inventory_cr=COALESCE(excluded.inventory_cr, inventory_cr),
+                    cfo_cr=COALESCE(excluded.cfo_cr, cfo_cr),
                     other_income_cr=COALESCE(excluded.other_income_cr, other_income_cr)
                     -- deliberately NOT overwritten: guidance_vs_delivered (owned by finnhub_source.py).
                     -- INSERT OR REPLACE used to blindly wipe it back to NULL on every sec_edgar re-run —
@@ -631,7 +747,12 @@ class SecEdgarSource(DataSource):
                  net_debt_val / 1e6 if net_debt_val is not None else None,
                  cash_val / 1e6 if cash_val is not None else None,
                  roe_pct, roce_pct, debt_equity,
-                 pbt_val / 1e6 if pbt_val is not None else None, tax_pct, book_value_per_share, shares_val),
+                 pbt_val / 1e6 if pbt_val is not None else None, tax_pct, book_value_per_share, shares_val,
+                 interest[end_str] / 1e6 if end_str in interest else None,
+                 cur_assets[end_str] / 1e6 if end_str in cur_assets else None,
+                 current_liab[end_str] / 1e6 if end_str in current_liab else None,
+                 inventory[end_str] / 1e6 if end_str in inventory else None,
+                 cfo[end_str] / 1e6 if end_str in cfo else None),
             )
             rows_written += 1
 

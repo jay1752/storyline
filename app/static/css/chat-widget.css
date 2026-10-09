@@ -206,3 +206,6 @@
 }
 
 .chat-via { font-family: var(--font-mono); font-size: 0.64rem; color: var(--muted); margin-left: auto; align-self: center; padding-right: 0.2rem; }
+
+.chat-card-ok { font-size: 0.74rem; color: var(--pos); margin-top: 0.15rem; }
+.chat-card-row.needs-review { border-left: 3px solid var(--accent); padding-left: 0.55rem; }

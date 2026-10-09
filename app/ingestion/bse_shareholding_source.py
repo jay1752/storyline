@@ -64,6 +64,11 @@ DII_CONTEXT = "InstitutionsDomestic_ContextI"
 # than fabricating a percentage that was never actually reported.
 PROMOTER_PLEDGE_TAG = "WhetherAnySharesHeldByPromotersAreEncumberedUnderPledgedForPromoterAndPromoterGroup"
 
+# Numeric pledge: the promoter group's pledged shares as a % of the promoter group's own holding (the figure
+# investors quote), carried by this tag on the promoter context. Present only on filings with a pledge.
+PLEDGE_PCT_TAG = "EncumberedShareUnderPledgedAsPercentageOfTotalNumberOfShares"
+PUBLIC_CONTEXT = "PublicShareholding_ContextI"
+
 _INSTANT_RE = re.compile(r'<xbrli:context id="MainI">.*?<xbrli:instant>([^<]+)</xbrli:instant>', re.DOTALL)
 
 
@@ -79,6 +84,19 @@ def _pct_for_context(xml: str, context_id: str) -> float | None:
     except ValueError:
         return None
     return round(val * 100, 2) if val <= 1 else round(val, 2)
+
+
+def _pledge_pct(xml: str, promoter_pct: float | None, pledge_flag: str | None) -> float | None:
+    m = re.search(r'<in-bse-shp:' + PLEDGE_PCT_TAG + r'[^>]*contextRef="' + re.escape(PROMOTER_CONTEXT) + r'"[^>]*>([^<]*)<', xml)
+    if m and m.group(1).strip():
+        try:
+            val = float(m.group(1).strip())
+            return round(val * 100, 2) if val <= 1 else round(val, 2)
+        except ValueError:
+            pass
+    if pledge_flag == "No pledge" and promoter_pct is not None:
+        return 0.0  # the filing explicitly says no promoter shares are pledged
+    return None
 
 
 def _promoter_pledge(xml: str) -> str | None:
@@ -112,7 +130,7 @@ class BseShareholdingSource(DataSource):
         resp.raise_for_status()
         return resp.json().get("Table") or []
 
-    def ingest_quarterly(self, conn, limit=None, symbol=None, progress=None) -> int:
+    def ingest_quarterly(self, conn, limit=None, symbol=None, progress=None, force=False, max_filings=None) -> int:
         scrip_map = self._scrip_map()
         symbols = [r["symbol"] for r in conn.execute(
             "SELECT DISTINCT symbol FROM quarterly_data WHERE symbol IN "
@@ -120,7 +138,7 @@ class BseShareholdingSource(DataSource):
         ).fetchall()]
         symbols = apply_symbol_filter(symbols, limit, symbol)
 
-        if not symbol:
+        if not symbol and not force:
             # Resume, don't restart: this source had NO skip-already-covered logic
             # either (same bug class as fivepaisa_source.py, fixed alongside this) —
             # every re-trigger re-fetched and re-parsed every symbol's full filing
@@ -175,7 +193,7 @@ class BseShareholdingSource(DataSource):
 
             # newest first, same convention as bse_source.py's _pick_latest_per_period
             filings = sorted(filings, key=lambda f: (f.get("yr") or "", f.get("qtrid") or 0), reverse=True)
-            for f in filings[:MAX_FILINGS_PER_SYMBOL]:
+            for f in filings[:(max_filings or MAX_FILINGS_PER_SYMBOL)]:
                 xbrl_file = f.get("XbrlFile")
                 if not xbrl_file:
                     continue
@@ -207,15 +225,22 @@ class BseShareholdingSource(DataSource):
                 fii_pct = _pct_for_context(xml, FII_CONTEXT)
                 dii_pct = _pct_for_context(xml, DII_CONTEXT)
                 promoter_pledge = _promoter_pledge(xml)
+                pledge_pct = _pledge_pct(xml, promoter_pct, promoter_pledge)
+                # A complete filing (it reports a public-shareholding total and a promoter holding) simply
+                # omits a category nobody holds — absent FII/DII means 0%, not "unknown".
+                if promoter_pct is not None and PUBLIC_CONTEXT in xml:
+                    fii_pct = 0.0 if fii_pct is None else fii_pct
+                    dii_pct = 0.0 if dii_pct is None else dii_pct
                 if promoter_pct is None and fii_pct is None and dii_pct is None and promoter_pledge is None:
                     continue
 
                 conn.execute(
                     "UPDATE quarterly_data SET promoter_pct = COALESCE(?, promoter_pct), "
                     "fii_pct = COALESCE(?, fii_pct), dii_pct = COALESCE(?, dii_pct), "
-                    "promoter_pledge = COALESCE(?, promoter_pledge) "
+                    "promoter_pledge = COALESCE(?, promoter_pledge), "
+                    "promoter_pledge_pct = COALESCE(?, promoter_pledge_pct) "
                     "WHERE symbol = ? AND period_end_date = ?",
-                    (promoter_pct, fii_pct, dii_pct, promoter_pledge, sym, nearest),
+                    (promoter_pct, fii_pct, dii_pct, promoter_pledge, pledge_pct, sym, nearest),
                 )
                 rows_written += 1
             conn.commit()

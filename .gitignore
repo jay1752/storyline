@@ -5,3 +5,6 @@ data/*.db
 data/*.db-*
 .env
 data/*.db.backup*
+
+# runtime data (databases, IndianAPI raw JSON, backups) — never committed
+data/
