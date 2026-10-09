@@ -40,17 +40,49 @@
 </div>
 {% endif %}
 
-<nav class="subnav" id="subnav" aria-label="On this page">
-  <a href="#overview" class="active">Overview</a>
-  {% if ia_analyst %}<a href="#analysts">Analyst view</a>{% endif %}
-  {% if raw.quarterly %}<a href="#quarterly">Quarterly</a>{% endif %}
-  {% if raw.annual %}<a href="#annual">Annual</a>{% endif %}
-  {% if raw.balance %}<a href="#balance">Balance sheet</a>{% endif %}
-  {% if raw.annual_balance %}<a href="#annual-balance">Annual balance sheet</a>{% endif %}
-  {% if raw.ownership or matrix.institutional_holders is not none %}<a href="#ownership">Ownership</a>{% endif %}
-  {% if ia_company %}<a href="#company">Company</a>{% endif %}
-  <a href="#lens">Quality lens</a>
+{% if verdict or (ia_company and ia_company.next_event) %}
+<div class="verdict" id="verdict">
+  {% if verdict %}
+  <div class="verdict-main">
+    <b class="{{ 'val-pos' if verdict.passed == verdict.total else '' }}">Your rules: {{ verdict.passed }} of {{ verdict.total }} pass</b>
+    {% for f in verdict.failed %}<span class="vchip neg" title="{{ f.value }} against {{ f.threshold }}">{{ f.label }}</span>{% endfor %}
+    {% if verdict.more %}<span class="vchip">+{{ verdict.more }} more</span>{% endif %}
+    {% if verdict.unknown %}<span class="vchip" title="Rules we can't check yet for this stock">{{ verdict.unknown }} unchecked</span>{% endif %}
+    <a class="vlink" href="/rules">Edit rules</a>
+  </div>
+  {% endif %}
+  {% set ne = ia_company.next_event if ia_company else none %}
+  {% if ne %}<span class="vchip warn">{{ 'Results' if 'esult' in (ne.text or '') else 'Board meeting' }} {{ 'today' if ne.days == 0 else ('tomorrow' if ne.days == 1 else 'in ' ~ ne.days ~ ' days') }}</span>{% endif %}
+</div>
+{% endif %}
+
+{% if view_groups|length > 1 %}
+<nav class="viewbar" id="viewbar" aria-label="Choose what to show">
+  <div class="viewbar-chips" role="group" aria-label="Sections">
+    {% for g in view_groups %}<button type="button" class="vtab" data-grp="{{ g.key }}" aria-pressed="false">{{ g.label }}</button>{% endfor %}
+  </div>
+  <div class="viewbar-presets"><span>Presets</span>
+    <button type="button" data-preset="perf">Quick look</button>
+    <button type="button" data-preset="health,own">Risk check</button>
+    <button type="button" data-preset="all">Deep dive</button>
+  </div>
 </nav>
+{% endif %}
+<script>
+(function () {
+  var avail = {{ view_groups | map(attribute='key') | list | tojson }};
+  var q = new URLSearchParams(location.search).get("show"), saved = null;
+  try { saved = localStorage.getItem("stocktale.view"); } catch (e) {}
+  var want = (q || saved || "perf,health").split(",").filter(function (k) { return avail.indexOf(k) > -1; });
+  if (!want.length) want = avail.slice(0, 1);
+  var de = document.documentElement;
+  de.dataset.view = want.join(" ");
+  var pane = null;
+  try { pane = localStorage.getItem("stocktale.perf"); } catch (e) {}
+  var panes = {{ perf_panes | tojson }};
+  de.dataset.perf = panes.indexOf(pane) > -1 ? pane : (panes[0] || "quarterly");
+})();
+</script>
 
 <section class="section" id="overview">
   <div class="card">
@@ -88,11 +120,82 @@
   </div>
 </section>
 
+<div class="grp" data-grp="perf">
+{% if perf_panes|length > 1 %}
+<div class="perf-switch"><div class="seg" id="perf-switch" role="group" aria-label="Period">
+  <button type="button" data-pane="quarterly">Quarterly</button><button type="button" data-pane="annual">Annual</button></div></div>
+{% endif %}
+{% if raw.quarterly %}
+<section class="section" id="quarterly" data-pane="quarterly">
+  <div class="section-head">
+    <div>
+      <h2 class="section-title">Quarterly results</h2>
+      <span class="section-note">{{ raw.money_unit }} unless stated · {{ n_quarters }} quarters on file</span>
+    </div>
+    <div class="toolbar">
+      <div class="seg" role="group" aria-label="Quarters shown">
+        {% for opt in range_options %}
+        <a class="{{ 'active' if opt == current_range else '' }}" href="/analytics/{{ default_symbol }}?span={{ opt }}#quarterly">{{ opt if opt == 'all' else opt + 'Q' }}</a>
+        {% endfor %}
+      </div>
+      <a class="btn btn-sm" href="/export/stock/{{ stock.symbol }}.csv"><svg class="icon icon-sm"><use href="#i-arrow-down"/></svg>CSV</a>
+    </div>
+  </div>
+  {% if raw.quarterly.charts %}<div class="chart-grid">{% for c in raw.quarterly.charts %}{{ bar_chart(c, 'quarterly') }}{% endfor %}</div>{% endif %}
+  {{ period_table(raw.quarterly, 'quarterly') }}
+  <p class="prose">Growth is the reported figure where the source gave one; otherwise it is computed from the same quarter a year earlier (or the previous quarter for QoQ) in the rows shown. Empty rows are hidden.</p>
+</section>
+{% endif %}
+{% if raw.annual %}
+<section class="section" id="annual" data-pane="annual">
+  <div class="section-head">
+    <div><h2 class="section-title">Annual results</h2><span class="section-note">{{ raw.money_unit }} unless stated · {{ n_annual }} fiscal years on file</span></div>
+  </div>
+  {% if raw.annual.charts %}<div class="chart-grid">{% for c in raw.annual.charts %}{{ bar_chart(c, 'annual') }}{% endfor %}</div>{% endif %}
+  {{ period_table(raw.annual, 'annual') }}
+</section>
+{% endif %}
+</div>
+<div class="grp" data-grp="health">
+{% if raw.cashflow %}
+<section class="section" id="cashflow">
+  <div class="section-head"><div><h2 class="section-title">Cash flow</h2><span class="section-note">fiscal years · {{ raw.money_unit }} unless stated · cash flow is reported once a year</span></div></div>
+  {{ period_table(raw.cashflow, 'annual') }}
+</section>
+{% endif %}
+
+{% if raw.annual_balance %}
+<section class="section" id="annual-balance">
+  <div class="section-head"><div><h2 class="section-title">Annual balance sheet &amp; efficiency</h2><span class="section-note">fiscal years · {{ raw.money_unit }} unless stated</span></div></div>
+  {{ period_table(raw.annual_balance, 'annual_balance') }}
+</section>
+{% endif %}
+{% if raw.balance %}
+<section class="section" id="balance">
+  <div class="section-head"><div><h2 class="section-title">Balance sheet &amp; ratios</h2><span class="section-note">only periods with reported values · {{ raw.money_unit }} unless stated</span></div></div>
+  {{ period_table(raw.balance, 'balance') }}
+  {% if has_ratios %}
+  <div class="stat-row">
+    {% for label, val in ratio_stats %}{% if val != '—' and val != '— – —' %}
+    <div class="stat-cell"><div class="stat-label">{{ label }}</div><div class="stat-val" style="{{ 'font-size:1.05rem;' if '–' in val else '' }}">{{ val }}</div></div>
+    {% endif %}{% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+</div>
+<div class="grp" data-grp="val">
+{% if pe_stats %}
+<section class="section" id="pe">
+  <div class="stat-row">{% for label, val in pe_stats %}<div class="stat-cell"><div class="stat-label">{{ label }}</div><div class="stat-val">{{ val }}</div></div>{% endfor %}</div>
+</section>
+{% endif %}
+
 {% if ia_analyst %}
 {% set A = ia_analyst %}
 {% set cur = price_summary.currency if price_summary else '₹' %}
 <section class="section" id="analysts">
-  <div class="section-head"><div><h2 class="section-title">Analyst view</h2><span class="section-note">Consensus via IndianAPI · analyst-basis figures (exclude one-offs) · indicative, not filed results</span></div></div>
+  <div class="section-head"><div><h2 class="section-title">Analyst view</h2><span class="section-note">Analyst consensus · figures exclude one-offs · indicative, not filed results</span></div></div>
   <div class="kpi-grid">
     {% if A.target %}
     <div class="kpi"><span class="kpi-label">Mean target</span><span class="kpi-value">{{ cur }}{{ "{:,.0f}".format(A.target.mean) }}</span><span class="kpi-sub">{{ A.target.n }} analysts · {{ "{:,.0f}".format(A.target.low) }}–{{ "{:,.0f}".format(A.target.high) }}</span></div>
@@ -164,60 +267,19 @@
   {% endif %}
 </section>
 {% endif %}
-
-{% if raw.quarterly %}
-<section class="section" id="quarterly">
-  <div class="section-head">
-    <div>
-      <h2 class="section-title">Quarterly results</h2>
-      <span class="section-note">{{ raw.money_unit }} unless stated · {{ n_quarters }} quarters on file</span>
-    </div>
-    <div class="toolbar">
-      <div class="seg" role="group" aria-label="Quarters shown">
-        {% for opt in range_options %}
-        <a class="{{ 'active' if opt == current_range else '' }}" href="/analytics/{{ default_symbol }}?span={{ opt }}#quarterly">{{ opt if opt == 'all' else opt + 'Q' }}</a>
-        {% endfor %}
-      </div>
-      <a class="btn btn-sm" href="/export/stock/{{ stock.symbol }}.csv"><svg class="icon icon-sm"><use href="#i-arrow-down"/></svg>CSV</a>
-    </div>
-  </div>
-  {% if raw.quarterly.charts %}<div class="chart-grid">{% for c in raw.quarterly.charts %}{{ bar_chart(c, 'quarterly') }}{% endfor %}</div>{% endif %}
-  {{ period_table(raw.quarterly, 'quarterly') }}
-  <p class="prose">Growth is the reported figure where the source gave one; otherwise it is computed from the same quarter a year earlier (or the previous quarter for QoQ) in the rows shown. Empty rows are hidden.</p>
+{% if ia_company and ia_company.peers %}{% set C = ia_company %}
+<section class="section" id="peers">
+  <div class="section-head"><div><h2 class="section-title">Peers</h2><span class="section-note">market cap in ₹ Cr</span></div></div>
+  <div class="card"><div class="table-wrap"><table class="fin ia-text"><thead><tr><th>Company</th><th>P/E</th><th>P/B</th><th>Mkt cap</th><th>Day</th></tr></thead><tbody>
+    {% for p in C.peers %}<tr><td>{% if p.symbol %}<a href="/analytics/{{ p.symbol }}">{{ p.name }}</a>{% else %}{{ p.name }}{% endif %}</td>
+      <td>{{ "%.1f"|format(p.pe) if p.pe else '—' }}</td><td>{{ "%.2f"|format(p.pb) if p.pb else '—' }}</td><td>{{ "{:,.0f}".format(p.mcap) if p.mcap else '—' }}</td>
+      <td>{% if p.chg is not none %}<span class="{{ 'val-pos' if p.chg >= 0 else 'val-neg' }}">{{ "%+.2f"|format(p.chg) }}%</span>{% else %}—{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div></div>
 </section>
 {% endif %}
 
-{% if raw.annual %}
-<section class="section" id="annual">
-  <div class="section-head">
-    <div><h2 class="section-title">Annual results</h2><span class="section-note">{{ raw.money_unit }} unless stated · {{ n_annual }} fiscal years on file</span></div>
-  </div>
-  {% if raw.annual.charts %}<div class="chart-grid">{% for c in raw.annual.charts %}{{ bar_chart(c, 'annual') }}{% endfor %}</div>{% endif %}
-  {{ period_table(raw.annual, 'annual') }}
-</section>
-{% endif %}
-
-{% if raw.annual_balance %}
-<section class="section" id="annual-balance">
-  <div class="section-head"><div><h2 class="section-title">Annual balance sheet &amp; efficiency</h2><span class="section-note">fiscal years · {{ raw.money_unit }} unless stated · IndianAPI annual statements</span></div></div>
-  {{ period_table(raw.annual_balance, 'annual_balance') }}
-</section>
-{% endif %}
-
-{% if raw.balance %}
-<section class="section" id="balance">
-  <div class="section-head"><div><h2 class="section-title">Balance sheet &amp; ratios</h2><span class="section-note">only periods with reported values · {{ raw.money_unit }} unless stated</span></div></div>
-  {{ period_table(raw.balance, 'balance') }}
-  {% if has_ratios %}
-  <div class="stat-row">
-    {% for label, val in ratio_stats %}{% if val != '—' and val != '— – —' %}
-    <div class="stat-cell"><div class="stat-label">{{ label }}</div><div class="stat-val" style="{{ 'font-size:1.05rem;' if '–' in val else '' }}">{{ val }}</div></div>
-    {% endif %}{% endfor %}
-  </div>
-  {% endif %}
-</section>
-{% endif %}
-
+</div>
+<div class="grp" data-grp="own">
 {% if raw.ownership or matrix.institutional_holders is not none %}
 <section class="section" id="ownership">
   <div class="section-head"><div><h2 class="section-title">Ownership</h2><span class="section-note">{{ 'shareholding pattern by quarter' if raw.ownership else '13F institutional holdings' }}</span></div></div>
@@ -231,12 +293,12 @@
   {% endif %}
 </section>
 {% endif %}
-
-{% set has_lens = matrix.has_layer2 or (matrix.guidance|select|list|length) or (matrix.sector_momentum|select|list|length) or matrix.has_layer5 %}
+</div>
+<div class="grp" data-grp="co">
 {% if ia_company %}
 {% set C = ia_company %}
 <section class="section" id="company">
-  <div class="section-head"><div><h2 class="section-title">Company</h2><span class="section-note">profile, peers and reference data via IndianAPI</span></div></div>
+  <div class="section-head"><div><h2 class="section-title">Company</h2><span class="section-note">profile, leadership, corporate actions and reference data</span></div></div>
   <div class="card"><div class="card-body">
     {% if C.description %}<p class="ia-desc">{{ C.description }}</p>{% endif %}
     <div class="stat-row">
@@ -256,14 +318,6 @@
         {% for o in C.officers %}<tr><td>{{ o.name }}</td><td>{{ o.title }}</td><td>{{ o.age or '—' }}</td></tr>{% endfor %}
       </tbody></table></div></div>
     {% endif %}
-    {% if C.peers %}
-    <div class="card"><div class="card-head"><h3 class="card-title">Peers</h3><span class="section-note">market cap in ₹ Cr</span></div>
-      <div class="table-wrap"><table class="fin"><thead><tr><th>Company</th><th>P/E</th><th>P/B</th><th>Mkt cap</th><th>Day</th></tr></thead><tbody>
-        {% for p in C.peers %}<tr><td>{% if p.symbol %}<a href="/analytics/{{ p.symbol }}">{{ p.name }}</a>{% else %}{{ p.name }}{% endif %}</td>
-          <td>{{ "%.1f"|format(p.pe) if p.pe else '—' }}</td><td>{{ "%.2f"|format(p.pb) if p.pb else '—' }}</td><td>{{ "{:,.0f}".format(p.mcap) if p.mcap else '—' }}</td>
-          <td>{% if p.chg is not none %}<span class="{{ 'val-pos' if p.chg >= 0 else 'val-neg' }}">{{ "%+.2f"|format(p.chg) }}%</span>{% else %}—{% endif %}</td></tr>{% endfor %}
-      </tbody></table></div></div>
-    {% endif %}
   </div>
 
   <div class="ia-grid">
@@ -279,7 +333,7 @@
   </div>
 
   {% if C.metrics %}
-  <div class="card ia-metrics"><div class="card-head"><h3 class="card-title">Key metrics</h3><span class="section-note">values as provided by IndianAPI (mixed units)</span></div><div class="card-body">
+  <div class="card ia-metrics"><div class="card-head"><h3 class="card-title">Key metrics</h3><span class="section-note">values as provided (mixed units)</span></div><div class="card-body">
     {% for g in C.metrics %}
     <details><summary>{{ g.title }} <span class="section-note">{{ g.rows|length }}</span></summary>
       <dl>{% for r in g.rows %}<div><dt>{{ r.name }}</dt><dd>{{ r.value }}</dd></div>{% endfor %}</dl>
@@ -289,7 +343,8 @@
   {% endif %}
 </section>
 {% endif %}
-
+</div>
+<div class="grp" data-grp="lens">
 {% if has_lens %}
 <section class="section" id="lens">
   <div class="section-head">
@@ -332,8 +387,10 @@
   </div>
 </section>
 {% endif %}
+</div>
 
 
+<script src="/static/js/view-select.js?v={{ asset_version('js/view-select.js') }}" defer></script>
 <script src="/static/js/analytics-page.js?v={{ asset_version('js/analytics-page.js') }}" defer></script>
 <script src="/static/js/chart-explorer.js?v={{ asset_version('js/chart-explorer.js') }}" defer></script>
 <script id="explorer-data" type="application/json">{{ explorer | tojson }}</script>

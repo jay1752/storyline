@@ -138,12 +138,14 @@ def company_panel(symbol: str):
             "other": [{"kind": k.title(), "date": d.get("xbDate") or d.get("recordDate") or d.get("dateOfAnnouncement"), "text": d.get("remarks")} for k in ("splits", "bonus", "rights") for d in (ca.get(k) or [])[:3]],
             "meetings": [{"date": m.get("boardMeetDate"), "text": m.get("purpose")} for m in upcoming],
         }
+        nxt = next(({"date": m["date"], "text": m["text"], "days": (date.fromisoformat(m["date"][:10]) - date.today()).days}
+                    for m in actions["meetings"] if m["date"] and m["date"][:10] >= today), None)
         news = [{"headline": n.get("headline"), "date": (n.get("date") or "")[:10]} for n in (_json(p["news_json"]) or [])[:6]]
         growth = {}
         for r in c.execute("SELECT metric, horizon, pct FROM ia_growth WHERE symbol=?", (symbol,)):
             growth.setdefault(r["metric"], {})[r["horizon"]] = r["pct"]
         ma = [{"days": r["days"], "price": r["nse_price"] or r["bse_price"]} for r in c.execute("SELECT days, nse_price, bse_price FROM ia_technical WHERE symbol=? ORDER BY days", (symbol,))]
         return {"description": p["description"], "industry": p["industry"], "isin": p["isin"], "officers": officers, "peers": peers, "metrics": groups,
-                "actions": actions, "news": news, "growth": growth, "ma": ma}
+                "actions": actions, "news": news, "growth": growth, "ma": ma, "next_event": nxt}
     finally:
         c.close()

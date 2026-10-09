@@ -19,7 +19,7 @@ def annual_rows(conn, symbol: str) -> list[AnnualRow]:
     rows = []
     for r in raw:
         d = AnnualRow(dict(r))
-        d["quarter_label"] = f"FY{r['period_end_date'][:4]} (IndianAPI, annual)"
+        d["quarter_label"] = f"FY{r['period_end_date'][:4]} (annual)"
         rows.append(d)
     by = {r["period_end_date"]: r for r in rows}
     for r in rows:
