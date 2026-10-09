@@ -27,7 +27,7 @@
         <button class="icon-btn" type="button" id="palette-toggle" title="Palette" aria-label="Change palette"><svg class="icon"><use href="#i-palette"/></svg></button>
         <button class="icon-btn" type="button" id="theme-toggle" title="Theme: system" aria-label="Change theme"><svg class="icon"><use href="#i-monitor"/></svg></button>
         {% if user %}
-        <a class="btn btn-primary btn-sm" href="/home">Open Stocktale <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
+        <a class="btn btn-primary btn-sm" href="/analytics">Open Stocktale <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
         {% else %}
         <a class="btn btn-ghost btn-sm hm-login" href="/login">Log in</a>
         <a class="btn btn-primary btn-sm" href="/signup">Get started</a>
@@ -45,8 +45,8 @@
         <p class="hm-lede">Stocktale lines up every reported quarter, the price history and who owns the company. It checks each stock against the thresholds and position sizes you set, then keeps an eye on what you track and tells you when the story changes.</p>
         <div class="hm-cta">
           {% if user %}
-          <a class="btn btn-primary hm-btn" href="/home">Open Home <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
-          <a class="btn hm-btn" href="/analytics">Research a stock</a>
+          <a class="btn btn-primary hm-btn" href="/analytics">Open Analytics <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
+          <a class="btn hm-btn" href="/portfolio">Your portfolio</a>
           {% else %}
           <a class="btn btn-primary hm-btn" href="/signup">Create your account <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
           <a class="btn hm-btn" href="#how">See how it works</a>
@@ -227,7 +227,7 @@
         <h2 class="hm-h2">Start with any stock.</h2>
         <div class="hm-cta">
           {% if user %}
-          <a class="btn btn-primary hm-btn" href="/home">Open Home <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
+          <a class="btn btn-primary hm-btn" href="/analytics">Open Stocktale <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
           {% else %}
           <a class="btn btn-primary hm-btn" href="/signup">Create your account <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
           <a class="btn hm-btn" href="/login">I already have one</a>
