@@ -46,7 +46,33 @@ STORY_DEFS = [
     {"key": "story_fresh", "label": "Skip a stock analysed within", "kind": "number", "default": 18, "unit": "hours", "lo": 1, "hi": 168,
      "note": "avoids re-running a story that is still fresh"},
 ]
-STORY_BY_KEY = {d["key"]: d for d in STORY_DEFS}
+
+# Portfolio sizing and discipline: the numbers the story's position-size / exit / add checks and the analyst prompt use. Same layers.
+SIZING_DEFS = [
+    {"key": "size_max", "label": "Largest a position may grow to", "kind": "number", "default": 8.0, "unit": "% of portfolio", "lo": 1, "hi": 100,
+     "note": "above this the story raises a trim alert; also the ceiling for a Core stock"},
+    {"key": "size_target", "label": "Trim back toward", "kind": "number", "default": 5.0, "unit": "%", "lo": 0.5, "hi": 100,
+     "note": "the weight a trim aims for; also a Core stock's usual size"},
+    {"key": "size_watch", "label": "Yellow-flag line", "kind": "number", "default": 5.0, "unit": "%", "lo": 0.5, "hi": 100,
+     "note": "between this and the largest size, the story shows a yellow flag"},
+    {"key": "size_steady", "label": "A Steady stock's size, up to", "kind": "number", "default": 5.0, "unit": "%", "lo": 0.5, "hi": 100,
+     "note": "4+ quarters of accelerating fundamentals"},
+    {"key": "size_start", "label": "Starter size for a new Emerging stock", "kind": "number", "default": 2.0, "unit": "%", "lo": 0.1, "hi": 100,
+     "note": "first crossed the filters in the last 2 quarters"},
+    {"key": "size_confirmed", "label": "Emerging stock after 2 quarters' confirmation", "kind": "number", "default": 3.0, "unit": "%", "lo": 0.1, "hi": 100,
+     "note": "what a confirmed Emerging stock may be built to"},
+    {"key": "sector_max", "label": "Largest share of the book in one sector", "kind": "number", "default": 30.0, "unit": "%", "lo": 5, "hi": 100,
+     "note": "above this the story raises a yellow flag"},
+    {"key": "exit_days", "label": "Exit within this long after a confirmed two-quarter deterioration", "kind": "number", "default": 30, "unit": "days", "lo": 1, "hi": 365,
+     "note": "holding past it is flagged as a late exit"},
+    {"key": "avg_down_max", "label": "Times you may average down", "kind": "number", "default": 1, "unit": "times", "lo": 0, "hi": 10,
+     "note": "one more than this is flagged until the first lot is in profit"},
+    {"key": "evidence_quarters", "label": "Quarters of evidence before adding to a stock", "kind": "number", "default": 2, "unit": "quarters", "lo": 1, "hi": 8,
+     "note": "each of them must clear your sales-growth rule"},
+    {"key": "lot_gap", "label": "Flag a second lot in the same quarter as the first", "kind": "choice", "default": 1, "lo": 0, "hi": 1,
+     "choices": [(1, "Yes"), (0, "No")], "note": "the framework says build slowly: one lot per quarter"},
+]
+STORY_BY_KEY = {d["key"]: d for d in STORY_DEFS + SIZING_DEFS}
 STORY_STOCK_KEY = "story_stock"
 
 
@@ -156,7 +182,7 @@ def stocks_with_overrides(u, user_id: int) -> list[dict]:
 # ---------------------------------------------------------------------------- daily story
 
 def _story_blank() -> dict:
-    return {d["key"]: {**d, "value": d["default"], "enabled": True, "source": "built-in"} for d in STORY_DEFS}
+    return {d["key"]: {**d, "value": d["default"], "enabled": True, "source": "built-in"} for d in STORY_DEFS + SIZING_DEFS}
 
 
 def story_resolve(u, user_id: int | None, symbol: str | None = None, platform_only: bool = False) -> dict:
@@ -193,6 +219,16 @@ def story_plan(u, user_id: int) -> dict:
     over = {r["symbol"]: int(r["value"]) for r in u.execute(
         "SELECT symbol, value FROM framework_overrides WHERE scope='stock' AND user_id=? AND key=?", (user_id, STORY_STOCK_KEY))}
     return {"scope": int(s["story_scope"]["value"]), "max": int(s["story_max"]["value"]), "fresh": int(s["story_fresh"]["value"]), "over": over}
+
+
+def sizing_plan(u, user_id: int) -> dict:
+    """The user's effective sizing / discipline numbers: {key: value} (built-in < platform < the user's own)."""
+    s = story_resolve(u, user_id)
+    return {d["key"]: s[d["key"]]["value"] for d in SIZING_DEFS}
+
+
+def sizing_defaults() -> dict:
+    return {d["key"]: d["default"] for d in SIZING_DEFS}
 
 
 def story_select(plan: dict, positions) -> list:

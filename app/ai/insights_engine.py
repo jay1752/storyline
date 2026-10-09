@@ -45,31 +45,33 @@ run, and continuing that stock's running story from the prior entries you are sh
 
 NON-NEGOTIABLE HONESTY RULES
 - Every number comes from the data block. Never invent, estimate or "recall" a figure. If a value is missing, say UNKNOWN.
-- Interest coverage, current ratio, quick ratio and CFO/PAT are NOT in our data: report them as unknown, never guess.
+- If a rule shows UNKNOWN in the data block (the figure is not in our data for this company), report it as unknown, never guess.
+- The thresholds and position sizes below are THIS USER'S OWN settings (their Investment rules), not fixed doctrine: apply exactly these numbers.
+<<off_rules>>
 - You are not a SEBI-registered adviser; this is the user's framework applied to data.
 - Lynch category, Mayer probability, Mukherjea fit and Dorsey moat are qualitative judgements: base them on the data given
   plus widely known facts about the business; if you are not sure, answer UNKNOWN rather than guess.
 
 FRAMEWORK
-Buckets (exactly one): Core (5+ yrs, all filters passing 3+ yrs; 4-5% cost, up to 8%) · Steady (4+ consecutive quarters of
-accelerating fundamentals; 3-5%) · Emerging (first crossed the filters in the last 2 quarters; 1-2% starter, 3% after 2Q
+Buckets (exactly one): Core (5+ yrs, all filters passing 3+ yrs; about <<size_target>>% cost, up to <<size_max>>%) · Steady (4+ consecutive quarters of
+accelerating fundamentals; up to <<size_steady>>%) · Emerging (first crossed the filters in the last 2 quarters; <<size_start>>% starter, <<size_confirmed>>% after 2Q
 confirmation) · Reserve (passes filters, watchlist, 0%) · Trim-Exit (1 quarter of breaking a filter; confirm at quarter 2 -> exit).
 There is no trading bucket: once bought, hold until the BUSINESS deteriorates.
-Hard filters: ROCE > 25% (ROE for banks/financials; <20% ROCE = pass entirely), D/E < 0.25 (n/a for banks), interest coverage > 10,
-promoter pledge < 10% (>10% = avoid), current ratio > 1.5, quick ratio > 1, sales growth > 30% over the recent 4 quarters
-(accelerating preferred), operating margin > 30% for high-margin businesses, promoter holding high and non-decreasing.
+Hard filters: ROCE > <<roce>>% (ROE > <<roe>>% for banks/financials), D/E < <<de>> (n/a for banks), interest coverage > <<interest_cover>>,
+promoter pledge < <<pledge>>% (above = avoid), current ratio > <<current_ratio>>, quick ratio > <<quick_ratio>>, sales growth > <<sales_growth>>% over the recent 4 quarters
+(accelerating preferred), operating margin > <<opm>>% for high-margin businesses, promoter holding high and not falling by more than <<promoter>> pp.
 Three-speed exit check:
-- Speed 1 (immediate): auditor change/restatement, pledge suddenly > 10%, SEBI/RBI ban or major enforcement, confirmed fraud/governance
+- Speed 1 (immediate): auditor change/restatement, pledge suddenly > <<pledge>>%, SEBI/RBI ban or major enforcement, confirmed fraud/governance
   scandal. Only mark "triggered" if a supplied headline or data point actually shows it; otherwise "clear" (or "monitor" if a credible
   headline hints at it).
-- Speed 2 (two consecutive quarters): ROCE < 25% (ROE < 18% banks), sales growth actually negative, OPM compression > 500 bps from
-  peak, CFO/PAT < 0.6, working capital stretching > 30 days, D/E > 0.25. One bad quarter = noise (status "one_quarter_warning");
-  two = trend ("two_quarter_confirmed" -> exit within 30 days).
+- Speed 2 (two consecutive quarters): ROCE < <<roce>>% (ROE < <<roe>>% banks), sales growth actually negative, OPM compression > 500 bps from
+  peak, CFO/PAT < <<cfo_pat>>, working capital stretching > 30 days, D/E > <<de>>. One bad quarter = noise (status "one_quarter_warning");
+  two = trend ("two_quarter_confirmed" -> exit within <<exit_days>> days).
 - Speed 3 (12-18 months): promoter holding declining, moat erosion, sector regulatory change, capital-allocation drift.
 NOT exit triggers: price falling alone, market/sector correction, ONE bad quarter, an expensive P/E (that means TRIM, not exit),
 news headlines/political noise, analyst downgrades, stop-losses (never used).
-Yellow flags (TRIM, not exit): position > 5% of portfolio (trim toward 5%), valuation far ahead of growth, a sector > 30% of the book.
-Sizing: never scale up without 2-quarter evidence; never delay exit past 2-quarter confirmation; build over 1-2 years; never buy a
+Yellow flags (TRIM, not exit): position > <<size_watch>>% of portfolio (trim toward <<size_target>>%; above <<size_max>>% is an alert), valuation far ahead of growth, a sector > <<sector_max>>% of the book.
+Sizing: never scale up without <<evidence_quarters>>-quarter evidence; never delay exit past 2-quarter confirmation; build over 1-2 years; never buy a
 second lot in the same quarter as the first.
 Realistic expectation: 14-17% INR CAGR over 5-10 years.
 
@@ -81,7 +83,7 @@ Rule checks computed from the journal and position (same-quarter lots, averaging
 late exit) are given to you — do NOT restate them, including position size. story_flags are ONLY for NEW observations about the
 user's own actions or stated thesis measured against the data (e.g. "your note says margins would hold — they fell 700 bps",
 "trimming while every filter passes cuts a winner"); general fundamentals belong in the other sections, not here. Add at most 3
-(level ok/watch/warning/alert). Respect their actions in the verdict: if they added recently the 2-quarter-evidence rule blocks
+(level ok/watch/warning/alert). Respect their actions in the verdict: if they added recently the <<evidence_quarters>>-quarter-evidence rule blocks
 another BUY (say HOLD); if they trimmed, comment on whether the remaining size still fits the bucket. With no journal, set
 user_story to an empty string and story_flags to an empty list — never invent user actions.
 
@@ -92,6 +94,17 @@ HOW TO WRITE THE ENTRY
   A watchlist stock (not owned) can be BUY / WATCH; an owned position HOLD / TRIM / EXIT / BUY(add).
 - Cite news as [n] using only the numbered headlines supplied. Do not cite what you were not given.
 - Keep every text field concise and specific; no filler, no hype, no price targets."""
+
+
+def build_system_prompt(th: dict, sz: dict) -> str:
+    """The analyst prompt with THIS USER's numbers filled in: their Investment rules (thresholds) and sizing settings."""
+    from app import framework as fr
+    vals = {**{k: v["value"] for k, v in th.items()}, **{**fr.sizing_defaults(), **(sz or {})}}
+    off = [v["label"] for v in th.values() if not v.get("enabled", True)]
+    text = SYSTEM_PROMPT.replace("<<off_rules>>", ("- Rules the user has switched OFF are not applied and must not be reported as failing: " + ", ".join(off) + ".") if off else "")
+    for k, v in vals.items():
+        text = text.replace(f"<<{k}>>", f"{v:g}" if isinstance(v, (int, float)) else str(v))
+    return text
 
 
 # ---------------------------------------------------------------------------- output schema
@@ -234,7 +247,9 @@ def _gather(u, pos) -> dict:
     from app.annual import annual_rows
     with get_market_conn() as _am:
         annual = annual_rows(_am, sym)
-    framework = evaluate_framework(q_dicts, stock["sector"], framework_rules.resolve(u, pos["user_id"], sym), annual=annual)
+    th = framework_rules.resolve(u, pos["user_id"], sym)
+    sz = framework_rules.sizing_plan(u, pos["user_id"])
+    framework = evaluate_framework(q_dicts, stock["sector"], th, annual=annual)
 
     with get_market_conn() as m:
         closes = m.execute("SELECT date, close FROM price_history WHERE symbol = ? ORDER BY date DESC LIMIT 400", (sym,)).fetchall()
@@ -288,13 +303,13 @@ def _gather(u, pos) -> dict:
         if d.get("revenue_growth_pct") is None:
             d["revenue_growth_pct"] = _yoy(r, by_end, stored=False)
         q_all.append(d)
-    flags = rule_flags(events, pos, q_all, price, weight, prior_analyses) if (events or weight) else []
+    flags = rule_flags(events, pos, q_all, price, weight, prior_analyses, sz=sz, growth_bar=th["sales_growth"]["value"]) if (events or weight) else []
 
     entry_no = 1 + u.execute("SELECT COUNT(*) FROM position_snapshots WHERE position_id = ? AND analysis_json IS NOT NULL", (pos["id"],)).fetchone()[0]
     news = company_news(sym, stock["name"])
     return {
         "entry_no": entry_no,
-        "journal": events, "rule_flags": flags,
+        "journal": events, "rule_flags": flags, "system": build_system_prompt(th, sz),
         "symbol": sym, "name": stock["name"], "sector": stock["sector"], "market": stock["market"],
         "position": position, "valuation": valuation, "framework": framework,
         "quarters": _quarter_table(q_dicts[-6:]),
@@ -385,7 +400,7 @@ def _structured_output_problem(e: Exception) -> bool:
                                 "validation error", "does not support tool", "no endpoints found that support", "tool use"))
 
 
-def _generate(chain: list[dict], prompt: str) -> tuple[Analysis, dict]:
+def _generate(chain: list[dict], prompt: str, system: str | None = None) -> tuple[Analysis, dict]:
     """Walk the user's model chain; transient errors get retries, anything else moves to the next model."""
     from pydantic_ai import Agent, PromptedOutput
 
@@ -396,7 +411,7 @@ def _generate(chain: list[dict], prompt: str) -> tuple[Analysis, dict]:
         for attempt in range(3):
             try:
                 try:
-                    result = Agent(model=link["model"], system_prompt=SYSTEM_PROMPT, output_type=Analysis).run_sync(prompt)
+                    result = Agent(model=link["model"], system_prompt=system or SYSTEM_PROMPT, output_type=Analysis).run_sync(prompt)
                 except Exception as first:  # noqa: BLE001
                     # Some models/providers (Groq's gpt-oss, assorted free OpenRouter models) reject or botch tool-call
                     # output ("tool call validation failed", wrong field names). Ask for plain JSON text instead and validate
@@ -404,7 +419,7 @@ def _generate(chain: list[dict], prompt: str) -> tuple[Analysis, dict]:
                     if not _structured_output_problem(first):
                         raise
                     logger.info("insights: %s can't do tool-call output (%s); retrying as prompted JSON", link["label"], type(first).__name__)
-                    result = Agent(model=link["model"], system_prompt=SYSTEM_PROMPT, output_type=PromptedOutput(Analysis)).run_sync(prompt)
+                    result = Agent(model=link["model"], system_prompt=system or SYSTEM_PROMPT, output_type=PromptedOutput(Analysis)).run_sync(prompt)
                 return result.output, link
             except Exception as e:  # noqa: BLE001
                 logger.warning("insights: %s failed (attempt %d): %s: %s", link["label"], attempt + 1, type(e).__name__, str(e)[:200])
@@ -475,7 +490,7 @@ def _analyse(user_id: int, position_id: int, trigger: str) -> None:
             raise AnalysisError("That tracked stock no longer exists.")
         ctx = _gather(u, pos)
         today = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%A %d %B %Y")
-        analysis, link = _generate(chain, _prompt(ctx, today))
+        analysis, link = _generate(chain, _prompt(ctx, today), ctx.get("system"))
 
         a = analysis.model_dump()
         a.update({

@@ -25,12 +25,12 @@
   </table>
 </div>
 {% endmacro %}
-{% macro story_table(rows, scope) %}
+{% macro story_table(rows, scope, items) %}
 <div class="table-wrap">
   <table class="fin rules-table" data-scope="{{ scope }}">
     <thead><tr><th>Setting</th><th>Value</th><th>Where it comes from</th><th></th></tr></thead>
     <tbody>
-      {% for d in story_defs %}{% set r = rows[d.key] %}
+      {% for d in items %}{% set r = rows[d.key] %}
       <tr data-key="{{ d.key }}" data-base="{{ r.reset_value }}">
         <td>{{ d.label }}<span class="row-sub">{{ d.note }}</span></td>
         <td class="rule-edit">
@@ -60,7 +60,7 @@
   <div class="page-head-main">
     <span class="eyebrow">System</span>
     <h1 class="page-title">Investment rules</h1>
-    <p class="page-sub">The thresholds behind the Fundamentals scan on every stock's story page, and which of your stocks get a story automatically each day. They apply in three layers: the <b>platform</b> default, <b>your</b> defaults, and an override for a <b>single stock</b>. Anything you don't change inherits from the layer above, and ↺ Reset sends it back.</p>
+    <p class="page-sub">The thresholds behind the Fundamentals scan on every stock's story page, which of your stocks get a story automatically each day, and how you size positions. They apply in three layers: the <b>platform</b> default, <b>your</b> defaults, and an override for a <b>single stock</b>. Anything you don't change inherits from the layer above, and ↺ Reset sends it back.</p>
   </div>
 </div>
 
@@ -76,7 +76,14 @@
   <div class="section-head">
     <div><h2 class="section-title">Daily story</h2><span class="section-note">which of your tracked stocks get an AI story every morning · you can also switch one stock on or off from its own story page</span></div>
   </div>
-  {{ story_table(story_mine, 'user') }}
+  {{ story_table(story_mine, 'user', story_defs) }}
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <div><h2 class="section-title">Portfolio sizing &amp; discipline</h2><span class="section-note">how big a position may get, when to trim, and the habits the story checks your journal against · the AI analysis uses exactly these numbers</span></div>
+  </div>
+  {{ story_table(story_mine, 'user', sizing_defs) }}
 </section>
 
 <section class="section">
@@ -101,7 +108,11 @@
 {% if story_platform %}
 <section class="section">
   <div class="section-head"><div><h2 class="section-title">Platform daily story <span class="badge accent">admin</span></h2><span class="section-note">the default for every user until they set their own</span></div></div>
-  {{ story_table(story_platform, 'platform') }}
+  {{ story_table(story_platform, 'platform', story_defs) }}
+</section>
+<section class="section">
+  <div class="section-head"><div><h2 class="section-title">Platform sizing &amp; discipline <span class="badge accent">admin</span></h2><span class="section-note">the default for every user until they set their own</span></div></div>
+  {{ story_table(story_platform, 'platform', sizing_defs) }}
 </section>
 {% endif %}
 

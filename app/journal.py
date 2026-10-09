@@ -131,12 +131,15 @@ def entries(u, position_id: int) -> list[dict]:
 # ---------------------------------------------------------------------------- rule-based story flags
 
 def rule_flags(events: list[dict], pos, quarters: list[dict], latest_price: float | None, weight_pct: float | None,
-               prior_analyses: list[dict]) -> list[dict]:
+               prior_analyses: list[dict], sz: dict | None = None, growth_bar: float = 30.0) -> list[dict]:
     """Framework rules the user's own actions can break, computed from their entries. Each flag:
     {level: ok|watch|warning|alert, text, source: 'rule'}.
 
     quarters: quarterly rows (dict-like, oldest first) with period_end_date / revenue_growth_pct.
-    prior_analyses: earlier analysis dicts (newest first) so a missed exit can be spotted."""
+    prior_analyses: earlier analysis dicts (newest first) so a missed exit can be spotted.
+    sz: the user's sizing / discipline numbers (framework.sizing_plan; built-in defaults when omitted); growth_bar: their sales-growth rule."""
+    from app.framework import sizing_defaults
+    sz = {**sizing_defaults(), **(sz or {})}
     flags: list[dict] = []
 
     def flag(level, text, kind):
@@ -146,12 +149,12 @@ def rule_flags(events: list[dict], pos, quarters: list[dict], latest_price: floa
     adds = [e for e in events if e["event_type"] == "add"]
 
     # 1) Never buy a 2nd lot in the same quarter as the 1st.
-    if len(lots) >= 2:
+    if sz["lot_gap"] and len(lots) >= 2:
         first_q = _quarter(lots[0]["event_date"])
         same = [e for e in lots[1:] if _quarter(e["event_date"]) == first_q]
         if same:
             flag("warning", f"You bought another lot on {same[0]['event_date']} in the same quarter as your first ({lots[0]['event_date']}). "
-                            "Framework: never buy the second lot in the same quarter as the first.", "same_quarter")
+                            "Your rule: no second lot in the same quarter as the first.", "same_quarter")
 
     # 2) Averaging down: more than once is a breach.
     running_qty, running_cost, down = 0.0, 0.0, 0
@@ -160,28 +163,31 @@ def rule_flags(events: list[dict], pos, quarters: list[dict], latest_price: floa
             down += 1
         running_qty += e["quantity"] or 0
         running_cost += (e["quantity"] or 0) * (e["price"] or 0)
-    if down >= 2:
-        flag("warning", f"You've averaged down {down} times. Framework: don't average down more than once until the first lot shows a profit.", "averaging")
-    elif down == 1:
-        flag("watch", "One of your adds was below your average cost (averaging down). One is allowed — a second is a breach until the first lot is in profit.", "averaging")
+    allowed = int(sz["avg_down_max"])
+    if down > allowed:
+        flag("warning", f"You've averaged down {down} times. Your rule: at most {allowed} until the first lot shows a profit.", "averaging")
+    elif down and down == allowed:
+        flag("watch", f"{'One' if down == 1 else down} of your adds {'was' if down == 1 else 'were'} below your average cost (averaging down). That is your limit of {allowed} — another is a breach until the first lot is in profit.", "averaging")
 
-    # 3) Evidence before scaling up: two consecutive quarters of >30% sales growth that were public at the time.
+    # 3) Evidence before scaling up: N consecutive quarters above the user's sales-growth bar that were public at the time.
+    n_ev = int(sz["evidence_quarters"])
     for e in adds:
         known = [q for q in quarters if q["period_end_date"] <= (date.fromisoformat(e["event_date"]) - timedelta(days=45)).isoformat()]
-        g = [q.get("revenue_growth_pct") for q in known[-2:]]
-        if len(g) == 2 and all(x is not None for x in g) and not all(x > 30 for x in g):
-            flag("warning", f"On {e['event_date']} you added shares, but the two latest reported quarters then showed sales growth of "
-                            f"{g[0]:.0f}% and {g[1]:.0f}% — below the 30% bar. Framework: never scale up without 2-quarter evidence.", "evidence")
+        g = [q.get("revenue_growth_pct") for q in known[-n_ev:]]
+        if len(g) == n_ev and all(x is not None for x in g) and not all(x > growth_bar for x in g):
+            shown = " and ".join(f"{x:.0f}%" for x in g)
+            flag("warning", f"On {e['event_date']} you added shares, but the {n_ev} latest reported quarters then showed sales growth of "
+                            f"{shown} — below your {growth_bar:g}% bar. Your rule: no scaling up without {n_ev}-quarter evidence.", "evidence")
             break
 
-    # 4) Position size.
+    # 4) Position size, against the user's own limits.
     if weight_pct is not None:
-        if weight_pct > 8:
-            flag("alert", f"This is {weight_pct:.1f}% of your book. Framework: above 8% trim back toward 5%.", "size")
-        elif weight_pct > 5:
-            flag("watch", f"This is {weight_pct:.1f}% of your book — over the 5% yellow-flag line (trim back to 5% if it keeps growing).", "size")
+        if weight_pct > sz["size_max"]:
+            flag("alert", f"This is {weight_pct:.1f}% of your book. Your rule: above {sz['size_max']:g}% trim back toward {sz['size_target']:g}%.", "size")
+        elif weight_pct > sz["size_watch"]:
+            flag("watch", f"This is {weight_pct:.1f}% of your book — over your {sz['size_watch']:g}% yellow-flag line (trim back to {sz['size_target']:g}% if it keeps growing).", "size")
 
-    # 5) Exit within 30 days of a confirmed two-quarter deterioration.
+    # 5) Exit within the user's window after a confirmed two-quarter deterioration.
     for a in reversed(prior_analyses):  # oldest first
         if a.get("speed2", {}).get("status") == "two_quarter_confirmed":
             when = (a.get("generated_at") or "")[:10]
@@ -189,8 +195,8 @@ def rule_flags(events: list[dict], pos, quarters: list[dict], latest_price: floa
                 days = (today_ist() - date.fromisoformat(when)).days
             except ValueError:
                 break
-            if days > 30 and pos["status"] == "active" and pos["anchor_type"] == "position":
+            if days > sz["exit_days"] and pos["status"] == "active" and pos["anchor_type"] == "position":
                 flag("alert", f"The analysis confirmed a two-quarter deterioration on {when} ({days} days ago) and you still hold it. "
-                              "Framework: exit within 30 days of the second confirmation.", "late_exit")
+                              f"Your rule: exit within {sz['exit_days']:g} days of the second confirmation.", "late_exit")
             break
     return flags

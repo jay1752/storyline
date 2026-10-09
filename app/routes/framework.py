@@ -27,7 +27,7 @@ def rules_page(request: Request):
         story_platform = fw.story_platform_layers(u) if request.state.is_admin else None
     return templates.TemplateResponse("rules.html", {
         "request": request, "active_nav": "rules", "defs": fw.DEFS, "mine": mine, "platform": platform, "stocks": stocks,
-        "story_defs": fw.STORY_DEFS, "story_mine": story_mine, "story_platform": story_platform})
+        "story_defs": fw.STORY_DEFS, "sizing_defs": fw.SIZING_DEFS, "story_mine": story_mine, "story_platform": story_platform})
 
 
 async def _payload(request: Request) -> dict:
