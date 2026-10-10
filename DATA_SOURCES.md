@@ -109,7 +109,7 @@ SQLite runs with a rollback journal (not WAL) and **one writer at a time**: run 
 | Estimates: EPS, revenue, net profit (annual, FY27–FY29), EPS (quarterly) | `/stock_forecasts` | Reference | Sales and net profit arrive in ₹ millions and are shown in ₹ Cr |
 | Reported vs consensus EPS (surprise) | `/stock_forecasts` | Reference | Analyst basis: excludes one-offs, differs from filed EPS by up to ~10% |
 | Company profile, officers, peers, key metrics, corporate actions, news, moving averages | `/stock` | Reference | Shown in the Company section of the stock page |
-| Recent filings with a one-line summary | BSE announcements feed for the list (free, exact time, category, PDF link); IndianAPI `/recent_announcements` for the summary, joined by PDF id | Reference | On demand when a stock page opens: BSE cached 3 h per stock, IndianAPI at most once per 12 h per stock and only under the 450/month call cap. Without the key or budget the list shows without summaries |
+| Recent filings with a one-line summary | BSE announcements feed for the list (free, exact time, category, PDF link); IndianAPI `/recent_announcements` for the summary, joined by PDF id | Reference | On demand when a stock page opens: BSE cached 3 h per stock, IndianAPI at most once per 12 h per stock and only under the 450/month call cap. Without the key or budget the list shows without summaries. BSE answers 403 to the VM's datacenter address, so on the VM the list comes from IndianAPI alone (needs `INDIANAPI_KEY` in the VM `.env`; without it the card says filings are unavailable) |
 | Refinitiv-style statement set (INR millions) | `/stock` (`financials`) | Staged only | Not displayed |
 
 ### 3.6 Funds and ETFs (`funds.db`)

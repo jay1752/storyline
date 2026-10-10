@@ -85,6 +85,34 @@ def _ia_summaries(ticker: str) -> dict:
     return out
 
 
+def _ia_only_items(ticker: str) -> list[dict]:
+    """The whole list from IndianAPI, for hosts BSE refuses (its API answers 403 to the VM's datacenter address). Dates carry no year or time."""
+    key = os.environ.get("INDIANAPI_KEY", "").strip()
+    if not key:
+        return []
+    with get_market_conn() as m:
+        if _used(m) >= MONTHLY_CAP:
+            return []
+        _bump(m)
+    r = requests.get(f"{IA_HOST}/recent_announcements", params={"stock_name": ticker}, headers={"X-Api-Key": key}, timeout=40)
+    data = r.json() if r.status_code == 200 else []
+    out, today = [], date.today()
+    for x in data if isinstance(data, list) else []:
+        t = " ".join((x.get("title") or "").split())
+        s = _SUMMARY.search(t)
+        when = None
+        if s:
+            try:
+                d = datetime.strptime(f"{s.group(1)} {today.year}", "%d %b %Y").date()
+                when = (d if d <= today else d.replace(year=d.year - 1)).isoformat()
+            except ValueError:
+                pass
+        m_id = re.search(r"Pname=([0-9a-fA-F-]{36})", x.get("link") or "")
+        out.append({"id": m_id.group(1).lower() if m_id else None, "title": t[:s.start()] if s else t, "at": when or "", "category": None,
+                    "link": x.get("link"), "summary": s.group(2).strip() if s else None})
+    return out
+
+
 def get_announcements(symbol: str, limit: int = 15) -> dict:
     """{"items": [...], "as_of": utc string, "error": str|None}. Never raises: a failure returns the stale cache or an empty list."""
     with get_market_conn() as m:
@@ -94,7 +122,21 @@ def get_announcements(symbol: str, limit: int = 15) -> dict:
     error = None
     if not row or _now() - fetched > FRESH:
         try:
-            code = scrip_code(symbol)
+            try:
+                code = scrip_code(symbol)
+                bse_ok = True
+            except requests.RequestException:  # BSE refuses some hosts outright (403): fall back to IndianAPI's own list
+                code, bse_ok = None, False
+                ia_items = _ia_only_items(symbol.split(":")[-1])
+                if ia_items:
+                    items, fetched, ia_at = ia_items, _now(), _now()
+                    with get_market_conn() as m:
+                        m.execute("INSERT INTO announcements_cache (symbol, fetched_at, ia_at, items_json) VALUES (?,?,?,?) "
+                                  "ON CONFLICT(symbol) DO UPDATE SET fetched_at=excluded.fetched_at, ia_at=excluded.ia_at, items_json=excluded.items_json",
+                                  (symbol, _stamp(fetched), _stamp(ia_at), json.dumps(items)))
+                        m.commit()
+                else:
+                    error = "Filings are unavailable on this server right now."
             if code:
                 old = {i["id"]: i.get("summary") for i in items if i.get("id")}
                 items = _bse_items(code)
@@ -114,7 +156,7 @@ def get_announcements(symbol: str, limit: int = 15) -> dict:
                               "ON CONFLICT(symbol) DO UPDATE SET fetched_at=excluded.fetched_at, ia_at=excluded.ia_at, items_json=excluded.items_json",
                               (symbol, _stamp(fetched), _stamp(ia_at) if ia_at else None, json.dumps(items)))
                     m.commit()
-            elif not items:
+            elif bse_ok and not items:
                 error = "This stock has no BSE filings feed."
         except Exception as e:  # noqa: BLE001
             logger.warning("announcements fetch failed for %s: %s", symbol, e)
