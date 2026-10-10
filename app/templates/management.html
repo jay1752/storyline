@@ -72,11 +72,11 @@
             <a class="row-ticker" href="/management/{{ p.id }}">{{ p.symbol }}</a>
             <span class="row-sub">{{ p.company_name }}</span>
           </td>
-          <td><span class="badge neutral">{{ p.anchor_type|capitalize }}</span></td>
-          <td>{{ p.anchor_date }}{% if p.buy_price %}<span class="row-sub">{{ "%g"|format(p.buy_price) }} avg{% if p.quantity %} · {{ "%g"|format(p.quantity) }} sh{% endif %}</span>{% else %}<span class="row-sub">added</span>{% endif %}</td>
-          <td>{% if p.since_anchor_pct is not none %}<span class="{{ 'val-pos' if p.since_anchor_pct >= 0 else 'val-neg' }}">{{ "%+.1f"|format(p.since_anchor_pct) }}%</span>{% else %}<span class="stub">—</span>{% endif %}</td>
-          <td>{% if p.one_yr_pct is not none %}<span class="{{ 'val-pos' if p.one_yr_pct >= 0 else 'val-neg' }}">{{ "%+.0f"|format(p.one_yr_pct) }}%</span>{% else %}<span class="stub">—</span>{% endif %}</td>
-          <td>
+          <td data-label="Type"><span class="badge neutral">{{ p.anchor_type|capitalize }}</span></td>
+          <td data-label="Anchor">{{ p.anchor_date }}{% if p.buy_price %}<span class="row-sub">{{ "%g"|format(p.buy_price) }} avg{% if p.quantity %} · {{ "%g"|format(p.quantity) }} sh{% endif %}</span>{% else %}<span class="row-sub">added</span>{% endif %}</td>
+          <td data-label="Since anchor">{% if p.since_anchor_pct is not none %}<span class="{{ 'val-pos' if p.since_anchor_pct >= 0 else 'val-neg' }}">{{ "%+.1f"|format(p.since_anchor_pct) }}%</span>{% else %}<span class="stub">—</span>{% endif %}</td>
+          <td data-label="1 year">{% if p.one_yr_pct is not none %}<span class="{{ 'val-pos' if p.one_yr_pct >= 0 else 'val-neg' }}">{{ "%+.0f"|format(p.one_yr_pct) }}%</span>{% else %}<span class="stub">—</span>{% endif %}</td>
+          <td data-label="Latest story">
             {% if p.run_status in ('queued', 'running') %}<span class="badge accent">Analysing…</span>
             {% elif p.run_status == 'failed' %}<span class="badge neg" title="{{ p.run_error }}">Last run failed</span>
             {% elif p.analysed_at %}<a href="/management/{{ p.id }}#analysis" class="muted"><time data-utc="{{ p.analysed_at }}" data-fmt="date">{{ p.analysed_at[:10] }}</time></a>{% else %}<span class="stub">—</span>{% endif %}

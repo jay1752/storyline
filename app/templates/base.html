@@ -83,6 +83,16 @@
   </div>
 
   {% if user %}
+  <nav class="tabbar" aria-label="Main">
+    <a href="/analytics" class="{{ 'active' if active_nav == 'analytics' else '' }}"><svg class="icon"><use href="#i-analytics"/></svg><span>Stocks</span></a>
+    <a href="/management" class="{{ 'active' if active_nav == 'management' else '' }}"><svg class="icon"><use href="#i-management"/></svg><span>Tracking</span></a>
+    <a href="/portfolio" class="{{ 'active' if active_nav == 'portfolio' else '' }}"><svg class="icon"><use href="#i-portfolio"/></svg><span>Portfolio</span></a>
+    <button type="button" onclick="toggleChat()" aria-label="Open the assistant"><svg class="icon"><use href="#i-sparkle"/></svg><span>Assistant</span></button>
+    <button type="button" class="{{ 'active' if active_nav in ('community', 'rules', 'settings', 'profile', 'admin', 'welcome') else '' }}" onclick="document.getElementById('shell').dataset.drawer='open'" aria-label="More"><svg class="icon"><use href="#i-menu"/></svg><span>More</span></button>
+  </nav>
+  {% endif %}
+
+  {% if user %}
   <div class="palette-scrim" id="palette" role="dialog" aria-modal="true" aria-label="Search" data-admin="{{ 1 if request.state.is_admin else 0 }}">
     <div class="palette">
       <div class="palette-input-row">
