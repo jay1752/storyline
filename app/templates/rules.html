@@ -64,7 +64,18 @@
   </div>
 </div>
 
-<section class="section">
+{% if start %}
+<section class="rules-start" aria-label="Getting started with rules">
+  <h2>Set your rules in two steps</h2>
+  <ol>
+    <li><a href="#thresholds"><b>Thresholds</b></a>: what a good stock means to you. This drives the &ldquo;Passes your rules&rdquo; screen in Analytics and every stock&rsquo;s verdict.</li>
+    <li><a href="#sizing"><b>Position sizing</b></a>: how big a holding may grow, when to trim, and your sector limit. This drives the alerts on your tracked stocks.</li>
+  </ol>
+  <p class="prose">Defaults are already filled in. Change a number, then press <b>Save</b> on that row. Anything you leave stays at the default.</p>
+</section>
+{% endif %}
+
+<section class="section" id="thresholds">
   <div class="section-head">
     <div><h2 class="section-title">Your defaults</h2><span class="section-note">used for every stock unless that stock has its own</span></div>
     <button type="button" class="btn btn-sm" id="reset-all-user">↺ Reset all to the platform defaults</button>
@@ -79,12 +90,19 @@
   {{ story_table(story_mine, 'user', story_defs) }}
 </section>
 
-<section class="section">
+<section class="section" id="sizing">
   <div class="section-head">
     <div><h2 class="section-title">Portfolio sizing &amp; discipline</h2><span class="section-note">how big a position may get, when to trim, and the habits the story checks your journal against · the AI analysis uses exactly these numbers</span></div>
   </div>
   {{ story_table(story_mine, 'user', sizing_defs) }}
 </section>
+
+{% if start %}
+<section class="section rules-done">
+  <a class="btn btn-primary" href="/analytics?screen=rules">Show me stocks that pass my rules</a>
+  <a class="btn" href="/management">Go to my positions</a>
+</section>
+{% endif %}
 
 <section class="section">
   <div class="section-head"><div><h2 class="section-title">Stocks with their own rules</h2><span class="section-note">edit these from the stock's story page (Fundamentals scan → pencil)</span></div></div>

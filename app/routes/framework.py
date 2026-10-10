@@ -17,7 +17,7 @@ def _err(msg: str, code: int = 400):
 
 
 @router.get("/rules", response_class=HTMLResponse)
-def rules_page(request: Request):
+def rules_page(request: Request, start: int = 0):
     user_id = request.state.user_id
     with get_users_conn() as u:
         mine = fw.layers(u, user_id)
@@ -25,7 +25,7 @@ def rules_page(request: Request):
         stocks = fw.stocks_with_overrides(u, user_id)
         story_mine = fw.story_layers(u, user_id)
         story_platform = fw.story_platform_layers(u) if request.state.is_admin else None
-    return templates.TemplateResponse("rules.html", {
+    return templates.TemplateResponse("rules.html", {"start": bool(start),
         "request": request, "active_nav": "rules", "defs": fw.DEFS, "mine": mine, "platform": platform, "stocks": stocks,
         "story_defs": fw.STORY_DEFS, "sizing_defs": fw.SIZING_DEFS, "story_mine": story_mine, "story_platform": story_platform})
 

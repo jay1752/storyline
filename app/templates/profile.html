@@ -62,4 +62,16 @@
   </div>
   <div class="form-actions"><button class="btn btn-primary" type="submit">Save profile</button></div>
 </form>
+
+<section class="danger-zone" aria-labelledby="dz-title">
+  <h2 id="dz-title">Delete my account</h2>
+  <p>This permanently removes your profile, positions and their history, rules, notes, saved AI keys and community posts. It can't be undone. Posts that others have replied to are blanked so their replies still make sense. You will be signed out.</p>
+  <form method="post" action="/profile/delete" onsubmit="return confirm('Delete your account and all your data for good?');">
+    <div class="form-field">
+      <label for="del-confirm">Type DELETE to confirm</label>
+      <input class="form-input" id="del-confirm" name="confirm" autocomplete="off" placeholder="DELETE" oninput="document.getElementById('del-btn').disabled = this.value.trim() !== 'DELETE'">
+    </div>
+    <div class="form-actions"><button class="btn btn-danger" id="del-btn" type="submit" disabled>Delete my account</button></div>
+  </form>
+</section>
 {% endblock %}

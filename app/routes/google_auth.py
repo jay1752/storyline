@@ -104,6 +104,7 @@ def google_callback(request: Request, code: str | None = None, state: str | None
 
     now = datetime.now(timezone.utc).isoformat()
     name = (c.get("name") or "").strip()[:60] or None
+    is_new = False
     with get_users_conn() as u:
         user = u.execute("SELECT * FROM users WHERE google_sub = ?", (c["sub"],)).fetchone()
         if user is None:
@@ -120,12 +121,13 @@ def google_callback(request: Request, code: str | None = None, state: str | None
             else:
                 user_id = u.execute("INSERT INTO users (email, google_sub, email_verified_at, display_name) VALUES (?,?,?,?)",
                                     (email, c["sub"], now, name)).lastrowid
+                is_new = True
         else:
             user_id = user["id"]
         u.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))  # housekeeping: expired sessions were never purged
         u.commit()
 
-    resp = RedirectResponse("/analytics", status_code=303)
+    resp = RedirectResponse("/welcome" if is_new else "/analytics", status_code=303)  # a brand-new account gets the getting-started page
     resp.delete_cookie(STATE_COOKIE, path="/auth/google")
     _set_session_cookie(resp, create_session(user_id))
     return resp

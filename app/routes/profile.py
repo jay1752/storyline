@@ -8,6 +8,8 @@ import urllib.parse
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from app.account import CannotDelete, delete_account
+from app.auth.middleware import SESSION_COOKIE
 from app.db import get_users_conn
 from app.templates_config import templates
 
@@ -49,3 +51,17 @@ def profile_save(request: Request, display_name: str = Form(""), phone: str = Fo
                   (name or None, phone or None, contact_email or None, country or None, city or None, about or None, request.state.user_id))
         u.commit()
     return RedirectResponse("/profile?saved=1", status_code=303)
+
+
+@router.post("/profile/delete")
+def profile_delete(request: Request, confirm: str = Form("")):
+    """Permanent self-service deletion. Needs the word DELETE typed in, so it can't happen from a stray click."""
+    if confirm.strip() != "DELETE":
+        return RedirectResponse("/profile?error=" + urllib.parse.quote("Type DELETE exactly to confirm."), status_code=303)
+    try:
+        delete_account(request.state.user_id)
+    except CannotDelete as e:
+        return RedirectResponse("/profile?error=" + urllib.parse.quote(str(e)), status_code=303)
+    resp = RedirectResponse("/?account_deleted=1", status_code=303)
+    resp.delete_cookie(SESSION_COOKIE)
+    return resp

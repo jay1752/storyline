@@ -1614,3 +1614,28 @@ details.auth-pw > summary { cursor: pointer; color: var(--muted); font-size: 0.8
 details.auth-pw > summary::-webkit-details-marker { display: none; }
 details.auth-pw > summary:hover { color: var(--ink); }
 details.auth-pw[open] > summary { margin-bottom: 0.8rem; }
+
+/* welcome / getting started */
+.wl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1rem; align-items: stretch; }
+.wl-card { background: var(--card, var(--paper)); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 1.3rem 1.3rem 1.2rem; display: flex; flex-direction: column; gap: 0.55rem; box-shadow: var(--shadow-sm); }
+.wl-card h2 { font-size: 1.12rem; margin: 0; line-height: 1.25; text-wrap: balance; }
+.wl-card p { margin: 0; color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
+.wl-step { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.wl-points { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.35rem; font-size: 0.88rem; color: var(--ink); }
+.wl-fine { font-size: 0.8rem !important; }
+.wl-actions { margin-top: auto; padding-top: 0.6rem; display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; }
+.wl-search { position: relative; margin-top: 0.2rem; }
+.wl-skip { margin: 1.4rem 0 0; font-size: 0.88rem; color: var(--muted); }
+.wl-skip a { color: var(--structure); text-underline-offset: 2px; }
+/* rules page: first-run guide */
+.rules-start { border: 1px solid var(--border-strong); background: var(--paper); border-radius: var(--r-lg); padding: 1.1rem 1.3rem; margin-bottom: 1.4rem; display: grid; gap: 0.5rem; }
+.rules-start h2 { margin: 0; font-size: 1.05rem; }
+.rules-start ol { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.35rem; font-size: 0.9rem; }
+.rules-start a { color: var(--structure); text-underline-offset: 2px; }
+.rules-done { display: flex; gap: 0.8rem; flex-wrap: wrap; align-items: center; }
+/* danger zone (profile) */
+.danger-zone { border: 1px solid var(--neg, #b3402f); border-radius: var(--r-lg); padding: 1.1rem 1.3rem; margin-top: 2rem; display: grid; gap: 0.6rem; }
+.danger-zone h2 { margin: 0; font-size: 1.05rem; color: var(--neg, #b3402f); }
+.danger-zone p { margin: 0; font-size: 0.88rem; color: var(--muted); line-height: 1.55; }
+.btn-danger { background: var(--neg, #b3402f); border-color: var(--neg, #b3402f); color: #fff; }
+.btn-danger:disabled { opacity: 0.45; cursor: not-allowed; }

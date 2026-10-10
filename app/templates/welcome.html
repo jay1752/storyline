@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Get started · Tenetfolio{% endblock %}
+{% block content %}
+<section class="hero">
+  <span class="eyebrow">Get started</span>
+  <h1 class="page-title">Welcome{{ ', ' ~ first_name if first_name else '' }}. Let's set you up.</h1>
+  <p class="page-sub">Three ways to begin. Pick any one now; the others are always a click away.</p>
+</section>
+
+<section class="section wl-grid">
+  <article class="wl-card">
+    <span class="wl-step">Bring in what you own</span>
+    <h2>Drop in a broker statement</h2>
+    <p>Excel, CSV or PDF from your broker. We read it, match each stock and show every line for you to check and correct. Nothing is saved until you confirm.</p>
+    <div class="wl-actions"><button type="button" class="btn btn-primary" onclick="openChatForImport()">Import a statement</button></div>
+  </article>
+
+  <article class="wl-card">
+    <span class="wl-step">Add a stock you follow</span>
+    <h2>Search and open it</h2>
+    <p>Find any Indian or US stock, read its story, then add it to your watchlist or positions.</p>
+    <div class="hero-search wl-search">
+      <svg class="icon"><use href="#i-search"/></svg>
+      <input class="hero-search-input" type="search" name="q" placeholder="Company, symbol or sector…" autocomplete="off"
+             hx-get="/search-stocks" hx-trigger="keyup changed delay:250ms, search" hx-target="#wl-search-results" hx-swap="innerHTML">
+      <div class="hero-search-results" id="wl-search-results"></div>
+    </div>
+    <div class="wl-actions"><a class="linklike" href="/management/add">or add a holding by hand</a></div>
+  </article>
+
+  <article class="wl-card wl-card-rules">
+    <span class="wl-step">Set your investing rules</span>
+    <h2>Decide what a good stock means to you</h2>
+    <p>Your rules do two jobs, so set them once and both follow:</p>
+    <ul class="wl-points">
+      <li><b>The screener.</b> Which stocks count as passing, in Analytics and on every stock's page.</li>
+      <li><b>Your positions.</b> How big a holding may get, when to trim, and your sector limit.</li>
+    </ul>
+    <p class="wl-fine">Sensible defaults are already in place. Change only what you disagree with.</p>
+    <div class="wl-actions"><a class="btn btn-primary" href="/rules?start=1">Set my rules</a></div>
+  </article>
+</section>
+
+<p class="wl-skip">Not sure yet? <a href="/analytics">Just look around the stocks →</a></p>
+{% endblock %}
