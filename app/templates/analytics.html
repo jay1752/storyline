@@ -179,7 +179,7 @@
 {% endif %}
 {% if raw.balance %}
 <section class="section" id="balance">
-  <div class="section-head"><div><h2 class="section-title">Balance sheet &amp; ratios</h2><span class="section-note">only periods with reported values · {{ raw.money_unit }} unless stated</span></div></div>
+  <div class="section-head"><div><h2 class="section-title">Balance sheet &amp; ratios</h2><span class="section-note">{{ "half-yearly (Indian companies file a balance sheet twice a year)" if stock.market == "IN" else "only periods with reported values" }} · {{ raw.money_unit }} unless stated</span></div></div>
   {{ period_table(raw.balance, 'balance') }}
   {% if has_ratios %}
   <div class="stat-row">

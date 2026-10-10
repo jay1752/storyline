@@ -411,6 +411,72 @@ def _balance_table(period_rows, money_unit, eps_unit, bank=False):
     return {"columns": [_period_label(r["period_end_date"], r["quarter_label"]) for r in cols], "ends": [r["period_end_date"] for r in cols], "rows": rows}
 
 
+def _half_year_ends(d_from: date, d_to: date, months: set) -> list:
+    out = []
+    for y in range(d_from.year, d_to.year + 1):
+        for m in sorted(months):
+            nxt = date(y + (m == 12), m % 12 + 1, 1)
+            d = nxt - timedelta(days=1)
+            if d_from <= d <= d_to:
+                out.append(d)
+    return sorted(out)
+
+
+def _balance_table_half(all_rows, annual_all, money_unit, eps_unit, bank=False, keep=6):
+    """Balance sheet and trailing ratios by HALF-YEAR end (fiscal year-end and the date six months earlier: March and September for most
+    Indian companies). Indian companies file a balance sheet only twice a year, so June and December columns can never hold one.
+    The "latest" balance figures are stamped on whichever quarter row was newest when they were stored; here each is moved onto the
+    half-year end it describes, and years with no filed detail borrow borrowings / equity capital / ROCE from the annual statements."""
+    g = lambda r, k: (r[k] if k in r.keys() else None)
+    ends_src = annual_all[-1]["period_end_date"] if annual_all else None
+    fy_m = int(ends_src[5:7]) if ends_src else 3
+    months = {fy_m, (fy_m + 5) % 12 + 1}
+    keys = [k for _, k, _, _ in _BS_FIELDS]
+    data: dict = {}
+
+    def half_end_on_or_before(d):
+        ends = _half_year_ends(date(d.year - 1, 1, 1), d, months)
+        return ends[-1] if ends else None
+
+    held = [r for r in all_rows if any(g(r, k) is not None for k in keys)]
+    for exact in (False, True):  # a row sitting on its own half-year end wins over figures moved onto it
+        for r in sorted(held, key=lambda r: r["period_end_date"]):
+            d = date.fromisoformat(r["period_end_date"])
+            on_end = bool(_half_year_ends(d, d, months))
+            if on_end != exact:
+                continue
+            target = d if on_end else half_end_on_or_before(d)
+            if target is None:
+                continue
+            slot = data.setdefault(target, {})
+            for k in keys:
+                v = g(r, k)
+                if v is not None and (exact or slot.get(k) is None):
+                    slot[k] = v
+    for a in annual_all:  # filed half-year detail is scarce: fill the year-end from the annual statements
+        t = date.fromisoformat(a["period_end_date"])
+        slot = data.setdefault(t, {})
+        for dst, src in (("total_debt_cr", "borrowings_cr"), ("equity_share_capital_cr", "equity_capital_cr"), ("roce_pct", "roce_pct")):
+            if slot.get(dst) is None and g(a, src) is not None:
+                slot[dst] = g(a, src)
+    for slot in data.values():
+        if slot.get("net_debt_cr") is None and slot.get("total_debt_cr") is not None and slot.get("cash_cr") is not None:
+            slot["net_debt_cr"] = slot["total_debt_cr"] - slot["cash_cr"]
+    dates = sorted(d for d, slot in data.items() if any(slot.get(k) is not None for k in keys))[-keep:]
+    if not dates:
+        return None
+    unit = {"money": money_unit, "eps": eps_unit, "%": "%", "x": "x", "": ""}
+    rows = [x for x in (_row(lbl, [data[d].get(k) for d in dates], fmt, unit[u], spark=False) for lbl, k, fmt, u in _BS_FIELDS) if x]
+    if not bank:
+        cur = [(data[d].get("current_assets_cr"), data[d].get("current_liabilities_cr"), data[d].get("inventory_cr")) for d in dates]
+        crt = [round(a / l, 2) if a is not None and l else None for a, l, _ in cur]
+        qrt = [round((a - (i or 0)) / l, 2) if a is not None and l else None for a, l, i in cur]
+        at = next((i for i, x in enumerate(rows) if x["label"] == "Inventory"), None)
+        extra = [x for x in (_row("Current ratio", crt, _num2, "x", spark=False), _row("Quick ratio", qrt, _num2, "x", spark=False)) if x]
+        rows[(at + 1 if at is not None else len(rows)):(at + 1 if at is not None else len(rows))] = extra
+    return {"columns": [d.strftime("%b %Y") for d in dates], "ends": [d.isoformat() for d in dates], "rows": rows} if rows else None
+
+
 _ANNUAL_BS = [
     ("Equity capital", "equity_capital_cr", _money, "money"), ("Reserves", "reserves_cr", _money, "money"), ("Borrowings", "borrowings_cr", _money, "money"),
     ("Other liabilities", "other_liabilities_cr", _money, "money"), ("Total liabilities", "total_liabilities_cr", _money, "money"),
@@ -1010,7 +1076,8 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
         "money_unit": money_unit,
         "quarterly": _pl_table(q_window, quarter_all, money_unit, eps_unit, with_qoq=True, bank=bank) if q_window else None,
         "annual": _pl_table(annual_all[-12:], annual_all, money_unit, eps_unit, with_qoq=False, bank=bank) if annual_all else None,
-        "balance": _balance_table(all_rows[-14:], money_unit, eps_unit, bank=bank),
+        "balance": (_balance_table_half(all_rows, annual_all, money_unit, eps_unit, bank=bank) if stock["market"] == "IN"  # India files a balance sheet twice a year; US 10-Qs carry one every quarter
+                    else _balance_table(all_rows[-14:], money_unit, eps_unit, bank=bank)),
         "annual_balance": _annual_balance_table(annual_all[-10:], money_unit) if stock["market"] == "IN" else None,
         "ownership": _ownership_table(q_window) if q_window else None,
     }
@@ -1057,7 +1124,7 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
         "sets": {k: v for k, v in {
             "quarterly": _explorer_set(full_q, "Quarterly results", "Quarter"),
             "annual": _explorer_set(full_a, "Annual results", "Fiscal year"),
-            "balance": _explorer_set(_balance_table(all_rows, money_unit, eps_unit, bank=bank), "Balance sheet & ratios", "Period"),
+            "balance": _explorer_set((_balance_table_half(all_rows, annual_all, money_unit, eps_unit, bank=bank, keep=40) if stock["market"] == "IN" else _balance_table(all_rows, money_unit, eps_unit, bank=bank)), "Balance sheet & ratios", "Half-year end" if stock["market"] == "IN" else "Period"),
             "ownership": _explorer_set(_ownership_table(quarter_all) if quarter_all else None, "Ownership", "Quarter"),
         }.items() if v},
     }
