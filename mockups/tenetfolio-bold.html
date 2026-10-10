@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tenetfolio, bolder directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400&display=swap">
+<style>
+:root{--serif:"Newsreader",Georgia,serif;--mono:"IBM Plex Mono",monospace;--ink:#12261F;--paper:#F4F2EC;--amber:#E0A34C;--calm:#7FC8A9;--alert:#E58B6F}
+*{box-sizing:border-box}
+body{margin:0;background:#CFCCC2;font-family:"IBM Plex Sans",system-ui,sans-serif;color:var(--paper);line-height:1.5}
+.page{max-width:1000px;margin:0 auto;padding:24px 18px 60px}
+.label{font:12px var(--mono);color:#4B554F;margin:30px 0 8px}
+.screen{border-radius:14px;overflow:hidden;margin:0 0 6px}
+.nav{display:flex;align-items:center;gap:16px;padding:18px 36px}
+.logo{display:flex;align-items:center;gap:9px;font-weight:500;font-size:16px}
+.mk{width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;font-size:14px}
+.sp{flex:1}.lk{font-size:13px;opacity:.75}
+.btn{border:0;border-radius:10px;padding:13px 22px;font:500 15px "IBM Plex Sans",sans-serif;cursor:pointer}
+.btn-a{background:var(--amber);color:#2A1C05}
+.btn-d{background:var(--ink);color:var(--paper)}
+.btn-s{padding:9px 16px;font-size:13px;background:rgba(244,242,236,.12);color:var(--paper)}
+.eyebrow{font:12px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--amber)}
+.fine{font:11px var(--mono);opacity:.6}
+/* A */
+.A{background:var(--ink)}
+.A .hero{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:40px;padding:44px 36px 56px;align-items:center}
+.A h1{font-family:var(--serif);font-weight:400;font-size:68px;line-height:1.02;letter-spacing:-.01em;margin:14px 0 18px}
+.A h1 em{color:var(--amber);font-style:italic}
+.A .lead{font-size:18px;opacity:.82;max-width:30ch;margin:0 0 26px}
+.panic{background:#0C1B16;border:1px solid rgba(244,242,236,.14);border-radius:14px;padding:20px}
+.panic .top{display:flex;justify-content:space-between;font:12px var(--mono);opacity:.75}
+.panic .idx{font-size:34px;font-weight:500;color:var(--alert);margin:10px 0 2px}
+.panic hr{border:0;border-top:1px solid rgba(244,242,236,.12);margin:14px 0}
+.panic .r{display:flex;justify-content:space-between;font-size:14px;padding:5px 0}
+.panic .big{font-family:var(--serif);font-size:30px;line-height:1.15;margin:12px 0 0;color:var(--calm)}
+.A .three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border-top:1px solid rgba(244,242,236,.12)}
+.A .three div{padding:22px 36px;border-right:1px solid rgba(244,242,236,.12);font-size:15px}
+.A .three div:last-child{border-right:0}
+.A .three b{display:block;font:12px var(--mono);color:var(--amber);font-weight:400;margin-bottom:4px}
+.A .close{padding:40px 36px 46px;text-align:center;border-top:1px solid rgba(244,242,236,.12)}
+.A .close p{font-family:var(--serif);font-size:34px;line-height:1.15;margin:0 0 18px}
+.foot{padding:14px 36px;font:11px var(--mono);opacity:.55;border-top:1px solid rgba(244,242,236,.12)}
+/* B */
+.B{background:var(--paper);color:var(--ink)}
+.B .hero{padding:70px 36px 74px;text-align:left}
+.B h1{font-family:var(--serif);font-weight:500;font-size:86px;line-height:.98;letter-spacing:-.02em;margin:0;max-width:11ch}
+.B h1 span{color:#B9771F;font-style:italic;font-weight:400;display:block}
+.B p{font-size:19px;max-width:34ch;margin:22px 0 26px;color:#44504A}
+.B .eyebrow{color:#9A6212}
+/* C */
+.C{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.C .l{background:var(--ink);padding:56px 36px}
+.C h1{font-family:var(--serif);font-weight:400;font-size:56px;line-height:1.04;margin:14px 0 18px}
+.C h1 em{color:var(--amber)}
+.C .r{background:#E9E4D6;color:var(--ink);padding:44px 36px;display:flex;align-items:center}
+.pledge{background:#FBFAF6;border:1px solid rgba(18,38,31,.18);border-radius:14px;padding:22px 24px;width:100%}
+.pledge .t{font:12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:#9A6212}
+.pledge ol{margin:12px 0 14px;padding:0;list-style:none}
+.pledge li{font-family:var(--serif);font-size:20px;line-height:1.3;padding:9px 0;border-top:1px solid rgba(18,38,31,.12)}
+.pledge li:first-child{border-top:0}
+.pledge .sig{font:12px var(--mono);color:#5E6B66}
+</style>
+</head>
+<body>
+<div class="page">
+<div class="label">A · "Decide when you're calm." (my pick: bold, dark, one proof moment)</div>
+<div class="screen A">
+  <div class="nav"><span class="logo"><span class="mk" style="background:var(--paper);color:var(--ink)">↗</span>Tenetfolio</span><span class="sp"></span><span class="lk">Log in</span><button class="btn btn-s">Continue with Google</button></div>
+  <div class="hero">
+    <div>
+      <span class="eyebrow">Tenetfolio</span>
+      <h1>Decide when you're calm. <em>Hold when you're not.</em></h1>
+      <p class="lead">Write your investing rules once. Tenetfolio holds you to them when the market shakes.</p>
+      <button class="btn btn-a">Continue with Google</button>
+      <p class="fine" style="margin:14px 0 0">Free. Descriptive research, not investment advice.</p>
+    </div>
+    <div class="panic">
+      <div class="top"><span>Tuesday · 11:42</span><span>Example</span></div>
+      <div class="idx">Nifty −3.2%</div>
+      <div style="opacity:.7;font-size:14px">The feed says sell everything.</div>
+      <hr>
+      <div class="r"><span>Holdings that pass your rules</span><span style="color:var(--calm)">11 of 14</span></div>
+      <div class="r"><span>Broke a rule before today</span><span>3</span></div>
+      <div class="r"><span>New rule breaks today</span><span style="color:var(--calm)">0</span></div>
+      <div class="big">Nothing to do. Your plan says hold.</div>
+    </div>
+  </div>
+  <div class="three">
+    <div><b>1</b>Write your rules in plain numbers.</div>
+    <div><b>2</b>Drop in your broker statement.</div>
+    <div><b>3</b>Get a calm daily read, every morning.</div>
+  </div>
+  <div class="close"><p>Rules written in calm hold in a storm.</p><button class="btn btn-a">Continue with Google</button></div>
+  <div class="foot">A tenet is a rule you hold to. Tenetfolio is a descriptive research tool and does not give investment advice. · Privacy · Terms</div>
+</div>
+
+<div class="label">B · "The market tests your nerve." (type only, light, loud)</div>
+<div class="screen B">
+  <div class="nav"><span class="logo"><span class="mk" style="background:var(--ink);color:var(--amber)">↗</span>Tenetfolio</span><span class="sp"></span><span class="lk">Log in</span><button class="btn btn-d" style="padding:9px 16px;font-size:13px">Continue with Google</button></div>
+  <div class="hero">
+    <span class="eyebrow">Rules first</span>
+    <h1 style="margin-top:14px">The market tests your nerve.<span>Your tenets hold.</span></h1>
+    <p>Set the rules you believe in. We check every stock you own against them, every day.</p>
+    <button class="btn btn-d">Continue with Google</button>
+  </div>
+</div>
+
+<div class="label">C · "Be the investor you planned to be." (the pledge)</div>
+<div class="screen C">
+  <div class="l">
+    <span class="eyebrow">Tenetfolio</span>
+    <h1>Be the investor you <em>planned</em> to be.</h1>
+    <p style="font-size:17px;opacity:.82;max-width:30ch;margin:0 0 24px">Turn your rules into a daily check on what you own.</p>
+    <button class="btn btn-a">Continue with Google</button>
+  </div>
+  <div class="r">
+    <div class="pledge">
+      <div class="t">My tenets · Example</div>
+      <ol>
+        <li>No position above 8% of my portfolio.</li>
+        <li>No company with promoter pledge above 10%.</li>
+        <li>No debt I would not sleep on.</li>
+        <li>No selling in a panic. Review at quarter end.</li>
+      </ol>
+      <div class="sig">Checked daily against every holding</div>
+    </div>
+  </div>
+</div>
+</div>
+</body>
+</html>

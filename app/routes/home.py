@@ -4,6 +4,7 @@ Everything numeric on it is real: coverage counts and the sample stock cards com
 market data, nothing user-specific), cached for a few minutes so the page never costs a scan.
 Anything that is only an illustration of a feature is labelled "Example" in the template."""
 
+import os
 import threading
 import time
 from datetime import date
@@ -159,7 +160,23 @@ def _data():
         return _cache["value"]
 
 
+def _covered_text() -> str:
+    """'11,000+' style count of stocks we hold reported data for (rounded down, so it is never an overstatement)."""
+    try:
+        with get_market_conn() as conn:
+            n = conn.execute("SELECT COUNT(*) FROM stock_metrics").fetchone()[0] or conn.execute("SELECT COUNT(DISTINCT symbol) FROM quarterly_data").fetchone()[0]
+    except Exception:  # noqa: BLE001
+        n = 0
+    return f"{n // 1000 * 1000:,}+" if n >= 2000 else "Thousands of"
+
+
 @router.get("/", response_class=HTMLResponse)
-def home(request: Request):
+def home(request: Request, v: str | None = None):
+    """The public home page. `?v=classic` (or HOME_VARIANT=classic in the environment) serves the previous home page, kept as a backup."""
     d = _data()
-    return templates.TemplateResponse("home.html", {"request": request, "active_nav": "", **d})
+    variant = (v or os.environ.get("HOME_VARIANT", "")).lower()
+    if variant == "classic":
+        return templates.TemplateResponse("home_classic.html", {"request": request, "active_nav": "", **d})
+    from app.routes.google_auth import google_enabled
+    return templates.TemplateResponse("home.html", {"request": request, "cta_href": "/auth/google" if google_enabled() else "/login",
+                                                    "covered_text": _covered_text(), "active_nav": ""})

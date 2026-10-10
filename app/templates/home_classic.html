@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Tenetfolio · Research, rules and portfolio for India and the US</title>
+  <meta name="description" content="Research any stock, test it against your own rules, and manage what you own, for India and the US. Every reported quarter, ownership, and a daily read on what you track.">
+  {% include "_head.html" %}
+  <link rel="stylesheet" href="/static/css/home.css?v={{ asset_version('css/home.css') }}">
+  <script src="/static/js/shell.js?v={{ asset_version('js/shell.js') }}" defer></script>
+  <script src="/static/js/home.js?v={{ asset_version('js/home.js') }}" defer></script>
+</head>
+<body class="home">
+  {% include "_icons.html" %}
+  {% set user = request.state.user %}
+
+  <header class="hm-nav">
+    <div class="hm-wrap hm-nav-in">
+      <a class="hm-brand" href="/" aria-label="Tenetfolio home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--structure)"/><path d="M8 21l5-6 4 3 7-9" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="brand-name">Tenetfolio</span>
+      </a>
+      <nav class="hm-links" aria-label="Sections">
+        <a href="#product">Product</a>
+        <a href="#how">How it works</a>
+        <a href="#ai">AI models</a>
+      </nav>
+      <div class="hm-nav-end">
+        <button class="icon-btn" type="button" id="palette-toggle" title="Palette" aria-label="Change palette"><svg class="icon"><use href="#i-palette"/></svg></button>
+        <button class="icon-btn" type="button" id="theme-toggle" title="Theme: system" aria-label="Change theme"><svg class="icon"><use href="#i-monitor"/></svg></button>
+        {% if user %}
+        <a class="btn btn-primary btn-sm" href="/analytics">Open Tenetfolio <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
+        {% else %}
+        <a class="btn btn-ghost btn-sm hm-login" href="/login">Log in</a>
+        <a class="btn btn-primary btn-sm" href="/signup">Get started</a>
+        {% endif %}
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Hero -->
+    <section class="hm-hero hm-wrap">
+      <div class="hm-hero-copy">
+        <span class="eyebrow">Research · Rules · Portfolio · India + US</span>
+        <h1 class="hm-h1">Research any stock. Test it against <em>your rules</em>. Manage what you own.</h1>
+        <p class="hm-lede">Tenetfolio lines up every reported quarter, the price history and who owns the company. It checks each stock against the thresholds and position sizes you set, then keeps an eye on what you track and tells you when the story changes.</p>
+        <div class="hm-cta">
+          {% if user %}
+          <a class="btn btn-primary hm-btn" href="/analytics">Open Analytics <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
+          <a class="btn hm-btn" href="/portfolio">Your portfolio</a>
+          {% else %}
+          <a class="btn btn-primary hm-btn" href="/signup">Create your account <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
+          <a class="btn hm-btn" href="#how">See how it works</a>
+          {% endif %}
+        </div>
+        <dl class="hm-facts">
+          <div><dt>{{ "{:,}".format(covered) }}</dt><dd>stocks with reported data</dd></div>
+          <div><dt>{{ "{:,}".format(periods) }}</dt><dd>quarters and fiscal years on file</dd></div>
+          <div><dt>Filed</dt><dd>reported figures, not estimates</dd></div>
+        </dl>
+      </div>
+
+      {% if featured %}
+      <div class="hm-demo" aria-label="Live sample from the Analytics page">
+        <div class="hm-demo-bar">
+          {% if featured|length > 1 %}
+          <div class="seg" role="group" aria-label="Sample market" id="demo-tabs">
+            {% for m, f in featured.items() %}<button type="button" class="{{ 'active' if loop.first else '' }}" data-demo="{{ m }}">{{ 'India' if m == 'IN' else 'United States' }}</button>{% endfor %}
+          </div>
+          {% else %}<span class="section-note">Live sample</span>{% endif %}
+          <span class="hm-live"><i></i>Real data, as of {{ (featured.values()|first).as_of }}</span>
+        </div>
+
+        {% for m, f in featured.items() %}
+        <article class="card hm-card" data-demo-card="{{ m }}" {% if not loop.first %}hidden{% endif %}>
+          <header class="hm-card-head">
+            <div>
+              <span class="row-ticker">{{ f.symbol }}</span>
+              <h3>{{ f.name }}</h3>
+            </div>
+            <div class="hm-price"><b>{{ f.last }}</b><span class="val-{{ f.ret_tone }}">{{ f.ret }} <small>1Y</small></span></div>
+          </header>
+
+          <svg class="hm-line {{ 'up' if f.tone_pos else 'down' }}" viewBox="0 0 560 150" preserveAspectRatio="none" role="img" aria-label="One year price of {{ f.name }}">
+            <defs><linearGradient id="hmg-{{ m }}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-opacity=".28"/><stop offset="1" stop-opacity="0"/></linearGradient></defs>
+            <path class="a" d="{{ f.price.area }}" fill="url(#hmg-{{ m }})"/>
+            <path class="l" d="{{ f.price.line }}"/>
+          </svg>
+          <div class="hm-line-foot"><span>{{ f.first_date }}</span><span>Daily close, {{ f.cur }}</span><span>{{ f.as_of }}</span></div>
+
+          {% if f.chips %}
+          <div class="hm-chips">
+            {% for c in f.chips %}<div><span class="stat-label">{{ c.label }}</span><b class="{{ 'val-pos' if c.tone == 'pos' else ('val-neg' if c.tone == 'neg' else '') }}">{{ c.value }}</b><small>{{ c.sub }}</small></div>{% endfor %}
+          </div>
+          {% endif %}
+
+          <div class="hm-bars-head"><b>Revenue, last {{ f.bars|length }} quarters</b><span class="section-note">{{ f.unit }}</span></div>
+          <div class="hm-bars" style="--n: {{ f.bars|length }}">
+            {% for b in f.bars %}
+            <div class="hm-bar {{ 'last' if b.last else '' }}"><i style="height: {{ b.h }}%"></i><span class="v">{{ b.text }}</span><span class="q">{{ b.label }}</span></div>
+            {% endfor %}
+          </div>
+          <a class="hm-card-link" href="{{ '/analytics/' ~ f.symbol if user else '/signup' }}">{{ 'Open the full page' if user else 'Open the full page after signing up' }} <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
+        </article>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </section>
+
+    <!-- Product -->
+    <section class="hm-sec hm-wrap" id="product">
+      <div class="hm-sec-head">
+        <span class="eyebrow">What's inside</span>
+        <h2 class="hm-h2">One place to research, decide and manage.</h2>
+      </div>
+
+      <div class="hm-feature">
+        <div class="hm-feature-copy">
+          <h3>Raw data first</h3>
+          <p>Every reported quarter and fiscal year in one matrix: revenue, margins, EPS, debt, cash and ownership. A figure that wasn't reported is left out, never faked. Click any chart to open it full-size with axes, units, exact values and the data table behind it.</p>
+          <ul class="hm-ticks">
+            <li>Quarterly and annual results, balance sheet, ratios, promoter and institutional holding</li>
+            <li>Price history with 1M to full-history ranges and a log scale</li>
+            <li>Export any stock to CSV</li>
+          </ul>
+        </div>
+        <div class="hm-feature-art">
+          {% set f = (featured.values()|first) if featured else none %}
+          {% if f and f.matrix %}
+          <div class="card hm-mini">
+            <div class="hm-mini-head"><b>{{ f.name }}</b><span class="section-note">{{ f.unit }} unless stated</span></div>
+            <table class="fin">
+              <thead><tr><th>Metric</th>{% for h in f.heads %}<th class="{{ 'latest' if loop.last else '' }}">{{ h }}</th>{% endfor %}<th class="spark-col">Trend</th></tr></thead>
+              <tbody>
+                {% for r in f.matrix %}
+                <tr class="{{ 'strong' if loop.first else '' }}"><td>{{ r.label }}</td>{% for c in r.cells %}<td class="{{ 'latest' if loop.last else '' }}">{{ c }}</td>{% endfor %}
+                  <td class="spark-col"><svg class="spark {{ 'up' if r.up else 'down' }}" width="64" height="22" viewBox="0 0 84 22" preserveAspectRatio="none" aria-hidden="true"><path d="{{ r.spark.line }}"/><circle cx="{{ r.spark.end[0] }}" cy="{{ r.spark.end[1] }}" r="2"/></svg></td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="hm-feature flip">
+        <div class="hm-feature-copy">
+          <h3>A daily story for every stock you track</h3>
+          <p>Add a position or a watchlist stock. Each morning an AI reads the new filings, the price move and the news against your thesis and writes a short update. Add a buy, a trim or a note and the next read takes it into account.</p>
+          <ul class="hm-ticks">
+            <li>Rule-based flags from your own thresholds and sizing limits, plus the AI's own read</li>
+            <li>Optional journal: entries, exits and notes shape the story</li>
+            <li>Importing a broker statement PDF through chat fills in your positions</li>
+          </ul>
+        </div>
+        <div class="hm-feature-art">
+          <div class="card hm-story">
+            <div class="hm-story-head"><span class="badge accent">Example</span><span class="section-note">Morning update</span></div>
+            <p class="hm-story-text">Revenue grew for a third straight quarter, but operating margin slipped again. Your note says you bought for the margin recovery, so this is worth a closer look at the next filing.</p>
+            <ul class="flag-list">
+              <li class="flag lvl-watch"><span class="flag-lvl">Watch</span><span>Margin down two quarters in a row</span></li>
+              <li class="flag lvl-ok"><span class="flag-lvl">OK</span><span>Debt fell again; net cash position</span></li>
+              <li class="flag lvl-warning"><span class="flag-lvl">Warning</span><span>Promoter pledge rose this quarter</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="hm-trio">
+        <article class="card hm-tile">
+          <svg class="icon hm-tile-icon"><use href="#i-portfolio"/></svg>
+          <h3>Portfolio in one view</h3>
+          <p>Holdings across India and the US with invested and current value, day change and allocation, laid out the way a brokerage app does.</p>
+          <div class="hm-alloc" role="img" aria-label="Example allocation bar">
+            <i style="--w: 46%; --c: var(--s1)"></i><i style="--w: 27%; --c: var(--s2)"></i><i style="--w: 17%; --c: var(--s3)"></i><i style="--w: 10%; --c: var(--s4)"></i>
+          </div>
+          <small class="hm-cap">Example allocation</small>
+        </article>
+        <article class="card hm-tile">
+          <svg class="icon hm-tile-icon"><use href="#i-chat"/></svg>
+          <h3>A shared morning briefing</h3>
+          <p>Every day an AI-written briefing covers what moves markets, with its sources listed. Below it, members discuss in threads.</p>
+          <div class="hm-topics">
+            {% for t in ["Oil & gas", "Fed & bond yields", "Tariffs", "Dollar index", "Geopolitics", "China", "Inflation", "Monsoon", "AI & semis"] %}<span class="badge neutral">{{ t }}</span>{% endfor %}
+          </div>
+        </article>
+        <article class="card hm-tile">
+          <svg class="icon hm-tile-icon"><use href="#i-sparkle"/></svg>
+          <h3>Ask about any screen</h3>
+          <p>A chat assistant sits beside every page. Ask why margins moved, compare two stocks, or have it explain a ratio, using the data you are looking at.</p>
+          <div class="hm-ask"><span>Why did operating margin fall last quarter?</span></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="hm-sec hm-how" id="how">
+      <div class="hm-wrap">
+        <div class="hm-sec-head">
+          <span class="eyebrow">How it works</span>
+          <h2 class="hm-h2">From a first look to a managed position.</h2>
+        </div>
+        <ol class="hm-steps">
+          <li><span class="hm-step-n">1</span><h3>Research any stock</h3><p>Search a symbol or company name (⌘K from anywhere). Scan the quarterly matrix, open any chart full-size, and check cash flow, ownership and the balance sheet before you form a view.</p></li>
+          <li><span class="hm-step-n">2</span><h3>Test it against your rules</h3><p>Set your own bars for ROCE, debt, pledge, growth and margins, and how big a position may get. Every stock shows how many of your rules it passes.</p></li>
+          <li><span class="hm-step-n">3</span><h3>Track it and manage it</h3><p>Add it to your watchlist or positions. Each morning Tenetfolio tells you what needs attention: trim, hold or exit, sized by your limits.</p></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- AI models -->
+    <section class="hm-sec hm-wrap" id="ai">
+      <div class="hm-ai">
+        <div>
+          <span class="eyebrow">Your model, your key</span>
+          <h2 class="hm-h2">Use the AI you already pay for.</h2>
+          <p class="hm-sub">Pick a provider and model in Settings, paste your own key, and set a fallback model for when one runs out of quota. Keys are stored encrypted and are never shown again.</p>
+        </div>
+        <div class="hm-providers" aria-label="Supported providers">
+          {% for p in ["OpenAI", "Claude", "Gemini", "Groq", "Mistral", "OpenRouter", "xAI", "DeepSeek", "Local Ollama"] %}<span class="hm-prov">{{ p }}</span>{% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="hm-wrap hm-final">
+      <div class="hm-final-in">
+        <h2 class="hm-h2">Start with any stock.</h2>
+        <div class="hm-cta">
+          {% if user %}
+          <a class="btn btn-primary hm-btn" href="/analytics">Open Tenetfolio <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
+          {% else %}
+          <a class="btn btn-primary hm-btn" href="/signup">Create your account <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
+          <a class="btn hm-btn" href="/login">I already have one</a>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="hm-foot">
+    <div class="hm-wrap hm-foot-in">
+      <span class="hm-brand"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--structure)"/><path d="M8 21l5-6 4 3 7-9" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="brand-name">Tenetfolio</span></span>
+      <p>A descriptive research tool. It summarises reported data and does not give investment advice. Figures come from exchange and regulator filings and public price history and can contain errors; check the source before you act.</p>
+      <p class="hm-legal"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="mailto:tenetfolio@gmail.com">tenetfolio@gmail.com</a></p>
+    </div>
+  </footer>
+</body>
+</html>
