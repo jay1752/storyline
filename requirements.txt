@@ -16,3 +16,5 @@ cryptography==43.0.3
 # app's FastAPI. [google,anthropic] are the only model-provider extras actually used here.
 pydantic-ai-slim[google,anthropic,openai]==2.54.0
 argon2-cffi==25.1.0
+openpyxl==3.1.5
+xlrd==2.0.1

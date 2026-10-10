@@ -177,6 +177,18 @@ def _group_key(t: Txn) -> str:
     return "S:" + t.symbol if t.symbol else ("I:" + t.isin.strip().upper() if t.isin else "T:" + (t.company_text or "").strip().upper())
 
 
+def _draft(group: list, statement_date: Optional[str]) -> dict:
+    """Best-effort numbers for a row we could not turn into a position, so the review card can pre-fill them for the user to correct:
+    quantity (None when the file cannot tell, e.g. sells with no buys), the average of the buy rows, and a date."""
+    qty, avg, anchor, _w, err = _aggregate_symbol(group, statement_date)
+    buys = [t for t in group if t.side in ("buy", "holding") and t.quantity and t.price]
+    if (err or avg is None) and buys:
+        avg = sum(t.quantity * t.price for t in buys) / sum(t.quantity for t in buys)
+    dates = sorted(t.date for t in group if t.date)
+    return {"quantity": round(qty, 6) if (qty and qty > EPS and not err) else None, "avg_price": round(avg, 4) if avg else None,
+            "anchor_date": anchor or (dates[0] if dates else None) or statement_date or date_cls.today().isoformat(), "isin": next((t.isin for t in group if t.isin), None)}
+
+
 def propose(user_id: int, transactions: list[Txn], statement_date: Optional[str] = None) -> dict:
     deadline = time.monotonic() + FETCH_BUDGET_SECONDS
     with get_market_conn() as m:
@@ -267,14 +279,14 @@ def propose(user_id: int, transactions: list[Txn], statement_date: Optional[str]
                     if close:
                         opts = "; ".join(describe(c, r) for c, r in close)
                         skipped.append({"label": label, "reason": f"Ambiguous — several stocks fit these prices: {opts}. Ask the user which one, "
-                                        "then resubmit the full list with the `symbol` field set on these rows."})
+                                        "then resubmit the full list with the `symbol` field set on these rows.", "draft": _draft(grp, statement_date)})
                         continue
                     if sym:
                         confidence, note = "low", "Name matched but prices don't — please verify this is the right stock."
                     else:
                         near = ", ".join(f"{c} ({names.get(c, '?')})" for c, _ in scored[:4])
                         skipped.append({"label": label, "reason": "No stock in our list matches this name and these prices"
-                                        + (f" (closest: {near})" if near else "") + ". Use search_stocks, then resubmit with `symbol` set."})
+                                        + (f" (closest: {near})" if near else "") + ". Use search_stocks, then resubmit with `symbol` set.", "draft": _draft(grp, statement_date)})
                         continue
 
             entry = resolved.setdefault(sym, {"group": [], "match": None, "check": None, "notes": []})
@@ -300,7 +312,7 @@ def propose(user_id: int, transactions: list[Txn], statement_date: Optional[str]
             group = info["group"]
             qty, avg, anchor, warnings, error = _aggregate_symbol(group, statement_date)
             if error:
-                skipped.append({"label": names[sym] + f" ({sym})", "reason": error})
+                skipped.append({"label": names[sym] + f" ({sym})", "reason": error, "symbol": sym, "draft": _draft(group, statement_date)})
                 continue
             if qty <= EPS:
                 skipped.append({"label": names[sym] + f" ({sym})", "reason": "Fully sold within this file — nothing left to track."})
@@ -369,58 +381,135 @@ def cancel(user_id: int, proposal_id: int) -> bool:
     return cur.rowcount > 0
 
 
-def commit(user_id: int, proposal_id: int) -> Optional[dict]:
-    """Applies a pending proposal. Returns counts, or None if it isn't pending/owned."""
+class EditError(ValueError):
+    """A user edit on the review card that cannot be applied (message is shown to the user)."""
+
+
+def _valid_symbol(m, symbol: str):
+    r = m.execute("SELECT symbol, name FROM stocks WHERE symbol = ?", (symbol,)).fetchone()
+    if not r:
+        raise EditError(f"{symbol!r} is not a stock we know. Search for it and pick from the list.")
+    return r["name"]
+
+
+def _num_edit(v, what: str, allow_none: bool = False):
+    if v in (None, ""):
+        if allow_none:
+            return None
+        raise EditError(f"Enter the {what}.")
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        raise EditError(f"{what[0].upper()}{what[1:]} must be a number.")
+    if not math.isfinite(x) or x <= 0 or x > 1e12:
+        raise EditError(f"{what[0].upper()}{what[1:]} must be greater than zero.")
+    return x
+
+
+def _date_edit(v):
+    if not v:
+        return date_cls.today().isoformat()
+    try:
+        d = date_cls.fromisoformat(str(v)[:10])
+    except ValueError:
+        raise EditError("Dates must look like 2025-03-31.")
+    if d > date_cls.today():
+        raise EditError("A purchase date cannot be in the future.")
+    return d.isoformat()
+
+
+def apply_edits(proposal: dict, edits: Optional[dict]) -> list[dict]:
+    """The rows to write after the user's corrections on the review card.
+
+    edits = {"rows": [{"symbol": <original>, "include": bool, "new_symbol"?: str, "quantity"?, "avg_price"?, "anchor_date"?, "mode"?: "replace"|"combine"}],
+             "added": [{"symbol", "quantity", "avg_price"?, "anchor_date"?}]}   # rows that were skipped and the user filled in by hand
+    Every number is re-validated here - the card is a convenience, not a trust boundary."""
+    edits = edits or {}
+    by_sym = {e.get("symbol"): e for e in edits.get("rows", []) if isinstance(e, dict)}
+    out: list[dict] = []
+    with get_market_conn() as m:
+        for r in proposal["rows"]:
+            e = by_sym.get(r["symbol"], {})
+            if e.get("include") is False:
+                continue
+            row = {k: r[k] for k in ("symbol", "company_name", "quantity", "avg_price", "anchor_date")}
+            if e.get("new_symbol") and e["new_symbol"] != r["symbol"]:
+                row["symbol"] = e["new_symbol"]
+                row["company_name"] = _valid_symbol(m, e["new_symbol"])
+            if "quantity" in e:
+                row["quantity"] = _num_edit(e["quantity"], f"quantity for {row['symbol']}")
+            if "avg_price" in e:
+                row["avg_price"] = _num_edit(e["avg_price"], f"average price for {row['symbol']}", allow_none=True)
+            if "anchor_date" in e:
+                row["anchor_date"] = _date_edit(e["anchor_date"])
+            if e.get("mode") == "combine":
+                row["combine"] = True
+            out.append(row)
+        for a in edits.get("added", []):
+            if not isinstance(a, dict) or not a.get("symbol"):
+                continue
+            name = _valid_symbol(m, a["symbol"])
+            out.append({"symbol": a["symbol"], "company_name": name, "quantity": _num_edit(a.get("quantity"), f"quantity for {a['symbol']}"),
+                        "avg_price": _num_edit(a.get("avg_price"), f"average price for {a['symbol']}", allow_none=True), "anchor_date": _date_edit(a.get("anchor_date"))})
+    merged: dict[str, dict] = {}
+    for row in out:  # two rows for one stock (e.g. a corrected symbol that collides): blend them rather than writing twice
+        k = row["symbol"]
+        if k in merged:
+            a, b = merged[k], row
+            tot = a["quantity"] + b["quantity"]
+            a["avg_price"] = (a["quantity"] * a["avg_price"] + b["quantity"] * b["avg_price"]) / tot if a["avg_price"] and b["avg_price"] else None
+            a["quantity"] = tot
+        else:
+            merged[k] = row
+    return list(merged.values())
+
+
+def commit(user_id: int, proposal_id: int, edits: Optional[dict] = None) -> Optional[dict]:
+    """Applies a pending proposal (with the user's corrections, if any). Returns counts, or None if it isn't pending/owned. Raises EditError
+    for a correction that is invalid (nothing is written then)."""
     proposal = get_proposal(user_id, proposal_id)
     if not proposal or proposal["status"] != "pending":
         return None
+    rows = apply_edits(proposal, edits)
+    if not rows:
+        raise EditError("Nothing selected to import.")
 
     created = updated = 0
     deadline = time.monotonic() + FETCH_BUDGET_SECONDS
-    for r in proposal["rows"]:  # a stock with no/stale prices is fetched now, so its returns work immediately
+    for r in rows:  # a stock with no/stale prices is fetched now, so its returns work immediately
         ensure_prices(r["symbol"], deadline)
     with get_users_conn() as u:
-        for r in proposal["rows"]:
+        for r in rows:
             latest = u.execute(
                 "SELECT close FROM market.price_history WHERE symbol = ? ORDER BY date DESC LIMIT 1", (r["symbol"],)
             ).fetchone()
             last_close = latest["close"] if latest else None
-
-            if r["action"] == "new":
-                create_tracked_position(
-                    u, user_id, r["symbol"], r["company_name"], "position",
-                    r["anchor_date"], r["avg_price"], r["quantity"],
-                )
-                created += 1
-                continue
-
             pos = u.execute(
-                "SELECT id FROM tracked_positions WHERE user_id = ? AND symbol = ? AND status = 'active'",
+                "SELECT id, quantity, buy_price, anchor_type FROM tracked_positions WHERE user_id = ? AND symbol = ? AND status = 'active'",
                 (user_id, r["symbol"]),
             ).fetchone()
-            if pos is None:  # deleted between proposal and confirm — treat as new
-                create_tracked_position(
-                    u, user_id, r["symbol"], r["company_name"], "position",
-                    r["anchor_date"], r["avg_price"], r["quantity"],
-                )
+            if pos is None:
+                create_tracked_position(u, user_id, r["symbol"], r["company_name"], "position", r["anchor_date"], r["avg_price"], r["quantity"])
                 created += 1
                 continue
 
+            qty, avg, anchor = r["quantity"], r["avg_price"], r["anchor_date"]
+            if r.get("combine") and pos["anchor_type"] == "position" and pos["quantity"]:
+                # a second account / broker for the same stock: add the shares, blend the cost
+                tot = pos["quantity"] + qty
+                avg = (pos["quantity"] * pos["buy_price"] + qty * avg) / tot if pos["buy_price"] and avg else None
+                qty = tot
             u.execute(
-                "UPDATE tracked_positions SET anchor_type = 'position', anchor_date = ?, buy_price = ?, quantity = ? "
-                "WHERE id = ?",
-                (r["anchor_date"], r["avg_price"], r["quantity"], pos["id"]),
+                "UPDATE tracked_positions SET anchor_type = 'position', anchor_date = ?, buy_price = ?, quantity = ? WHERE id = ?",
+                (anchor, avg, qty, pos["id"]),
             )
-            since = (
-                round((last_close / r["avg_price"] - 1) * 100, 2)
-                if last_close and r["avg_price"] else None
-            )
+            since = round((last_close / avg - 1) * 100, 2) if last_close and avg else None
             # New snapshot row so the Portfolio page's "latest snapshot" price/return
             # reflects the corrected cost basis immediately, not the stale pre-import one.
             u.execute(
                 "INSERT INTO position_snapshots (position_id, price_at_check, since_anchor_pct, one_yr_pct, "
                 "valuation_label, signal, reasoning_json, trigger_type) VALUES (?,?,?,?,?,?,?,?)",
-                (pos["id"], last_close or r["avg_price"], since, None, "Not yet assessed", "watch",
+                (pos["id"], last_close or avg, since, None, "Not yet assessed", "watch",
                  json.dumps(["Position updated from an imported statement"]), "event"),
             )
             updated += 1

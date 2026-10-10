@@ -23,8 +23,8 @@
   <div class="chat-composer">
     <div class="chat-attachment" id="chat-attachment"></div>
     <form class="chat-form" id="chat-form" onsubmit="sendChatMessage(event)">
-      <button type="button" class="icon-btn chat-attach" title="Attach a statement (PDF, CSV or image)" aria-label="Attach a file" onclick="pickChatFile(false)"><svg class="icon"><use href="#i-paperclip"/></svg></button>
-      <input type="file" id="chat-file" accept=".pdf,.csv,.tsv,.txt,.png,.jpg,.jpeg,.webp" hidden onchange="onChatFilePicked(this)">
+      <button type="button" class="icon-btn chat-attach" title="Attach a statement (Excel, CSV, PDF or image)" aria-label="Attach a file" onclick="pickChatFile(false)"><svg class="icon"><use href="#i-paperclip"/></svg></button>
+      <input type="file" id="chat-file" accept=".pdf,.csv,.tsv,.txt,.xlsx,.xlsm,.xls,.png,.jpg,.jpeg,.webp" hidden onchange="onChatFilePicked(this)">
       <textarea id="chat-input" rows="1" placeholder="Ask about this page…" autocomplete="off" aria-label="Message"></textarea>
       <button type="submit" class="chat-send" id="chat-send" title="Send" aria-label="Send"><svg class="icon"><use href="#i-arrow-up"/></svg></button>
     </form>

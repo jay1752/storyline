@@ -209,3 +209,22 @@
 
 .chat-card-ok { font-size: 0.74rem; color: var(--pos); margin-top: 0.15rem; }
 .chat-card-row.needs-review { border-left: 3px solid var(--accent); padding-left: 0.55rem; }
+
+/* import review card: editable lines */
+.chat-card-head { align-items: center; justify-content: flex-start; flex-wrap: wrap; }
+.chat-card-head input[type="checkbox"] { accent-color: var(--accent); }
+.chat-card-name { color: var(--muted); font-size: 0.74rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-card-row.off { opacity: 0.45; }
+.card-fields { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.4rem 0; }
+.card-field { display: grid; gap: 0.15rem; font-size: 0.68rem; color: var(--muted); }
+.card-input { font: inherit; font-size: 0.8rem; color: var(--ink); background: var(--paper); border: 1px solid var(--border-strong); border-radius: var(--r-md); padding: 0.3rem 0.45rem; width: 6.6rem; font-variant-numeric: tabular-nums; }
+.card-input.wide { width: 100%; }
+select.card-input { width: 100%; margin-top: 0.3rem; }
+.card-form { margin-top: 0.4rem; display: grid; gap: 0.35rem; }
+.stock-pick { margin-top: 0.35rem; }
+.stock-pick-list { display: grid; }
+.stock-pick-list button { all: unset; cursor: pointer; padding: 0.3rem 0.4rem; font-size: 0.78rem; border-bottom: 1px solid var(--border); }
+.stock-pick-list button:hover { background: var(--badge-accent-bg); }
+.linklike { all: unset; cursor: pointer; color: var(--accent); font-size: 0.74rem; text-decoration: underline; }
+.chat-card-skipped .chat-card-title { font-size: 0.8rem; }
+.card-form[hidden], .stock-pick[hidden] { display: none; }

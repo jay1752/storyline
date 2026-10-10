@@ -489,69 +489,186 @@ function _actionText(r) {
   return "Update: qty " + _fmt(e.quantity, 4) + " → " + _fmt(r.quantity, 4) + ", avg " + _fmt(e.buy_price, 2) + " → " + _fmt(r.avg_price, 2);
 }
 
+// Stock picker used on the review card: type 2+ letters, pick from the list. onPick({symbol, name}).
+function _stockPicker(onPick, placeholder) {
+  const box = _el("div", "stock-pick");
+  const input = _el("input", "card-input wide");
+  input.type = "search";
+  input.placeholder = placeholder || "Search a stock…";
+  input.autocomplete = "off";
+  const list = _el("div", "stock-pick-list");
+  let timer = 0;
+  input.oninput = () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 2) { list.textContent = ""; return; }
+    timer = setTimeout(async () => {
+      try {
+        const resp = await fetch("/chat/stock-search?q=" + encodeURIComponent(q));
+        const rows = resp.ok ? await resp.json() : [];
+        list.textContent = "";
+        for (const r of rows) {
+          const b = _el("button", null, r.symbol.split(":").pop() + " · " + r.name);
+          b.type = "button";
+          b.onclick = () => { list.textContent = ""; input.value = ""; onPick(r); };
+          list.appendChild(b);
+        }
+        if (!rows.length) list.appendChild(_el("span", "chat-card-sub", "No match"));
+      } catch (e) { /* offline: leave the list empty */ }
+    }, 220);
+  };
+  box.append(input, list);
+  return box;
+}
+
+function _field(label, input) {
+  const w = _el("label", "card-field");
+  w.append(_el("span", null, label), input);
+  return w;
+}
+
+function _numInput(value, step) {
+  const i = _el("input", "card-input");
+  i.type = "number";
+  i.step = step || "any";
+  i.min = "0";
+  if (value !== null && value !== undefined) i.value = value;
+  return i;
+}
+
+function _dateInput(value) {
+  const i = _el("input", "card-input");
+  i.type = "date";
+  i.max = new Date().toISOString().slice(0, 10);
+  if (value) i.value = String(value).slice(0, 10);
+  return i;
+}
+
 function _renderProposal(p) {
   const log = $("chat-log");
   if (!log) return;
   const card = _el("div", "chat-card");
-  card.appendChild(_el("div", "chat-card-title", p.rows.length ? "Review import — " + p.rows.length + " position" + (p.rows.length === 1 ? "" : "s") : "Nothing to import from this file"));
+  card.appendChild(_el("div", "chat-card-title", p.rows.length ? "Review import — " + p.rows.length + " position" + (p.rows.length === 1 ? "" : "s") : "Nothing matched yet"));
+  card.appendChild(_el("div", "chat-card-sub", "Change any number, switch the stock, untick a line to leave it out, or add one we couldn't place."));
+
+  const editors = []; // one per proposed row
+  const added = [];   // manually filled rows from "couldn't place"
 
   for (const r of p.rows) {
     const row = _el("div", "chat-card-row");
-    const head = _el("div", "chat-card-head");
     if (r.needs_review) row.classList.add("needs-review");
-    head.append(_el("strong", null, r.symbol), _el("span", null, _fmt(r.quantity, 4) + " sh @ " + (r.avg_price === null ? "price unknown" : _fmt(r.avg_price, 2))));
-    row.append(head, _el("div", "chat-card-sub", r.company_name + " · " + _actionText(r) + " · since " + r.anchor_date + " · " + r.txn_count + " row" + (r.txn_count === 1 ? "" : "s")));
-    if (r.last_price !== null && r.last_price !== undefined) {
-      const pct = r.return_pct === null || r.return_pct === undefined ? "" : " · " + (r.return_pct >= 0 ? "+" : "") + r.return_pct + "% vs your average";
-      row.appendChild(_el("div", "chat-card-sub", "Now " + _fmt(r.last_price, 2) + " (" + r.last_price_date + ")" + pct));
+    const ed = { orig: r.symbol, sym: r.symbol, include: true, mode: "replace" };
+    const head = _el("div", "chat-card-head");
+    const inc = _el("input");
+    inc.type = "checkbox";
+    inc.checked = true;
+    inc.setAttribute("aria-label", "Include " + r.symbol);
+    inc.onchange = () => { ed.include = inc.checked; row.classList.toggle("off", !inc.checked); };
+    const symEl = _el("strong", null, r.symbol);
+    const nameEl = _el("span", "chat-card-name", r.company_name);
+    const change = _el("button", "linklike", "Not this stock?");
+    change.type = "button";
+    head.append(inc, symEl, nameEl, change);
+    row.appendChild(head);
+
+    const picker = _stockPicker((hit) => { ed.sym = hit.symbol; symEl.textContent = hit.symbol; nameEl.textContent = hit.name; picker.hidden = true; }, "Search the right stock…");
+    picker.hidden = true;
+    change.onclick = () => { picker.hidden = !picker.hidden; if (!picker.hidden) picker.querySelector("input").focus(); };
+    row.appendChild(picker);
+
+    const qty = _numInput(r.quantity), avg = _numInput(r.avg_price), when = _dateInput(r.anchor_date);
+    ed.qty = qty; ed.avg = avg; ed.when = when;
+    const fields = _el("div", "card-fields");
+    fields.append(_field("Shares", qty), _field("Avg price", avg), _field("Since", when));
+    row.appendChild(fields);
+
+    const sub = [_actionText(r), r.txn_count + " row" + (r.txn_count === 1 ? "" : "s")];
+    if (r.last_price !== null && r.last_price !== undefined) sub.push("now " + _fmt(r.last_price, 2));
+    row.appendChild(_el("div", "chat-card-sub", sub.join(" · ")));
+    if (r.action === "update") {
+      const mode = _el("select", "card-input");
+      mode.append(Object.assign(_el("option", null, "Replace what I have (" + _fmt((r.existing || {}).quantity, 4) + " sh)"), { value: "replace" }),
+                  Object.assign(_el("option", null, "Add to what I have (another account)"), { value: "combine" }));
+      mode.onchange = () => { ed.mode = mode.value; };
+      row.appendChild(mode);
     }
     if (r.match && r.match.note) row.appendChild(_el("div", "chat-card-sub", r.match.note));
     if (r.price_check && r.price_check.status === "verified") row.appendChild(_el("div", "chat-card-ok", "✓ " + r.price_check.text));
     for (const w of r.warnings || []) row.appendChild(_el("div", "chat-card-warn", "⚠ " + w));
-    if (r.needs_review) row.appendChild(_el("div", "chat-card-warn", "⚠ Needs your review before you confirm."));
     card.appendChild(row);
+    editors.push(ed);
   }
 
   if (p.skipped && p.skipped.length) {
     const sk = _el("div", "chat-card-skipped");
-    sk.appendChild(_el("div", null, "Not imported:"));
-    for (const s of p.skipped) sk.appendChild(_el("div", null, "• " + s.label + " — " + s.reason));
+    sk.appendChild(_el("div", "chat-card-title", "Couldn't place — add by hand if you want them"));
+    for (const s of p.skipped) {
+      const item = _el("div", "chat-card-row");
+      item.appendChild(_el("div", "chat-card-sub", s.label + " — " + s.reason));
+      const d = s.draft || {};
+      const form = _el("div", "card-form");
+      form.hidden = true;
+      const entry = { sym: s.symbol || null, qty: _numInput(d.quantity), avg: _numInput(d.avg_price), when: _dateInput(d.anchor_date) };
+      const chosen = _el("div", "chat-card-head");
+      const chosenSym = _el("strong", null, s.symbol || "Pick the stock below");
+      chosen.appendChild(chosenSym);
+      const pick = _stockPicker((hit) => { entry.sym = hit.symbol; chosenSym.textContent = hit.symbol + " · " + hit.name; }, "Search the stock…");
+      const fields = _el("div", "card-fields");
+      fields.append(_field("Shares", entry.qty), _field("Avg price", entry.avg), _field("Since", entry.when));
+      form.append(chosen, pick, fields);
+      const open = _el("button", "linklike", "Add by hand");
+      open.type = "button";
+      open.onclick = () => { form.hidden = !form.hidden; if (!added.includes(entry)) added.push(entry); };
+      item.append(open, form);
+      sk.appendChild(item);
+    }
     card.appendChild(sk);
   }
 
   const status = _el("div", "chat-card-status");
-  if (p.rows.length) {
-    const actions = _el("div", "chat-card-actions");
-    const review = p.rows.filter((r) => r.needs_review).length;
-    const confirm = _el("button", null, review ? "Confirm import (" + review + " to review)" : "Confirm import");
-    confirm.type = "button";
-    const cancel = _el("button", "secondary", "Cancel");
-    cancel.type = "button";
-    const finish = (msg) => { actions.remove(); status.textContent = msg; };
+  const actions = _el("div", "chat-card-actions");
+  const confirm = _el("button", null, "Confirm import");
+  confirm.type = "button";
+  const cancel = _el("button", "secondary", "Cancel");
+  cancel.type = "button";
+  const finish = (msg) => { actions.remove(); status.textContent = msg; };
 
-    confirm.onclick = async () => {
-      confirm.disabled = cancel.disabled = true;
-      try {
-        const resp = await fetch("/chat/proposals/" + p.proposal_id + "/confirm", { method: "POST" });
-        if (resp.redirected) return finish("Session expired — log in again.");
-        const out = await resp.json();
-        if (!resp.ok) return finish(out.error || "Couldn't import.");
-        finish("Done — " + out.created + " added, " + out.updated + " updated.");
-        const ctx = _pageContext();
-        if (ctx.page === "management" || ctx.page === "portfolio") setTimeout(() => window.location.reload(), 900);
-      } catch (e) {
-        finish("Connection error — try again.");
+  confirm.onclick = async () => {
+    const body = { rows: [], added: [] };
+    for (const ed of editors) {
+      const e = { symbol: ed.orig, include: ed.include, mode: ed.mode, quantity: ed.qty.value, avg_price: ed.avg.value, anchor_date: ed.when.value };
+      if (ed.sym !== ed.orig) e.new_symbol = ed.sym;
+      body.rows.push(e);
+    }
+    for (const en of added) {
+      if (en.sym && en.qty.value) body.added.push({ symbol: en.sym, quantity: en.qty.value, avg_price: en.avg.value, anchor_date: en.when.value });
+    }
+    if (!body.rows.some((e) => e.include) && !body.added.length) { status.textContent = "Nothing selected to import."; return; }
+    confirm.disabled = cancel.disabled = true;
+    status.textContent = "Saving…";
+    try {
+      const resp = await fetch("/chat/proposals/" + p.proposal_id + "/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (resp.redirected) return finish("Session expired — log in again.");
+      const out = await resp.json();
+      if (!resp.ok) {
+        status.textContent = out.error || "Couldn't import.";  // a fixable mistake: keep the card open
+        if (resp.status === 422) { confirm.disabled = cancel.disabled = false; return; }
+        return finish(out.error || "Couldn't import.");
       }
-    };
-    cancel.onclick = async () => {
-      confirm.disabled = cancel.disabled = true;
-      try { await fetch("/chat/proposals/" + p.proposal_id + "/cancel", { method: "POST" }); } catch (e) { /* nothing was saved either way */ }
-      finish("Cancelled — nothing was saved.");
-    };
-    actions.append(confirm, cancel);
-    card.appendChild(actions);
-  }
-  card.appendChild(status);
+      finish("Done — " + out.created + " added, " + out.updated + " updated.");
+      const ctx = _pageContext();
+      if (ctx.page === "management" || ctx.page === "portfolio") setTimeout(() => window.location.reload(), 900);
+    } catch (e) {
+      finish("Connection error — try again.");
+    }
+  };
+  cancel.onclick = async () => {
+    confirm.disabled = cancel.disabled = true;
+    try { await fetch("/chat/proposals/" + p.proposal_id + "/cancel", { method: "POST" }); } catch (e) { /* nothing was saved either way */ }
+    finish("Cancelled — nothing was saved.");
+  };
+  actions.append(confirm, cancel);
+  card.append(actions, status);
   log.appendChild(card);
   _scrollDown(true);
 }

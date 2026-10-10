@@ -21,6 +21,7 @@ from app import positions as positions_mod
 from app.ai.agent import agent, proposals_created, tools_used
 from app.ai import errors
 from app.ai.page_context import page_instructions, suggestions
+from app import statement_parse
 from app.ai.providers import PROVIDERS, build_chain, get_user_settings
 
 router = APIRouter()
@@ -30,6 +31,7 @@ MAX_FILE_BYTES = 20 * 1024 * 1024
 MAX_TEXT_CHARS = 400_000
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
 TEXT_TYPES = (".csv", ".tsv", ".txt")
+SHEET_TYPES = (".csv", ".tsv", ".xlsx", ".xlsm", ".xls")
 
 
 class FileRejected(Exception):
@@ -55,8 +57,12 @@ def _file_to_prompt(message: str, filename: str, data: bytes):
         except UnicodeDecodeError:
             text = data.decode("latin-1")
         return f"{note}\n\n--- file contents ---\n{text[:MAX_TEXT_CHARS]}"
-    if name.endswith((".xlsx", ".xls")):
-        raise FileRejected("Excel files aren't supported yet — save it as CSV or PDF and attach that instead.")
+    if name.endswith((".xlsx", ".xlsm", ".xls")):
+        try:
+            text = statement_parse.sheets_to_text(statement_parse.read_sheets(filename, data), MAX_TEXT_CHARS)
+        except Exception:  # noqa: BLE001 - corrupt / password-protected workbook
+            raise FileRejected("I couldn't open that Excel file. Re-download it from your broker, or attach a CSV or PDF instead.")
+        return f"{note}\n\n--- file contents ---\n{text}"
     raise FileRejected("Attach a PDF, CSV, or image (PNG/JPG) of your statement.")
 
 
@@ -129,6 +135,37 @@ async def _stream(user_id: int, message: str, history_json: str | None, page: st
     hint = f"[Now on the {page} page" + (f" for {symbol}" if symbol else "") + ".] " if page else ""
 
     prompt = hint + message
+    if upload is not None and upload[0].lower().endswith(SHEET_TYPES):
+        # Spreadsheet exports map column-by-column with no AI: exact, free, and long files are no problem. Anything unrecognised
+        # falls through to the AI reading the file's text.
+        try:
+            parsed = statement_parse.parse_statement(statement_parse.read_sheets(*upload))
+        except statement_parse.NotPositions as e:
+            yield _sse(None, {"type": "text", "delta": str(e)})
+            yield "data: [DONE]\n\n"
+            return
+        except Exception:  # noqa: BLE001 - unreadable workbook: let the AI path report it
+            parsed = None
+        if parsed is not None:
+            try:
+                proposal = await asyncio.to_thread(positions_mod.propose, user_id, parsed.txns, None)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("direct import failed: %s: %s", type(e).__name__, str(e)[:200])
+                proposal = None
+            if proposal is not None:
+                n_rows = len(parsed.txns)
+                intro = (f"Read your {parsed.kind} file directly ({n_rows} row{'s' if n_rows != 1 else ''}; {parsed.mapping}). "
+                         f"I found {len(proposal['rows'])} position{'s' if len(proposal['rows']) != 1 else ''}"
+                         + (f" and {len(proposal['skipped'])} I couldn't place" if proposal["skipped"] else "") + ". "
+                         "Check each line below, fix anything that's off, then confirm. Nothing is saved until you do.")
+                if parsed.skipped:
+                    intro += f" ({parsed.skipped} non-equity or unrecognised rows were left out.)"
+                for note in parsed.notes:
+                    intro += " " + note
+                yield _sse(None, {"type": "text", "delta": intro})
+                yield _sse(None, {"type": "proposal", "proposal": proposal})
+                yield "data: [DONE]\n\n"
+                return
     if upload is not None:
         filename, data = upload
         try:
@@ -233,13 +270,36 @@ def chat_suggestions(request: Request, page: str | None = None, symbol: str | No
     return suggestions(request.state.user_id, page, symbol)
 
 
-@router.post("/chat/proposals/{proposal_id}/confirm")
-def confirm_proposal(request: Request, proposal_id: int):
-    """The ONLY path that turns a proposal into tracked positions — a user click, never
-    an LLM tool call, so the model can't write to a portfolio on its own."""
+@router.get("/chat/stock-search")
+def stock_search(request: Request, q: str = ""):
+    """Stock picker for the review card (fix a wrong match, place a row we could not match)."""
     if request.state.user_id is None:
         return JSONResponse({"error": "Not logged in."}, status_code=401)
-    result = positions_mod.commit(request.state.user_id, proposal_id)
+    q = q.strip()
+    if len(q) < 2:
+        return []
+    from app.db import get_market_conn
+    like = f"%{q}%"
+    with get_market_conn() as m:
+        rows = m.execute("SELECT symbol, name FROM stocks WHERE symbol LIKE ? OR name LIKE ? ORDER BY (symbol LIKE 'NSE:%') DESC, (symbol LIKE ?) DESC, symbol LIMIT 8",
+                         (like, like, f"{q.upper()}%")).fetchall()
+    return [{"symbol": r["symbol"], "name": r["name"]} for r in rows]
+
+
+@router.post("/chat/proposals/{proposal_id}/confirm")
+async def confirm_proposal(request: Request, proposal_id: int):
+    """The ONLY path that turns a proposal into tracked positions — a user click, never an LLM tool call, so the model can't write to a
+    portfolio on its own. The body (optional) carries the user's corrections from the review card; they are re-validated server-side."""
+    if request.state.user_id is None:
+        return JSONResponse({"error": "Not logged in."}, status_code=401)
+    try:
+        edits = await request.json()
+    except Exception:  # noqa: BLE001 - no body = confirm as proposed
+        edits = None
+    try:
+        result = positions_mod.commit(request.state.user_id, proposal_id, edits if isinstance(edits, dict) else None)
+    except positions_mod.EditError as e:
+        return JSONResponse({"error": str(e)}, status_code=422)
     if result is None:
         return JSONResponse({"error": "That import is no longer pending (already confirmed, cancelled, or replaced)."}, status_code=409)
     return result
