@@ -145,6 +145,11 @@ class DailyPriceSource(DataSource):
             if progress:
                 progress(written)
         written += self._refresh(conn, jumped, deadline)
+        try:  # delivery % rides along with the daily India run; its failure must not fail the price job
+            from app.ingestion import nse_delivery
+            nse_delivery.ingest_days(conn, nse_delivery.recent_days(conn), known)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("NSE delivery top-up failed: %s", e)
         return written
 
     # ------------------------------------------------------------------ US

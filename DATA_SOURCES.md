@@ -64,6 +64,7 @@ SQLite runs with a rollback journal (not WAL) and **one writer at a time**: run 
 | Data | Source | Role | Refresh |
 |---|---|---|---|
 | India daily prices | NSE bhavcopy + BSE bhavcopy (matched by ISIN); split detection via NSE prev-close | Primary | Job `daily_prices_in`, Mon–Fri 19:00 IST |
+| India delivery % (share of traded shares actually delivered) | NSE `sec_bhavdata_full` CSV, whole market per file; table `delivery_data`, 1 year backfilled (2,750 stocks) | Primary | Rides with `daily_prices_in` (last 14 days re-checked, stored days skipped); `scripts/backfill_delivery.py --days N` for history. IndianAPI `/historical_data` shows the same figure per stock but costs a call each, so it is not used |
 | India price history backfill | NSE bhavcopy archive (back to 1999), Yahoo Finance | Gap-fill | Manual |
 | US daily prices | Yahoo Finance via `yfinance`, batches of 100, stalest first; tracked stocks first | Primary | Job `daily_prices_us`, Tue–Sat 05:30 IST |
 | US price history backfill | Tiingo (free tier ~50 requests/hour) | Gap-fill | Mac launchd job only |
@@ -108,6 +109,7 @@ SQLite runs with a rollback journal (not WAL) and **one writer at a time**: run 
 | Estimates: EPS, revenue, net profit (annual, FY27–FY29), EPS (quarterly) | `/stock_forecasts` | Reference | Sales and net profit arrive in ₹ millions and are shown in ₹ Cr |
 | Reported vs consensus EPS (surprise) | `/stock_forecasts` | Reference | Analyst basis: excludes one-offs, differs from filed EPS by up to ~10% |
 | Company profile, officers, peers, key metrics, corporate actions, news, moving averages | `/stock` | Reference | Shown in the Company section of the stock page |
+| Recent filings with a one-line summary | BSE announcements feed for the list (free, exact time, category, PDF link); IndianAPI `/recent_announcements` for the summary, joined by PDF id | Reference | On demand when a stock page opens: BSE cached 3 h per stock, IndianAPI at most once per 12 h per stock and only under the 450/month call cap. Without the key or budget the list shows without summaries |
 | Refinitiv-style statement set (INR millions) | `/stock` (`financials`) | Staged only | Not displayed |
 
 ### 3.6 Funds and ETFs (`funds.db`)

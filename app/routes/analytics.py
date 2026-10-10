@@ -683,6 +683,31 @@ _RANGE_OPTIONS = ["4", "8", "12", "all"]
 _DEFAULT_RANGE = "12"
 
 
+@router.get("/announcements/{symbol:path}", response_class=HTMLResponse)
+def announcements_panel(request: Request, symbol: str):
+    """Lazy-loaded 'Recent filings' card for the stock page (htmx)."""
+    from app.announcements import get_announcements
+    with get_market_conn() as m:
+        ok = m.execute("SELECT 1 FROM stocks WHERE symbol = ? AND market = 'IN'", (symbol,)).fetchone()
+    if not ok:
+        return HTMLResponse("")
+    return templates.TemplateResponse("_announcements.html", {"request": request, "A": get_announcements(symbol)})
+
+
+def _delivery_block(conn, symbol: str):
+    """Latest delivery %, its 20-day and 1-year averages (NSE). None when the stock has no delivery data."""
+    rows = conn.execute("SELECT date, deliv_pct FROM delivery_data WHERE symbol = ? ORDER BY date DESC LIMIT 250", (symbol,)).fetchall()
+    if not rows:
+        return None
+    pcts = [r["deliv_pct"] for r in rows]
+    avg = lambda xs: round(sum(xs) / len(xs), 1)
+    out = {"latest": round(pcts[0], 1), "date": rows[0]["date"], "avg20": avg(pcts[:20]), "n": len(pcts)}
+    if len(pcts) >= 60:
+        out["avg250"] = avg(pcts)
+        out["vs"] = round(out["avg20"] - out["avg250"], 1)
+    return out
+
+
 @router.get("/analytics/{symbol:path}", response_class=HTMLResponse)
 def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
     with get_market_conn() as conn:
@@ -939,6 +964,7 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
 
     with get_market_conn() as pconn:
         price_summary, price_series = _price_block(pconn, symbol, stock["market"])
+        delivery = _delivery_block(pconn, symbol) if stock["market"] == "IN" else None
 
     # Key-stats strip: latest real value per headline metric. Revenue growth falls back to the
     # labelled QoQ figure only when no YoY exists at all — same rule as the matrix row.
@@ -1012,7 +1038,7 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
         ("health", "Financial health", "heartbeat", bool(raw["cashflow"] or raw["annual_balance"] or raw["balance"])),
         ("val", "Valuation", "target", bool(ia_analyst or pe_stats or (ia_company and ia_company["peers"]))),
         ("own", "Ownership", "users", has_own),
-        ("co", "Company", "building", bool(ia_company)),
+        ("co", "Company", "building", bool(ia_company) or stock["market"] == "IN"),
         ("lens", "Quality lens", "microscope", has_lens),
     ) if g[3]]
     perf_panes = [k for k, ok in (("quarterly", raw["quarterly"]), ("annual", raw["annual"])) if ok]
@@ -1065,7 +1091,7 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
             "verdict": verdict, "pe_stats": pe_stats, "has_lens": has_lens, "has_own": has_own,
             "view_groups": [{"key": k, "label": l, "icon": i} for k, l, i, _ in view_groups],
             "perf_panes": perf_panes,
-            "ia_company": ia_company, "next_result": next_result,
+            "ia_company": ia_company, "next_result": next_result, "delivery": delivery,
             "explorer": explorer,
             "n_quarters": len([r for r in all_rows if not _is_annual(r)]),
             "n_annual": len(annual_all),

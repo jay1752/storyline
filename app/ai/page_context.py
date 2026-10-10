@@ -106,6 +106,20 @@ def stock_digest(user_id: int | None, symbol: str) -> str | None:
 
     if stock["market"] == "IN":
         try:
+            from app.routes.analytics import _delivery_block
+            with get_market_conn() as m2:
+                dv = _delivery_block(m2, symbol)
+                ac = m2.execute("SELECT items_json FROM announcements_cache WHERE symbol = ?", (symbol,)).fetchone()
+            if dv:
+                out.append(f"DELIVERY % (NSE; share of traded shares actually delivered): latest {dv['latest']}% ({dv['date']}), 20-day avg {dv['avg20']}%"
+                           + (f", 1-year avg {dv['avg250']}%" if dv.get("avg250") is not None else ""))
+            if ac:
+                its = json.loads(ac["items_json"])[:6]
+                if its:
+                    out.append("RECENT FILINGS (BSE): " + " | ".join(f"{i['at'][:10]} {i['title'][:90]}" + (f" — {i['summary'][:120]}" if i.get("summary") else "") for i in its))
+        except Exception as e:  # noqa: BLE001
+            logger.info("stock_digest delivery/filings skipped: %s", e)
+        try:
             from app.ia_panels import analyst_panel, company_panel
             a = analyst_panel(symbol, price)
             if a:

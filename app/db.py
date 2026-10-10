@@ -148,6 +148,21 @@ CREATE TABLE IF NOT EXISTS results_calendar (   -- announced results / board-mee
 );
 CREATE INDEX IF NOT EXISTS idx_results_calendar_date ON results_calendar(event_date, status);
 
+CREATE TABLE IF NOT EXISTS delivery_data (     -- NSE's delivered share of traded volume per stock per day (sec_bhavdata_full), India only
+    symbol TEXT NOT NULL,
+    date   TEXT NOT NULL,
+    deliv_qty INTEGER,
+    deliv_pct REAL,
+    PRIMARY KEY (symbol, date)
+);
+
+CREATE TABLE IF NOT EXISTS announcements_cache (  -- recent exchange filings per stock (BSE), with IndianAPI's one-line summary where available
+    symbol     TEXT PRIMARY KEY,
+    fetched_at TEXT NOT NULL,        -- UTC, last BSE fetch
+    ia_at      TEXT,                 -- UTC, last IndianAPI summary fetch (NULL = never)
+    items_json TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS ia_usage (          -- calls made to the data vendor per month, so a refresh job can stop before the plan's monthly limit
     month TEXT PRIMARY KEY,                    -- YYYY-MM (UTC)
     calls INTEGER NOT NULL DEFAULT 0

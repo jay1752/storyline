@@ -1,0 +1,20 @@
+<div class="card">
+  <div class="card-body ia-list">
+    {% if A["items"] %}
+    <ul class="filings">
+      {% for i in A["items"] %}
+      <li>
+        <time>{{ i.at[:10] }}{% if i.at|length > 10 %} · {{ i.at[11:16] }}{% endif %}</time>
+        {% if i.category %}<span class="vchip">{{ i.category }}</span>{% endif %}
+        <div class="filing-title">{% if i.link %}<a href="{{ i.link }}" target="_blank" rel="noopener noreferrer">{{ i.title }}</a>{% else %}{{ i.title }}{% endif %}</div>
+        {% if i.summary %}<div class="filing-sum">{{ i.summary }}</div>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    <span class="section-note">Source: BSE{% if A.as_of %} · checked {{ A.as_of[:16] }} UTC{% endif %}. Summaries are machine-written; open the filing to confirm.</span>
+    {% else %}
+    <span class="stub">{{ A.error or "No filings in the last 45 days." }}</span>
+    {% endif %}
+    {% if A["items"] and A.error %}<div class="stub">{{ A.error }}</div>{% endif %}
+  </div>
+</div>

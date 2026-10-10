@@ -112,6 +112,14 @@
         <div><span class="stat-label">Last close</span><b>{{ price_summary.currency }}{{ "{:,.2f}".format(price_summary.last) }}</b></div>
         <div><span class="stat-label">As of</span><b>{{ price_summary.as_of }}</b></div>
       </div>
+      {% if delivery %}
+      <div class="price-stats" title="Share of the day's traded shares that were actually delivered (taken home) rather than squared off the same day. Source: NSE.">
+        <div><span class="stat-label">Delivery today</span><b>{{ delivery.latest }}%</b></div>
+        <div><span class="stat-label">Delivery 20-day avg</span><b>{{ delivery.avg20 }}%</b></div>
+        {% if delivery.avg250 is defined %}<div><span class="stat-label">Delivery 1-year avg</span><b>{{ delivery.avg250 }}%</b></div>
+        <div><span class="stat-label">20-day vs 1-year</span><b class="{{ 'pos' if delivery.vs >= 0 else 'neg' }}">{{ "%+.1f"|format(delivery.vs) }} pts</b></div>{% endif %}
+      </div>
+      {% endif %}
       {% else %}
       <div class="empty"><svg class="icon"><use href="#i-analytics"/></svg><h3>No price history yet</h3><p>Fundamentals are below. Prices appear once the daily price ingestion has covered this symbol.</p></div>
       {% endif %}
@@ -294,6 +302,12 @@
 {% endif %}
 </div>
 <div class="grp" data-grp="co">
+{% if stock.market == 'IN' %}
+<section class="section" id="filings">
+  <div class="section-head"><div><h2 class="section-title">Recent filings</h2><span class="section-note">exchange announcements, last 45 days</span></div></div>
+  <div hx-get="/announcements/{{ stock.symbol }}" hx-trigger="load" hx-swap="innerHTML"><div class="card"><div class="card-body"><span class="stub">Loading filings…</span></div></div></div>
+</section>
+{% endif %}
 {% if ia_company %}
 {% set C = ia_company %}
 <section class="section" id="company">
