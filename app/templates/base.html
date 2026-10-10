@@ -84,14 +84,6 @@
   </div>
 
   {% if user %}
-  <div class="install-hint" id="install-hint" hidden role="region" aria-label="Install the app">
-    <span data-text>Add Tenetfolio to your home screen for one-tap access.</span>
-    <button type="button" class="btn btn-sm btn-primary" data-install hidden>Install</button>
-    <button type="button" class="icon-btn" data-dismiss aria-label="Dismiss"><svg class="icon icon-sm"><use href="#i-x"/></svg></button>
-  </div>
-  {% endif %}
-
-  {% if user %}
   <nav class="tabbar" aria-label="Main">
     <a href="/analytics" class="{{ 'active' if active_nav == 'analytics' else '' }}"><svg class="icon"><use href="#i-analytics"/></svg><span>Stocks</span></a>
     <a href="/management" class="{{ 'active' if active_nav == 'management' else '' }}"><svg class="icon"><use href="#i-management"/></svg><span>Tracking</span></a>

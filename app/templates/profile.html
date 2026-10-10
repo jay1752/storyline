@@ -12,6 +12,12 @@
 {% if saved %}<div class="alert" role="status"><svg class="icon icon-sm"><use href="#i-check"/></svg> Profile saved.</div>{% endif %}
 {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
 
+<div class="install-pill" id="install-pill" role="region" aria-label="Install the app">
+  <svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg>
+  <span class="ip-text"><span data-text>Install Tenetfolio</span><span class="ip-sub" data-sub></span></span>
+  <button type="button" class="btn btn-sm btn-primary" data-install hidden>Install app</button>
+</div>
+
 <form method="post" action="/profile" class="form-card">
   <div class="form-grid">
     <div class="form-field">

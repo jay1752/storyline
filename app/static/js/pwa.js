@@ -1,4 +1,4 @@
-// Registers the service worker and shows a quiet, dismissible "install" hint on the pages a phone user lives on.
+// Registers the service worker and powers the "Install app" pill on the Profile page.
 (function () {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function () {
@@ -6,40 +6,46 @@
     });
   }
 
-  var hint = document.getElementById("install-hint");
-  if (!hint) return;
-  var standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone;
-  var KEY = "tf.install.dismissed";
-  var dismissed = false;
-  try { dismissed = Date.now() - Number(localStorage.getItem(KEY) || 0) < 30 * 864e5; } catch (e) { /* private mode */ }
-  if (standalone || dismissed || !/^\/(portfolio|management)/.test(location.pathname)) return;
-
-  var text = hint.querySelector("[data-text]");
-  var go = hint.querySelector("[data-install]");
-  var close = hint.querySelector("[data-dismiss]");
   var deferred = null;
   var ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+  var standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone;
+  var pill = document.getElementById("install-pill");
 
-  function show(msg, canInstall) {
-    text.textContent = msg;
-    go.hidden = !canInstall;
-    hint.hidden = false;
-  }
   window.addEventListener("beforeinstallprompt", function (e) {
     e.preventDefault();
     deferred = e;
-    show("Add Tenetfolio to your home screen for one-tap access.", true);
+    render();
   });
-  window.addEventListener("appinstalled", function () { hint.hidden = true; });
-  if (ios) show("To install: tap the Share button, then Add to Home Screen.", false);
+  window.addEventListener("appinstalled", function () { deferred = null; standalone = true; render(); });
 
-  go.addEventListener("click", function () {
-    if (!deferred) return;
-    deferred.prompt();
-    deferred.userChoice.finally(function () { deferred = null; hint.hidden = true; });
-  });
-  close.addEventListener("click", function () {
-    hint.hidden = true;
-    try { localStorage.setItem(KEY, String(Date.now())); } catch (e) { /* ignore */ }
-  });
+  function render() {
+    if (!pill) return;
+    var text = pill.querySelector("[data-text]");
+    var sub = pill.querySelector("[data-sub]");
+    var btn = pill.querySelector("[data-install]");
+    btn.hidden = true;
+    if (standalone) {
+      text.textContent = "Installed on this device";
+      text.className = "ip-ok";
+      sub.textContent = "You are using the app.";
+    } else if (deferred) {
+      text.textContent = "Install Tenetfolio on this device";
+      sub.textContent = "One tap from your home screen, no browser bars.";
+      btn.hidden = false;
+    } else if (ios) {
+      text.textContent = "Install Tenetfolio on this iPhone";
+      sub.textContent = "Tap the Share button, then Add to Home Screen.";
+    } else {
+      text.textContent = "Install Tenetfolio";
+      sub.textContent = "Use your browser menu: Install app, or Add to Home screen.";
+    }
+  }
+  if (pill) {
+    pill.querySelector("[data-install]").addEventListener("click", function () {
+      if (!deferred) return;
+      deferred.prompt();
+      deferred.userChoice.finally(function () { deferred = null; render(); });
+    });
+    render();
+  }
 })();
