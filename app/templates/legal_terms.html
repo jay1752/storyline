@@ -1,0 +1,52 @@
+{% extends "legal_base.html" %}
+{% block title %}Terms of use{% endblock %}
+{% block body %}
+<h1>Terms of use</h1>
+<p class="legal-meta">Last updated {{ updated }}</p>
+
+<p class="legal-note"><strong>Tenetfolio is a research and record-keeping tool. It does not give investment advice, and nothing in it is a recommendation to buy, sell or hold anything.</strong></p>
+
+<p>By creating an account or using Tenetfolio you agree to these terms. If you do not agree, please do not use it.</p>
+
+<h2>What Tenetfolio is</h2>
+<p>Tenetfolio summarises reported company data, prices and ownership, checks stocks against thresholds <em>you</em> set, and helps you keep track of positions you choose to record. It also offers AI-written summaries and a chat assistant. It is not offered as a SEBI-registered investment adviser or research analyst service, and it does not know your finances, goals or risk tolerance.</p>
+
+<h2>Your responsibility</h2>
+<ul>
+  <li>You decide what to buy, sell or hold. Any decision is yours, and so are its results.</li>
+  <li>Check any number against the original filing or your broker before you act on it.</li>
+  <li>Keep your own records. The positions and costs in Tenetfolio come from what you enter or import, and are not a substitute for your broker’s or depository’s statements.</li>
+  <li>Past performance and stored history do not predict the future. Investments can lose value.</li>
+</ul>
+
+<h2>Data and AI can be wrong</h2>
+<p>Financial figures come from exchange and regulator filings and third-party sources. They can be late, incomplete, restated or incorrect, and different sources may define the same figure differently. AI output (stories, briefings, chat answers, statement reading) can contain mistakes or invent details. We try to be accurate but do not promise that anything is error-free or current.</p>
+
+<h2>Your account</h2>
+<ul>
+  <li>You sign in with Google. You are responsible for activity on your account and for the security of your Google account.</li>
+  <li>You must be at least 18 and legally able to use a service like this.</li>
+  <li>If you use your own AI key, you are responsible for the usage and cost it incurs with that provider.</li>
+</ul>
+
+<h2>Acceptable use</h2>
+<p>Do not misuse Tenetfolio: no attempts to break or overload it, to access other people’s data, to scrape it at scale, or to resell its data. In Community, do not post anything unlawful, abusive or misleading, and do not post other people’s private information. Do not use Community to promote securities you have an undisclosed interest in or to run tips or pump-and-dump schemes. We can remove content and suspend accounts that break these rules.</p>
+
+<h2>Community content</h2>
+<p>You own what you post. You give us permission to store and show it in Community. Posts are the opinion of their authors, not ours.</p>
+
+<h2>Availability and changes</h2>
+<p>Tenetfolio is provided as it is, may be interrupted or change, and features or data sources may be added or removed. We may update these terms; if the change matters we will update the date above, and continuing to use Tenetfolio means you accept the new terms.</p>
+
+<h2>Liability</h2>
+<p>To the fullest extent the law allows, we are not liable for any loss arising from your use of, or reliance on, Tenetfolio, including investment losses, errors or delays in data, or outages. Nothing here limits liability that cannot be limited by law.</p>
+
+<h2>Ending your use</h2>
+<p>You can stop using Tenetfolio at any time and ask us to delete your account at <a href="mailto:{{ contact }}">{{ contact }}</a>. We may suspend or close accounts that break these terms.</p>
+
+<h2>Governing law</h2>
+<p>These terms are governed by the laws of India. Courts in India have jurisdiction over any dispute.</p>
+
+<h2>Contact</h2>
+<p><a href="mailto:{{ contact }}">{{ contact }}</a></p>
+{% endblock %}

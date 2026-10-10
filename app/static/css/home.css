@@ -132,3 +132,15 @@ body.home { background: var(--paper); color: var(--ink); font-family: var(--font
   .hm-bar .v { font-size: 0.52rem; }
   .hm-nav-in { gap: 0.6rem; }
 }
+
+.hm-legal a, .auth-aside small a { color: inherit; text-underline-offset: 2px; }
+.hm-foot .hm-legal { font-size: 0.78rem; color: var(--muted); }
+/* privacy / terms */
+.legal { width: min(46rem, 100% - 2.5rem); margin: 2.5rem auto 4rem; color: var(--ink); line-height: 1.65; }
+.legal h1 { font-family: var(--font-display, inherit); font-size: clamp(1.8rem, 4vw, 2.4rem); line-height: 1.15; margin: 0 0 0.4rem; text-wrap: balance; }
+.legal .legal-meta { color: var(--muted); font-size: 0.85rem; margin: 0 0 2rem; }
+.legal h2 { font-size: 1.12rem; margin: 2rem 0 0.5rem; }
+.legal p, .legal li { font-size: 0.95rem; }
+.legal ul { padding-left: 1.2rem; display: grid; gap: 0.35rem; }
+.legal a { color: var(--structure); text-underline-offset: 2px; }
+.legal .legal-note { border: 1px solid var(--border-strong); border-radius: var(--r-md); padding: 0.8rem 1rem; background: var(--paper); font-size: 0.9rem; }

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>{% block title %}{% endblock %} · Tenetfolio</title>
+  {% include "_head.html" %}
+  <link rel="stylesheet" href="/static/css/home.css?v={{ asset_version('css/home.css') }}">
+  <meta name="robots" content="index,follow">
+</head>
+<body class="home">
+  <header class="hm-nav">
+    <div class="hm-wrap hm-nav-in">
+      <a class="hm-brand" href="/" aria-label="Tenetfolio home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--structure)"/><path d="M8 21l5-6 4 3 7-9" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="brand-name">Tenetfolio</span>
+      </a>
+      <div class="hm-nav-end"><a class="btn btn-primary btn-sm" href="/login">Log in</a></div>
+    </div>
+  </header>
+  <main class="legal">
+    {% block body %}{% endblock %}
+  </main>
+  <footer class="hm-foot">
+    <div class="hm-wrap hm-foot-in">
+      <span class="hm-brand"><span class="brand-name">Tenetfolio</span></span>
+      <p class="hm-legal"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="mailto:{{ contact }}">{{ contact }}</a></p>
+    </div>
+  </footer>
+</body>
+</html>

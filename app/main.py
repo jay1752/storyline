@@ -9,7 +9,7 @@ from app.auth.middleware import AuthMiddleware
 from app.db import ensure_platform_admin, get_market_conn, get_users_conn, init_db
 from app.ingestion.runner import start_worker
 from app.scheduler import start_scheduler
-from app.routes import admin, analytics, auth, chat, community, framework, google_auth, home, management, portfolio, profile, search, settings
+from app.routes import admin, analytics, auth, chat, community, framework, google_auth, home, legal, management, portfolio, profile, search, settings
 from app.tracking import already_tracked, create_tracked_position
 
 app = FastAPI(title="Tenetfolio")
@@ -34,6 +34,7 @@ app.include_router(google_auth.router)
 app.include_router(framework.router)
 app.include_router(profile.router)
 app.include_router(home.router)
+app.include_router(legal.router)
 app.include_router(analytics.router)
 app.include_router(management.router)
 app.include_router(portfolio.router)

@@ -1,0 +1,59 @@
+{% extends "legal_base.html" %}
+{% block title %}Privacy policy{% endblock %}
+{% block body %}
+<h1>Privacy policy</h1>
+<p class="legal-meta">Last updated {{ updated }}</p>
+
+<p>Tenetfolio (“we”, “us”) is a stock research and portfolio tool for investors in India and the US. This page says what we collect, why, who else sees it, and the choices you have. Questions: <a href="mailto:{{ contact }}">{{ contact }}</a>.</p>
+
+<h2>What we collect</h2>
+<ul>
+  <li><strong>Account.</strong> Your email address, name and Google account ID when you sign in with Google. We receive only what the Google basic scopes (openid, email, profile) provide. We never see your Google password.</li>
+  <li><strong>Profile (optional).</strong> Display name, phone, contact email, city, country and a short bio, only if you fill them in.</li>
+  <li><strong>Your investing data.</strong> Stocks you track, quantities, average prices and dates, your investment rules and sizing limits, journal notes, and the daily analyses we generate for you.</li>
+  <li><strong>Imports.</strong> When you attach a broker statement, we read it to propose positions. We do not keep the file itself. The rows we extracted are saved with your account until you confirm or cancel the import.</li>
+  <li><strong>Community posts and replies</strong> you choose to write, shown under your display name.</li>
+  <li><strong>AI provider keys.</strong> If you add your own key for an AI service, we store it encrypted and never show it again.</li>
+  <li><strong>Technical data.</strong> A sign-in cookie, and ordinary server logs (IP address, pages requested, errors) used to keep the service running and secure.</li>
+</ul>
+
+<h2>How we use it</h2>
+<ul>
+  <li>To run your account and show your portfolio, rules, stories and community.</li>
+  <li>To generate AI analyses, briefings and chat answers for you.</li>
+  <li>To keep the service secure, fix problems and prevent misuse.</li>
+</ul>
+<p>We do not sell your data, and we do not show advertising.</p>
+
+<h2>Who else sees it</h2>
+<ul>
+  <li><strong>Google</strong>, for sign-in.</li>
+  <li><strong>The AI provider you choose</strong> (for example Google Gemini, Anthropic, OpenAI, Groq or OpenRouter). When you use the assistant, a daily analysis or a briefing, the text of your request and the relevant stock, portfolio or statement data is sent to that provider using your key (or the shared key, if you choose it). The provider’s own privacy terms apply to what it receives. A statement PDF or image you attach is sent to it so it can be read.</li>
+  <li><strong>Our hosting provider</strong>, which stores the data on our behalf in a cloud server.</li>
+  <li><strong>Other users</strong>, only for content you post in Community.</li>
+  <li><strong>Authorities</strong>, where the law requires it.</li>
+</ul>
+<p>Market data we show (prices, filings, analyst figures) comes from third-party sources and does not include information about you.</p>
+
+<h2>Cookies</h2>
+<p>We use one essential cookie to keep you signed in, and a few settings (such as theme and view choices) stored in your browser. We do not use advertising or cross-site tracking cookies.</p>
+
+<h2>How long we keep it</h2>
+<p>We keep your account data while your account exists. If you ask us to delete your account, we delete your profile, positions, rules, journal, stored keys and posts, except what we must keep for security or legal reasons. Backups clear out in the normal course.</p>
+
+<h2>Security</h2>
+<p>Connections use HTTPS, AI keys are encrypted, and access to the server is restricted. No system is perfectly secure, so please use a strong Google account and tell us at once if you suspect misuse.</p>
+
+<h2>Your choices</h2>
+<ul>
+  <li>Edit your profile, rules and positions in the app at any time.</li>
+  <li>Remove or replace your AI key in AI settings.</li>
+  <li>Ask us to export or delete your data by emailing <a href="mailto:{{ contact }}">{{ contact }}</a> from the address on your account. We will respond within a reasonable time.</li>
+</ul>
+
+<h2>Children</h2>
+<p>Tenetfolio is for adults. We do not knowingly collect data from anyone under 18.</p>
+
+<h2>Changes</h2>
+<p>If we change this policy in a way that matters, we will update the date above and, for significant changes, tell you in the app.</p>
+{% endblock %}
