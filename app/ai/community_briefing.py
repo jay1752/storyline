@@ -92,11 +92,57 @@ def _google_news(query: str, limit: int = 6) -> list[dict]:
     return google_news(query, days=2, limit=limit)
 
 
+_ia_news_memo: dict = {"day": None, "items": []}
+
+
+def fetch_ia_news(limit: int = 15) -> list[dict]:
+    """India market headlines from IndianAPI /news (Mint, Economic Times, Business Standard, NDTV Profit...): one call, remembered for the day.
+    Personal-finance pieces (topic 'Money') are dropped. Counted against the monthly IndianAPI cap; [] without the key or budget."""
+    day = datetime.now(timezone.utc).date()
+    if _ia_news_memo["day"] == day:
+        return _ia_news_memo["items"]
+    key = os.environ.get("INDIANAPI_KEY", "").strip()
+    if not key:
+        return []
+    from app.db import get_market_conn
+    from app.ingestion.results_refresh_source import IA_HOST, MONTHLY_CAP, _bump, _used
+    with get_market_conn() as m:
+        if _used(m) >= MONTHLY_CAP:
+            return []
+        _bump(m)
+    ist = timezone(timedelta(hours=5, minutes=30))
+    items = []
+    r = requests.get(f"{IA_HOST}/news", headers={"X-Api-Key": key}, timeout=30)
+    r.raise_for_status()
+    for n in r.json():
+        topics = n.get("topics") or []
+        if "Money" in topics or not n.get("title") or re.search(r"box office|trailer|ott release|bollywood|ipl\b", n["title"], re.I):
+            continue
+        try:
+            when = datetime.fromisoformat(n["pub_date"]).replace(tzinfo=ist).astimezone(timezone.utc)
+        except (KeyError, ValueError):
+            continue
+        items.append({"title": n["title"].strip(), "source": n.get("source", ""), "url": n.get("url"), "when": when})
+    _ia_news_memo.update(day=day, items=items[:limit])
+    return _ia_news_memo["items"]
+
+
 def fetch_headlines() -> dict[str, list[dict]]:
     """{theme title: [headline, ...]} — only items from the last FRESH_HOURS, newest first, de-duplicated."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=FRESH_HOURS)
     seen: set[str] = set()
     result: dict[str, list[dict]] = {}
+    try:  # India desk first: the briefing is for Indian investors and Google/Finnhub are thin on Indian news
+        india = []
+        for it in fetch_ia_news():
+            k = re.sub(r"\W+", " ", it["title"].lower())[:80]
+            if it["when"] >= cutoff and k not in seen:
+                seen.add(k)
+                india.append(it)
+        if india:
+            result["India market headlines"] = sorted(india, key=lambda x: x["when"], reverse=True)[:10]
+    except Exception as e:  # noqa: BLE001 - a bonus source; the briefing runs without it
+        logger.warning("briefing: IndianAPI news failed: %s", type(e).__name__)
     for title, queries in THEMES:
         bucket = []
         for q in queries:

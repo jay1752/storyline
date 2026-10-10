@@ -130,7 +130,7 @@ SQLite runs with a rollback journal (not WAL) and **one writer at a time**: run 
 | US macro (fed funds, CPI, unemployment, GDP) | FRED (free key) | Primary; one row per quarter |
 | India macro (CPI inflation, GDP growth) | World Bank | Primary; annual only; no policy rate |
 | USD/INR for the combined portfolio view and position weights | Frankfurter (ECB reference rate), then open.er-api.com, then Yahoo `INR=X`; stored in `fx_rates` | Primary; refreshed hourly by the `fx_usd_inr` job (Admin > Scheduled jobs, interval editable); a quote more than 8% from the last one is rejected |
-| Market news for the Community briefing and daily analysis | Finnhub | Reference |
+| Market news for the Community briefing and daily analysis | Google News RSS + Finnhub general news; plus IndianAPI `/news` as an "India market headlines" bucket (Mint, ET, Business Standard, NDTV Profit; personal-finance and entertainment items dropped) | Reference; the IndianAPI bucket costs one call a day, counted in the 450/month cap, and is skipped without the key |
 
 ### 3.8 User data (never part of syncs)
 
