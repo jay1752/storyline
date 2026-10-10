@@ -25,7 +25,9 @@ AGREE, MIN_OVERLAP = 0.80, 3
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--symbols", default="", help="comma-separated, e.g. NSE:TCS,NSE:INFY (default: every stock)")
     a = ap.parse_args()
+    only = {("NSE:" + x if ":" not in x else x) for x in a.symbols.split(",") if x.strip()} if getattr(a, "symbols", "") else None
     ia = sqlite3.connect(f"file:{DATA_DIR}/indianapi.db?mode=ro", uri=True)
     m = sqlite3.connect(f"{DATA_DIR}/market.db", timeout=120)
     m.row_factory = sqlite3.Row
@@ -39,6 +41,8 @@ def main() -> None:
         ianp[sym][pe] = v
     tally, restored, deleted = collections.Counter(), 0, 0
     for (sym,) in ia.execute("SELECT symbol FROM ia_stock WHERE status IN ('loaded','unchecked') ORDER BY symbol").fetchall():
+        if only is not None and sym not in only:
+            continue
         n = ok = 0
         for pe, v in ianp[sym].items():
             b = orig[sym].get(pe)

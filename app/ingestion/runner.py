@@ -53,6 +53,8 @@ from app.ingestion.bse_ratio_inputs_source import BseRatioInputsSource
 from app.ingestion.daily_prices_source import DailyPriceSource
 from app.ingestion.fx_source import FxSource
 from app.ingestion.nse_integrated_source import NseIntegratedSource
+from app.ingestion.results_calendar_source import ResultsCalendarSource
+from app.ingestion.results_refresh_source import ResultsRefreshSource
 from app.ingestion.sec_edgar_source import SecEdgarSource
 from app.ingestion.tiingo_source import TiingoSource
 from app.ingestion.worldbank_source import WorldBankSource
@@ -78,6 +80,8 @@ SOURCES = {
     "sec_13f": Sec13FSource(),
     "worldbank": WorldBankSource(),
     "fx_usd_inr": FxSource(),
+    "results_calendar": ResultsCalendarSource(),
+    "results_refresh": ResultsRefreshSource(),
     "fred": FredSource(),
 }
 

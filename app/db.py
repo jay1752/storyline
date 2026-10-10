@@ -134,6 +134,25 @@ CREATE TABLE IF NOT EXISTS fx_rates (        -- USD/INR (INR per 1 USD) fetched 
     PRIMARY KEY (pair, fetched_at)
 );
 
+CREATE TABLE IF NOT EXISTS results_calendar (   -- announced results / board-meeting dates (NSE + BSE), refreshed daily; drives the post-results data refresh
+    symbol     TEXT NOT NULL,                       -- NSE:TCS
+    event_date TEXT NOT NULL,                       -- ISO date of the meeting
+    purpose    TEXT,                                -- e.g. 'Financial Results/Dividend'
+    source     TEXT NOT NULL,                       -- nse | bse
+    fetched_at TEXT NOT NULL,
+    status     TEXT NOT NULL DEFAULT 'upcoming',    -- upcoming | refreshed | gave_up
+    tries      INTEGER NOT NULL DEFAULT 0,          -- post-results refresh attempts so far
+    last_try   TEXT,
+    note       TEXT,
+    PRIMARY KEY (symbol, event_date)
+);
+CREATE INDEX IF NOT EXISTS idx_results_calendar_date ON results_calendar(event_date, status);
+
+CREATE TABLE IF NOT EXISTS ia_usage (          -- calls made to the data vendor per month, so a refresh job can stop before the plan's monthly limit
+    month TEXT PRIMARY KEY,                    -- YYYY-MM (UTC)
+    calls INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS institutional_holdings (
     symbol                TEXT NOT NULL REFERENCES stocks(symbol),
     period_end_date       TEXT NOT NULL,      -- 13F reporting quarter-end, e.g. "2026-06-30"

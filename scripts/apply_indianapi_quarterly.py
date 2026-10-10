@@ -30,7 +30,9 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--symbols", default="", help="comma-separated, e.g. NSE:TCS,NSE:INFY (default: every stock)")
     a = ap.parse_args()
+    only = {("NSE:" + x if ":" not in x else x) for x in a.symbols.split(",") if x.strip()} if getattr(a, "symbols", "") else None
     ia = sqlite3.connect(f"file:{DATA_DIR}/indianapi.db?mode=ro", uri=True)
     ia.row_factory = sqlite3.Row
     m = sqlite3.connect(f"{DATA_DIR}/market.db", timeout=120)
@@ -46,6 +48,8 @@ def main() -> None:
     except sqlite3.OperationalError:
         reverted = set()
     stocks = [s for s in stocks if s["symbol"] not in reverted]
+    if only:
+        stocks = [s for s in stocks if s["symbol"] in only]
     if a.limit:
         stocks = stocks[:a.limit]
     tally = collections.Counter()

@@ -142,7 +142,14 @@ Tracked positions, anchors, snapshots, rules overrides, profile, community posts
 
 ## 4. Refresh
 
-**Scheduled in-app** (`app/scheduler.py`, times editable in Admin → Scheduled jobs): India prices, US prices, Community briefing 07:30 IST, daily stock analysis 08:30 IST.
+**Scheduled in-app** (`app/scheduler.py`, times editable in Admin → Scheduled jobs): India prices, US prices, results calendar 07:00 IST, Community briefing 07:30 IST, daily stock analysis 08:30 IST, post-results refresh 21:30 IST, hourly USD/INR.
+
+**Results calendar and post-results refresh** (two daily jobs, no manual step):
+
+| Job | What it does |
+|---|---|
+| `results_calendar` 07:00 IST | Announced result dates from NSE (event calendar + board meetings, next 60 days) and BSE (forthcoming results), kept in `results_calendar` (symbol, date, status). A date that moves or is cancelled replaces the old upcoming row. Feeds "Results in N days" on the stock page (IndianAPI's board-meeting list is only the fallback). |
+| `results_refresh` 21:30 IST | For each stock whose date is today or up to 6 days back and still `upcoming`: (1) re-ingest that stock's BSE filings, (2) if `INDIANAPI_KEY` is set and the stock is covered, one `/historical_stats` call, then `load_indianapi` + the apply scripts + basis gate for that symbol only, (3) rebuild that stock's `stock_metrics`. The row becomes `refreshed` once the quarter that ended before the result date is stored; IndianAPI normally lags the filing by a day or two, so a BSE-only quarter stays open until IndianAPI has it or the third attempt. Max 5 tries. Calls are counted in `ia_usage` and stop at 450 a month (`INDIANAPI_MONTHLY_CAP`, free plan = 500). Without the key it runs BSE only. |
 
 **Manual** (Admin → Data ingestion, or scripts): all fundamentals sources (`bse`, `sec_edgar`, `nse_integrated`, `nse_results`, `bse_ratios`, `bse_shareholding`, `moneycontrol`, `sec13f`, `finnhub`, `fred`, `worldbank`), funds, and IndianAPI. There is no fundamentals schedule yet.
 
@@ -160,7 +167,7 @@ scripts/apply_indianapi_holdings.py --apply    # promoter / FII / DII history
 scripts/market_delta.py export | import        # ship repaired India rows to another machine (8 MB) instead of the 6 GB DB
 ```
 
-Mac is the development copy; the VM (https://stocktale.linkpc.net) owns `users.db`. Move India data to the VM with `market_delta`, not by copying `market.db` over it. The IndianAPI staging file is not on the VM yet, so the Analyst view and Company sections do not appear there.
+Mac is the development copy; the VM (https://stocktale.linkpc.net) owns `users.db`. Move India data to the VM with `market_delta`, not by copying `market.db` over it. The IndianAPI staging file (`data/indianapi.db`) is on the VM; the VM needs `INDIANAPI_KEY` in its `.env` for the post-results refresh to call IndianAPI (without it that job uses BSE filings only).
 
 ---
 

@@ -291,6 +291,25 @@ def _bars(title, labels, values, fmt, unit=""):
 _VENDOR_LABEL = re.compile(r"\s*\((?:MoneyControl|IndianAPI)[^)]*\)", re.I)
 
 
+def _next_result(symbol: str, ia_company) -> dict | None:
+    """Next results date: the exchange-fed results_calendar first (refreshed daily), IndianAPI's board-meeting list as the fallback.
+    A date that has just passed and is still 'upcoming' means the filing is being picked up ('updating')."""
+    today = date.today()
+    try:
+        with get_market_conn() as m:
+            row = m.execute("SELECT event_date, status FROM results_calendar WHERE symbol = ? AND event_date >= ? AND status = 'upcoming' ORDER BY event_date LIMIT 1",
+                            (symbol, (today - timedelta(days=6)).isoformat())).fetchone()
+    except Exception:  # noqa: BLE001 - table missing on an old DB: fall through to the fallback
+        row = None
+    if row:
+        d = date.fromisoformat(row["event_date"])
+        return {"label": "Results", "days": (d - today).days, "date": row["event_date"], "updating": d < today}
+    ne = ia_company.get("next_event") if ia_company else None
+    if ne:
+        return {"label": "Results" if "esult" in (ne.get("text") or "") else "Board meeting", "days": ne["days"], "date": ne["date"][:10], "updating": False}
+    return None
+
+
 def _public_label(label):
     """Column tooltips never name the data vendor: 'FY2024 (MoneyControl, annual)' -> 'FY2024 (annual)'."""
     return _VENDOR_LABEL.sub(" (annual)", label or "") if label else label
@@ -975,6 +994,7 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
     last_px = price_summary["last"] if price_summary else None
     ia_analyst = analyst_panel(stock["symbol"], last_px) if stock["market"] == "IN" else None
     ia_company = company_panel(stock["symbol"]) if stock["market"] == "IN" else None
+    next_result = _next_result(stock["symbol"], ia_company) if stock["market"] == "IN" else None
     cf_labels = {"Operating cash flow", "Cash flow ÷ profit", "Investing cash flow", "Financing cash flow", "Free cash flow"}
     if raw["annual"] and stock["market"] == "IN":  # India reports cash flow yearly: its own table under Financial health
         cf_rows = [r for r in raw["annual"]["rows"] if r["label"] in cf_labels]
@@ -1045,7 +1065,7 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
             "verdict": verdict, "pe_stats": pe_stats, "has_lens": has_lens, "has_own": has_own,
             "view_groups": [{"key": k, "label": l, "icon": i} for k, l, i, _ in view_groups],
             "perf_panes": perf_panes,
-            "ia_company": ia_company,
+            "ia_company": ia_company, "next_result": next_result,
             "explorer": explorer,
             "n_quarters": len([r for r in all_rows if not _is_annual(r)]),
             "n_annual": len(annual_all),

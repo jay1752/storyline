@@ -27,6 +27,11 @@ BANK_OK = {"Profit before tax", "Tax %", "Net Profit", "EPS in Rs", "Other Incom
 
 
 def main() -> None:
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--symbols", default="", help="comma-separated, e.g. NSE:TCS,NSE:INFY (default: every stock)")
+    a = ap.parse_args()
+    only = {("NSE:" + x if ":" not in x else x) for x in a.symbols.split(",") if x.strip()} or None
     init_db()  # creates annual_data on databases that predate it
     ia = sqlite3.connect(f"file:{DATA_DIR}/indianapi.db?mode=ro", uri=True)
     ia.row_factory = sqlite3.Row
@@ -37,10 +42,13 @@ def main() -> None:
     except sqlite3.OperationalError:
         reverted = set()
     tally = collections.Counter()
-    m.execute("DELETE FROM annual_data WHERE source = 'indianapi'")  # rebuild cleanly so rows dropped by a rule change don't linger
+    if only:  # a targeted refresh: replace just these stocks' rows
+        m.executemany("DELETE FROM annual_data WHERE source = 'indianapi' AND symbol = ?", [(s,) for s in only])
+    else:
+        m.execute("DELETE FROM annual_data WHERE source = 'indianapi'")  # rebuild cleanly so rows dropped by a rule change don't linger
     for s in ia.execute("SELECT symbol, layout FROM ia_stock WHERE status IN ('loaded','unchecked') ORDER BY symbol").fetchall():
         sym = s["symbol"]
-        if sym not in known or sym in reverted:
+        if sym not in known or sym in reverted or (only and sym not in only):
             continue
         bank = s["layout"] == "bank"
         years: dict[str, dict] = collections.defaultdict(dict)

@@ -172,11 +172,15 @@ def load_stock_extras(c, sym: str, s: dict) -> int:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--symbols", default="", help="comma-separated, e.g. NSE:TCS,NSE:INFY (default: every stock)")
     a = ap.parse_args()
     fetcher = _spec()
     market = sqlite3.connect(f"file:{DATA_DIR}/market.db?mode=ro", uri=True)
     c = get_indianapi_conn()
     tickers = sorted(p.stem for p in (RAW / "historical_stats").glob("*.json"))
+    if a.symbols:
+        want = {x.strip().split(":")[-1] for x in a.symbols.split(",") if x.strip()}
+        tickers = [x for x in tickers if x in want]
     if a.limit:
         tickers = tickers[:a.limit]
     tally = {"loaded": 0, "unchecked": 0, "held_out": 0, "facts": 0, "profiles": 0, "targets": 0, "estimates": 0, "bad_file": 0}

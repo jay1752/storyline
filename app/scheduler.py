@@ -44,6 +44,14 @@ JOBS = {
         "label": "USD/INR exchange rate", "source": "fx_usd_inr", "every": 60, "hm": 0, "days": ALL_DAYS,
         "desc": "The rupee value of a dollar, used wherever a US holding is shown in rupees (Portfolio's combined view, position weight in the daily analysis). ECB reference rate, with two backups.",
     },
+    "results_calendar": {
+        "label": "Results calendar", "source": "results_calendar", "hm": 7 * 60, "days": ALL_DAYS,
+        "desc": "Announced quarterly-result dates for every Indian stock (NSE event calendar, NSE board meetings, BSE forthcoming results). Shows 'Results in N days' on the stock page and tells the next job whom to refresh.",
+    },
+    "results_refresh": {
+        "label": "Post-results data refresh", "source": "results_refresh", "hm": 21 * 60 + 30, "days": ALL_DAYS,
+        "desc": "For every company whose result date has passed: pulls the new quarter from BSE filings and IndianAPI (within a monthly call cap), re-checks it against the filings, and refreshes that stock's analytics. Retries daily for up to a week.",
+    },
     "insights": {
         "label": "Daily stock analysis", "source": "insights", "hm": 8 * 60 + 30, "days": ALL_DAYS,
         "desc": "Each user's per-stock story and flags (users with tracked stocks, a usable AI model, and automatic analysis on). Which stocks run follows each user's Investment rules: platform default, own setting, per-stock switch.",
@@ -249,12 +257,12 @@ def _tick_fx() -> None:
 
 
 def _tick_prices() -> None:
-    """Daily end-of-day prices for every stock (app/ingestion/daily_prices_source.py): once per market per day, retried
+    """Daily jobs (end-of-day prices per market, results calendar, post-results refresh): once per day each, retried
     after RETRY_AFTER if it failed, and it catches up over a gap by itself (it walks every missed session)."""
     from app.ingestion.runner import enqueue_ingestion
 
     now = datetime.now(IST)
-    for key in ("daily_prices_in", "daily_prices_us"):
+    for key in ("daily_prices_in", "daily_prices_us", "results_calendar", "results_refresh"):
         if not _due(key, now):
             continue
         cfg = job_config(key)
