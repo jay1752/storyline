@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 IST = timezone(timedelta(hours=5, minutes=30))  # no DST, so a fixed offset is exact (and needs no tzdata in the image)
 FRESH_HOURS = 48
-UA = {"User-Agent": "Mozilla/5.0 (compatible; StocktaleBot/1.0)"}
+UA = {"User-Agent": "Mozilla/5.0 (compatible; TenetfolioBot/1.0)"}
 
 # (group, label, yahoo symbol, unit)  — unit: "$" price, "%" yield, "" plain level
 QUOTES = [
@@ -219,7 +219,7 @@ def _number_headlines(headlines: dict[str, list[dict]]) -> tuple[str, dict[int, 
     return "\n".join(lines), index
 
 
-SYSTEM_PROMPT = """You write the daily market briefing for Stocktale, a research app used mostly by Indian retail investors.
+SYSTEM_PROMPT = """You write the daily market briefing for Tenetfolio, a research app used mostly by Indian retail investors.
 You are given (1) exact market quotes and (2) numbered headlines from the last 48 hours. Write ONLY from those.
 
 Output Markdown, no preamble, no title, no closing remarks. Use exactly these sections, in this order, each as a `### ` heading:

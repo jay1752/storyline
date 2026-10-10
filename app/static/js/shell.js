@@ -39,7 +39,7 @@
   });
 
   // ---------- Palette: storyline <-> paperclip ----------
-  const PALETTES = [{ id: "storyline", label: "Stocktale" }, { id: "paperclip", label: "Paperclip" }];
+  const PALETTES = [{ id: "storyline", label: "Tenetfolio" }, { id: "paperclip", label: "Paperclip" }];
   function currentPalette() { return store.get("palette") === "paperclip" ? "paperclip" : "storyline"; }
   function applyPalette(p) {
     if (p === "paperclip") root.setAttribute("data-palette", "paperclip");

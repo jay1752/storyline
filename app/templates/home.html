@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <title>Stocktale · Research, rules and portfolio for India and the US</title>
+  <title>Tenetfolio · Research, rules and portfolio for India and the US</title>
   <meta name="description" content="Research any stock, test it against your own rules, and manage what you own, for India and the US. Every reported quarter, ownership, and a daily read on what you track.">
   {% include "_head.html" %}
   <link rel="stylesheet" href="/static/css/home.css?v={{ asset_version('css/home.css') }}">
@@ -14,9 +14,9 @@
 
   <header class="hm-nav">
     <div class="hm-wrap hm-nav-in">
-      <a class="hm-brand" href="/" aria-label="Stocktale home">
+      <a class="hm-brand" href="/" aria-label="Tenetfolio home">
         <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--structure)"/><path d="M8 21l5-6 4 3 7-9" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span class="brand-name">Stocktale</span>
+        <span class="brand-name">Tenetfolio</span>
       </a>
       <nav class="hm-links" aria-label="Sections">
         <a href="#product">Product</a>
@@ -27,7 +27,7 @@
         <button class="icon-btn" type="button" id="palette-toggle" title="Palette" aria-label="Change palette"><svg class="icon"><use href="#i-palette"/></svg></button>
         <button class="icon-btn" type="button" id="theme-toggle" title="Theme: system" aria-label="Change theme"><svg class="icon"><use href="#i-monitor"/></svg></button>
         {% if user %}
-        <a class="btn btn-primary btn-sm" href="/analytics">Open Stocktale <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
+        <a class="btn btn-primary btn-sm" href="/analytics">Open Tenetfolio <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
         {% else %}
         <a class="btn btn-ghost btn-sm hm-login" href="/login">Log in</a>
         <a class="btn btn-primary btn-sm" href="/signup">Get started</a>
@@ -42,7 +42,7 @@
       <div class="hm-hero-copy">
         <span class="eyebrow">Research · Rules · Portfolio · India + US</span>
         <h1 class="hm-h1">Research any stock. Test it against <em>your rules</em>. Manage what you own.</h1>
-        <p class="hm-lede">Stocktale lines up every reported quarter, the price history and who owns the company. It checks each stock against the thresholds and position sizes you set, then keeps an eye on what you track and tells you when the story changes.</p>
+        <p class="hm-lede">Tenetfolio lines up every reported quarter, the price history and who owns the company. It checks each stock against the thresholds and position sizes you set, then keeps an eye on what you track and tells you when the story changes.</p>
         <div class="hm-cta">
           {% if user %}
           <a class="btn btn-primary hm-btn" href="/analytics">Open Analytics <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
@@ -202,7 +202,7 @@
         <ol class="hm-steps">
           <li><span class="hm-step-n">1</span><h3>Research any stock</h3><p>Search a symbol or company name (⌘K from anywhere). Scan the quarterly matrix, open any chart full-size, and check cash flow, ownership and the balance sheet before you form a view.</p></li>
           <li><span class="hm-step-n">2</span><h3>Test it against your rules</h3><p>Set your own bars for ROCE, debt, pledge, growth and margins, and how big a position may get. Every stock shows how many of your rules it passes.</p></li>
-          <li><span class="hm-step-n">3</span><h3>Track it and manage it</h3><p>Add it to your watchlist or positions. Each morning Stocktale tells you what needs attention: trim, hold or exit, sized by your limits.</p></li>
+          <li><span class="hm-step-n">3</span><h3>Track it and manage it</h3><p>Add it to your watchlist or positions. Each morning Tenetfolio tells you what needs attention: trim, hold or exit, sized by your limits.</p></li>
         </ol>
       </div>
     </section>
@@ -227,7 +227,7 @@
         <h2 class="hm-h2">Start with any stock.</h2>
         <div class="hm-cta">
           {% if user %}
-          <a class="btn btn-primary hm-btn" href="/analytics">Open Stocktale <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
+          <a class="btn btn-primary hm-btn" href="/analytics">Open Tenetfolio <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
           {% else %}
           <a class="btn btn-primary hm-btn" href="/signup">Create your account <svg class="icon icon-sm"><use href="#i-arrow-right"/></svg></a>
           <a class="btn hm-btn" href="/login">I already have one</a>
@@ -239,7 +239,7 @@
 
   <footer class="hm-foot">
     <div class="hm-wrap hm-foot-in">
-      <span class="hm-brand"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--structure)"/><path d="M8 21l5-6 4 3 7-9" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="brand-name">Stocktale</span></span>
+      <span class="hm-brand"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--structure)"/><path d="M8 21l5-6 4 3 7-9" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="brand-name">Tenetfolio</span></span>
       <p>A descriptive research tool. It summarises reported data and does not give investment advice. Figures come from exchange and regulator filings and public price history and can contain errors; check the source before you act.</p>
     </div>
   </footer>

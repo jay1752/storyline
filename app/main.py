@@ -12,7 +12,7 @@ from app.scheduler import start_scheduler
 from app.routes import admin, analytics, auth, chat, community, framework, google_auth, home, management, portfolio, profile, search, settings
 from app.tracking import already_tracked, create_tracked_position
 
-app = FastAPI(title="Stocktale")
+app = FastAPI(title="Tenetfolio")
 app.add_middleware(AuthMiddleware)
 
 

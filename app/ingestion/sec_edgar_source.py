@@ -33,7 +33,7 @@ import requests
 
 from app.ingestion.base import DataSource, NotConfiguredError, apply_symbol_filter, safe_growth_pct
 
-UA = os.environ.get("SEC_EDGAR_USER_AGENT")  # required by SEC's fair-use policy, e.g. "Stocktale you@example.com"
+UA = os.environ.get("SEC_EDGAR_USER_AGENT")  # required by SEC's fair-use policy, e.g. "Tenetfolio you@example.com"
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"

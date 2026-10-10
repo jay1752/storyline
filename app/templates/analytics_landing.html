@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Analytics · Stocktale{% endblock %}
+{% block title %}Analytics · Tenetfolio{% endblock %}
 {% macro opt(name, current, items) %}
 <select class="form-input" name="{{ name }}">
   {% for v, lbl in items %}<option value="{{ v }}" {{ 'selected' if (current|string == v|string) else '' }}>{{ lbl }}</option>{% endfor %}

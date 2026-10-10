@@ -1,4 +1,4 @@
-"""Score EODHD fundamentals against what Stocktale already holds, before paying for a longer subscription.
+"""Score EODHD fundamentals against what Tenetfolio already holds, before paying for a longer subscription.
 
 Run inside the app container (read-only on market.db; raw responses cached to /tmp/eodhd/ so a re-run costs no API calls):
     docker compose exec -T -e EODHD_API_KEY=... app python scripts/compare_eodhd.py [--n 20] [--us 5]

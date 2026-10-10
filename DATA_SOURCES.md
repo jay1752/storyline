@@ -1,4 +1,4 @@
-# Stocktale — Data Sources
+# Tenetfolio — Data Sources
 
 What data the platform serves, where each piece comes from, which source wins when two disagree, how fresh it is, and what is still missing.
 Last updated 2026-10-10. Companion to `STATUS.md` (architecture and screens).
@@ -169,7 +169,7 @@ scripts/apply_indianapi_holdings.py --apply    # promoter / FII / DII history
 scripts/market_delta.py export | import        # ship repaired India rows to another machine (8 MB) instead of the 6 GB DB
 ```
 
-Mac is the development copy; the VM (https://stocktale.linkpc.net) owns `users.db`. Move India data to the VM with `market_delta`, not by copying `market.db` over it. The IndianAPI staging file (`data/indianapi.db`) is on the VM; the VM needs `INDIANAPI_KEY` in its `.env` for the post-results refresh to call IndianAPI (without it that job uses BSE filings only).
+Mac is the development copy; the VM (https://tenetfolio.com) owns `users.db`. Move India data to the VM with `market_delta`, not by copying `market.db` over it. The IndianAPI staging file (`data/indianapi.db`) is on the VM; the VM needs `INDIANAPI_KEY` in its `.env` for the post-results refresh to call IndianAPI (without it that job uses BSE filings only).
 
 ---
 

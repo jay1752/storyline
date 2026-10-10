@@ -638,5 +638,5 @@
     let t = null;
     window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(draw, 80); });
   }
-  window.StocktaleChartExplorer = { open: openDlg, close: closeDlg };
+  window.TenetfolioChartExplorer = { open: openDlg, close: closeDlg };
 })();

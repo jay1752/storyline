@@ -13,7 +13,7 @@ import requests
 logger = logging.getLogger("app.auth.email")
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
-RESEND_FROM = os.environ.get("RESEND_FROM", "Stocktale <onboarding@resend.dev>")
+RESEND_FROM = os.environ.get("RESEND_FROM", "Tenetfolio <onboarding@resend.dev>")
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:8000")
 
 
@@ -39,7 +39,7 @@ def send_verification_email(email: str, token: str) -> None:
     url = f"{APP_BASE_URL}/verify-email?token={token}"
     _send(
         email,
-        "Verify your Stocktale account",
+        "Verify your Tenetfolio account",
         f'<p>Click to verify your email:</p><p><a href="{url}">{url}</a></p>'
         f"<p>This link expires in 24 hours.</p>",
         "verification link",
@@ -50,7 +50,7 @@ def send_reset_email(email: str, token: str) -> None:
     url = f"{APP_BASE_URL}/reset-password?token={token}"
     _send(
         email,
-        "Reset your Stocktale password",
+        "Reset your Tenetfolio password",
         f'<p>Click to set a new password:</p><p><a href="{url}">{url}</a></p>'
         f"<p>This link expires in 1 hour. If you didn't request this, ignore this email.</p>",
         "password reset link",

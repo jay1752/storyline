@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <title>{% block title %}Stocktale{% endblock %}</title>
+  <title>{% block title %}Tenetfolio{% endblock %}</title>
   {% include "_head.html" %}
   <link rel="stylesheet" href="/static/css/chat-widget.css?v={{ asset_version('css/chat-widget.css') }}">
   <script src="/static/js/htmx.min.js?v={{ asset_version('js/htmx.min.js') }}"></script>
@@ -13,9 +13,9 @@
   {% set user = request.state.user %}
   <div class="shell" id="shell" data-sidebar="expanded">
     <aside class="sidebar" id="sidebar" aria-label="Primary">
-      <a class="brand" href="/analytics" title="Stocktale">
+      <a class="brand" href="/analytics" title="Tenetfolio">
         <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--structure)"/><path d="M8 21l5-6 4 3 7-9" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span class="brand-name">Stocktale</span>
+        <span class="brand-name">Tenetfolio</span>
       </a>
 
       {% if user %}
@@ -66,7 +66,7 @@
     <div class="main">
       <header class="mobilebar">
         <button class="icon-btn" type="button" id="drawer-open" aria-label="Open menu"><svg class="icon"><use href="#i-menu"/></svg></button>
-        <a class="brand" href="/analytics"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--structure)"/><path d="M8 21l5-6 4 3 7-9" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="brand-name">Stocktale</span></a>
+        <a class="brand" href="/analytics"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--structure)"/><path d="M8 21l5-6 4 3 7-9" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="brand-name">Tenetfolio</span></a>
         {% if user %}<button class="icon-btn" type="button" data-open-palette aria-label="Search"><svg class="icon"><use href="#i-search"/></svg></button>{% else %}<span></span>{% endif %}
       </header>
 

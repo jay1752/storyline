@@ -38,7 +38,7 @@ DISCLAIMER = ("Not SEBI-registered advice. This is your own framework applied by
               "Verify the numbers before acting.")
 VERDICT_TO_SIGNAL = {"BUY": "buy_consider", "HOLD": "hold", "TRIM": "trim_consider", "EXIT": "exit_consider", "WATCH": "watch"}
 
-SYSTEM_PROMPT = """You are the analyst inside Stocktale, applying the user's personal stock-investment-analysis framework
+SYSTEM_PROMPT = """You are the analyst inside Tenetfolio, applying the user's personal stock-investment-analysis framework
 (Anil Sanadhya's approach: Indian equities, business-driven, buy great companies, build slowly, hold long) to ONE stock per
 run, and continuing that stock's running story from the prior entries you are shown.
 

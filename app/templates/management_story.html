@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ pos.symbol }} story · Management · Stocktale{% endblock %}
+{% block title %}{{ pos.symbol }} story · Management · Tenetfolio{% endblock %}
 
 {% macro verdict_badge(v) -%}
 <span class="badge {{ {'BUY': 'pos', 'HOLD': 'pos', 'TRIM': 'accent', 'EXIT': 'neg', 'WATCH': 'neutral'}[v] }} badge-dot">{{ {'BUY': 'Buy / add', 'HOLD': 'Hold', 'TRIM': 'Trim', 'EXIT': 'Exit', 'WATCH': 'Watch'}[v] }}</span>
