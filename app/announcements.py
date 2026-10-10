@@ -108,7 +108,7 @@ def _ia_only_items(ticker: str) -> list[dict]:
             except ValueError:
                 pass
         m_id = re.search(r"Pname=([0-9a-fA-F-]{36})", x.get("link") or "")
-        out.append({"id": m_id.group(1).lower() if m_id else None, "title": t[:s.start()] if s else t, "at": when or "", "category": None,
+        out.append({"src": "ia", "id": m_id.group(1).lower() if m_id else None, "title": t[:s.start()] if s else t, "at": when or "", "category": None,
                     "link": x.get("link"), "summary": s.group(2).strip() if s else None})
     return out
 
@@ -120,7 +120,8 @@ def get_announcements(symbol: str, limit: int = 15) -> dict:
     items = json.loads(row["items_json"]) if row else []
     fetched, ia_at = _parse(row["fetched_at"]) if row else None, _parse(row["ia_at"]) if row else None
     error = None
-    if not row or _now() - fetched > FRESH:
+    ttl = IA_FRESH if items and items[0].get("src") == "ia" else FRESH  # an IndianAPI-only list costs a call: keep it 12 h
+    if not row or _now() - fetched > ttl:
         try:
             try:
                 code = scrip_code(symbol)
