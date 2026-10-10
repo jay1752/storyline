@@ -472,7 +472,16 @@ function _renderPendingFile() {
   x.setAttribute("aria-label", "Remove attachment");
   x.appendChild(_icon("i-x", "icon-sm"));
   x.onclick = clearChatFile;
-  box.append(_icon("i-paperclip", "icon-sm"), _el("span", "name", chat.pendingFile.name), x);
+  const row = _el("div", "chat-attachment-row");
+  row.append(_icon("i-paperclip", "icon-sm"), _el("span", "name", chat.pendingFile.name), x);
+  const note = _el("div", "chat-attachment-note");
+  note.append("We read this file to find your holdings and don't keep it. Excel, CSV and text PDFs are read on our server. Scans, photos and unfamiliar layouts are sent to the AI provider you chose in AI settings. ");
+  const link = _el("a", null, "Privacy policy");
+  link.href = "/privacy";
+  link.target = "_blank";
+  link.rel = "noopener";
+  note.append(link, ". Sending the file means you agree.");
+  box.append(row, note);
 }
 
 // ---------- import proposal card ----------
@@ -549,7 +558,7 @@ function _renderProposal(p) {
   if (!log) return;
   const card = _el("div", "chat-card");
   card.appendChild(_el("div", "chat-card-title", p.rows.length ? "Review import — " + p.rows.length + " position" + (p.rows.length === 1 ? "" : "s") : "Nothing matched yet"));
-  card.appendChild(_el("div", "chat-card-sub", "Change any number, switch the stock, untick a line to leave it out, or add one we couldn't place."));
+  card.appendChild(_el("div", "chat-card-sub", "Change any number, switch the stock, untick a line to leave it out, or add one we couldn't place. Read from your file, which isn't stored."));
 
   const editors = []; // one per proposed row
   const added = [];   // manually filled rows from "couldn't place"

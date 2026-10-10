@@ -178,7 +178,10 @@
 .chat-foot .kbd { font-size: 0.6rem; }
 
 .chat-attachment { display: none; }
-.chat-attachment.has { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; padding: 0.3rem 0.6rem; background: var(--badge-accent-bg); border-radius: var(--r-md); }
+.chat-attachment.has { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.78rem; padding: 0.35rem 0.6rem; background: var(--badge-accent-bg); border-radius: var(--r-md); }
+.chat-attachment-row { display: flex; align-items: center; gap: 0.5rem; }
+.chat-attachment-note { font-size: 0.7rem; color: var(--muted); line-height: 1.45; }
+.chat-attachment-note a { color: inherit; }
 .chat-attachment .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-attachment button { all: unset; cursor: pointer; color: var(--muted); display: grid; }
 .chat-attachment button:hover { color: var(--ink); }

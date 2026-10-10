@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tenetfolio · Research, rules and a portfolio you hold to them</title>
-  <meta name="description" content="Research any stock to the quarter, write the rules you invest by, and let Tenetfolio hold your portfolio to them every day. India and US stocks. Descriptive research, not investment advice.">
+  <title>Tenetfolio · Research any stock. Check your portfolio against your own rules</title>
+  <meta name="description" content="Research any stock to the quarter, write the rules you invest by, and have your portfolio checked against them every day. India and US stocks. Descriptive research, not investment advice.">
   <link rel="canonical" href="https://tenetfolio.com/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Tenetfolio">
-  <meta property="og:title" content="Tenetfolio: decide when you're calm, hold when you're not">
+  <meta property="og:title" content="Tenetfolio: write your investing rules while you're calm">
   <meta property="og:description" content="Research any stock to the quarter, write your own investing rules, and have your portfolio checked against them every day.">
   <meta property="og:url" content="https://tenetfolio.com/">
   <meta name="twitter:card" content="summary_large_image">
@@ -26,23 +26,23 @@
   <div class="hero">
    <div>
     <span class="eyebrow">Research · Rules · Portfolio</span>
-    <h1>Decide when you're calm. <em>Hold when you're not.</em></h1>
-    <p class="lead">Research any stock to the quarter. Write the rules you invest by. Tenetfolio holds your portfolio to them, every day.</p>
+    <h1>Decide when you're calm. <em>Check every day.</em></h1>
+    <p class="lead">Research any stock to the quarter. Write the rules you invest by. Tenetfolio checks your portfolio against them, every day.</p>
     <div class="cta"><a class="btn btn-a" href="{{ "/analytics" if user else cta_href }}">{{ "Open Tenetfolio" if user else "Continue with Google" }}</a><a class="btn btn-o" href="#research">See the research</a></div>
     <p class="fine" style="margin:14px 0 0">Free to start. Descriptive research, not investment advice.</p>
    </div>
    <div class="panic">
     <div class="top"><span>Tuesday · 11:42</span><span>Example</span></div>
     <div class="idx">Nifty −3.2%</div>
-    <div style="opacity:.72;font-size:14px">The feed says sell everything.</div>
+    <div style="opacity:.72;font-size:14px">A hard day for the market.</div>
     <hr>
     <div class="r"><span>Holdings that pass your rules</span><span style="color:var(--calm)">11 of 14</span></div>
     <div class="r"><span>Broke a rule before today</span><span>3</span></div>
     <div class="r"><span>New rule breaks today</span><span style="color:var(--calm)">0</span></div>
-    <div class="big">Nothing to do. Your plan says hold.</div>
+    <div class="big">Your rules, checked: no new breaks today.</div>
    </div>
   </div>
-  <div class="heroshot"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/static/img/home/story.jpg" alt="A position story: trim alert, your rules, exit check and position size" width="1823" height="1170" decoding="async"></div></div>
+  <div class="heroshot"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/static/img/home/analytics.jpg" alt="A stock page: key figures, how it scores against your rules, and the price chart" width="1823" height="1170" decoding="async"></div></div>
  </div>
 </div>
 
@@ -55,33 +55,27 @@
    <div class="stat"><b>5 views</b><span>performance, health, valuation, ownership, company</span></div>
    <div class="stat"><b>Daily</b><span>prices, filings and result dates</span></div>
   </div>
-  <div class="two">
-   <div class="txt"><span class="eyebrow">The page for every stock</span><h2>Your verdict, <em>first.</em></h2>
-    <p class="sub">Every stock opens with how it scores against your rules, so you see what fails before you read a number.</p>
-    <ul class="pts"><li>Price, growth, margin, ROCE and P/E at a glance</li><li>Next result date, from the exchanges</li><li>Choose what to show: performance, financial health, valuation, ownership, company</li></ul></div>
-   <div class="shot"><img src="/static/img/home/analytics.jpg" alt="Infosys page with the rules verdict and price chart" width="1823" height="1170" loading="lazy" decoding="async"></div>
-  </div>
   <div class="two flip" style="margin-top:72px">
    <div class="shot"><img src="/static/img/home/quarters.jpg" alt="Quarterly results table and charts for twelve quarters" width="1823" height="1170" loading="lazy" decoding="async"></div>
    <div class="txt"><span class="eyebrow">Raw data first</span><h2>Twelve quarters, <em>side by side.</em></h2>
-    <p class="sub">Revenue, margins, profit, EPS and growth, with balance sheet, cash flow and who owns the company, as filed.</p>
-    <ul class="pts"><li>Quarterly and annual, with cash flow and balance sheet</li><li>Promoter, FII and DII holding, and pledge</li><li>Recent exchange filings, summarised</li></ul></div>
+    <p class="sub">Revenue, margins, profit, EPS and growth for every reported quarter, as filed.</p>
+    <ul class="pts"><li>Quarterly and annual statements</li><li>Charts you can expand and export</li><li>Recent exchange filings, with links to the originals</li></ul></div>
   </div>
   <div class="two" style="margin-top:72px">
-   <div class="txt"><span class="eyebrow">Beyond the filings</span><h2>What the street <em>expects.</em></h2>
-    <p class="sub">Analyst targets, rating split and estimates for the next years and quarters, kept apart from reported results and clearly labelled.</p>
-    <ul class="pts"><li>Mean target, range and 90-day drift</li><li>Reported against consensus, with the surprise</li><li>Valuation against the stock's own history</li></ul></div>
-   <div class="shot"><img src="/static/img/home/analysts.jpg" alt="Analyst view: target range, ratings and consensus estimates" width="1823" height="1170" loading="lazy" decoding="async"></div>
+   <div class="txt"><span class="eyebrow">Behind the numbers</span><h2>Who owns it, and <em>the cash behind it.</em></h2>
+    <p class="sub">Cash flow, balance sheet and ownership, by year and by half-year, with the source of every figure.</p>
+    <ul class="pts"><li>Operating cash flow against profit</li><li>Promoter, FII and DII holding, and pledge</li><li>Next result date, from the exchanges</li></ul></div>
+   <div class="shot"><img src="/static/img/home/health.jpg" alt="Cash flow and balance sheet for a stock" width="1823" height="1170" loading="lazy" decoding="async"></div>
   </div>
  </div>
 </section>
 
 <section class="alt" id="rules">
  <div class="wrap two flip">
-  <div class="shot"><img src="/static/img/home/rules.jpg" alt="Investment rules page: thresholds, daily story and position sizing" width="1823" height="1170" loading="lazy" decoding="async"></div>
+  <div class="shot"><img src="/static/img/home/rules.jpg" alt="The investment rules page: the thresholds you set" width="1823" height="1170" loading="lazy" decoding="async"></div>
   <div class="txt"><span class="eyebrow">Your tenets</span><h2>Write your rules <em>once.</em></h2>
    <p class="sub">Set the numbers you believe in. They drive two things, so you never set them twice.</p>
-   <ul class="pts"><li><b>The screener.</b> Which stocks pass, in Analytics and on every stock page.</li><li><b>Your positions.</b> How big a holding may grow, when to trim, and your sector limit.</li><li>Defaults are ready. Change only what you disagree with.</li></ul></div>
+   <ul class="pts"><li><b>The screener.</b> Which stocks pass, in Analytics and on every stock page.</li><li><b>Your positions.</b> Limits you set, such as the largest a holding may be and the most you will hold in one sector.</li><li>Defaults are ready. Change only what you disagree with.</li></ul></div>
  </div>
 </section>
 
@@ -98,7 +92,7 @@
    <div class="shot"><img src="/static/img/home/portfolio.jpg" alt="Portfolio: value, returns, allocation and movers" width="1823" height="1080" loading="lazy" decoding="async"></div>
    <div class="txt"><span class="eyebrow">One view</span><h2>All of it, <em>at a glance.</em></h2>
     <p class="sub">Value, returns, allocation by sector and movers, in rupees, with US holdings converted at a live rate.</p>
-    <ul class="pts"><li>A daily story and flags for each stock you track</li><li>Trim alerts when a position outgrows your limit</li><li>Journal your reasons and review them later</li></ul></div>
+    <ul class="pts"><li>A daily summary of what changed and which of your rules a stock breaks</li><li>A flag when a position goes above a limit you set</li><li>Journal your reasons and review them later</li></ul></div>
   </div>
  </div>
 </section>
@@ -125,7 +119,7 @@
 </section>
 
 <div class="dark">
- <div class="wrap close"><h2>Rules written in calm <em>hold in a storm.</em></h2><a class="btn btn-a" href="{{ "/analytics" if user else cta_href }}">{{ "Open Tenetfolio" if user else "Continue with Google" }}</a><p class="fine" style="margin:14px 0 0">Free to start. Your data stays yours, with one-click delete.</p></div>
+ <div class="wrap close"><h2>Rules written in calm <em>are easier to keep.</em></h2><a class="btn btn-a" href="{{ "/analytics" if user else cta_href }}">{{ "Open Tenetfolio" if user else "Continue with Google" }}</a><p class="fine" style="margin:14px 0 0">Free to start. Your data stays yours, with one-click delete.</p></div>
 </div>
 <footer><div class="wrap"><span>Tenetfolio · A tenet is a rule you hold to. · <a href="mailto:tenetfolio@gmail.com">tenetfolio@gmail.com</a></span><span>A descriptive research tool. It does not give investment advice. Figures come from filings and public sources and can contain errors. · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span></div></footer>
 </body>

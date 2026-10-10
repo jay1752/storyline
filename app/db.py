@@ -624,6 +624,8 @@ def init_db() -> None:
                 u.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
         if "google_sub" not in {row["name"] for row in u.execute("PRAGMA table_info(users)").fetchall()}:
             u.execute("ALTER TABLE users ADD COLUMN google_sub TEXT")  # Google account id (OIDC `sub`) for "Sign in with Google"
+        if "import_consent_at" not in {row["name"] for row in u.execute("PRAGMA table_info(users)").fetchall()}:
+            u.execute("ALTER TABLE users ADD COLUMN import_consent_at TEXT")  # first time the user sent a statement, after seeing the processing notice
         if "welcomed_at" not in {row["name"] for row in u.execute("PRAGMA table_info(users)").fetchall()}:
             u.execute("ALTER TABLE users ADD COLUMN welcomed_at TEXT")  # first visit to the /welcome getting-started page
         u.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL")

@@ -135,6 +135,14 @@ async def _stream(user_id: int, message: str, history_json: str | None, page: st
     hint = f"[Now on the {page} page" + (f" for {symbol}" if symbol else "") + ".] " if page else ""
 
     prompt = hint + message
+    if upload is not None:
+        try:  # the widget shows the processing notice before a file can be sent: keep the time of the first one
+            from app.db import get_users_conn
+            with get_users_conn() as u:
+                u.execute("UPDATE users SET import_consent_at = COALESCE(import_consent_at, CURRENT_TIMESTAMP) WHERE id = ?", (user_id,))
+                u.commit()
+        except Exception:  # noqa: BLE001 - a logging failure must never block the import
+            logger.warning("could not record import notice time")
     if upload is not None and upload[0].lower().endswith(SHEET_TYPES):
         # Spreadsheet exports map column-by-column with no AI: exact, free, and long files are no problem. Anything unrecognised
         # falls through to the AI reading the file's text.
