@@ -1,11 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Analytics · Stocktale{% endblock %}
+{% macro opt(name, current, items) %}
+<select class="form-input" name="{{ name }}">
+  {% for v, lbl in items %}<option value="{{ v }}" {{ 'selected' if (current|string == v|string) else '' }}>{{ lbl }}</option>{% endfor %}
+</select>
+{% endmacro %}
 {% block content %}
 
 <section class="hero">
   <span class="eyebrow">Analytics</span>
   <h1 class="page-title">Find a stock worth your time</h1>
-  <p class="page-sub">Search a name or pick what you're looking for. {{ "{:,}".format(total_with_data) }} stocks with reported data, India and US.</p>
+  <p class="page-sub">Search a name, pick what you're looking for, or browse. {{ "{:,}".format(total_with_data) }} stocks with reported data, India and US.</p>
 
   <div class="hero-search">
     <svg class="icon"><use href="#i-search"/></svg>
@@ -16,20 +21,32 @@
 </section>
 
 <section class="section dz">
+  <div class="dz-guide">
+    <span class="dz-guide-q">New to this? Start with what you want:</span>
+    {% for key, label, scr in goals %}<a class="dz-goal" href="{{ link(screen=scr) }}">{{ label }}</a>{% endfor %}
+  </div>
+
   <div class="section-head"><div><h2 class="section-title">What are you looking for?</h2><span class="section-note">each one is a ready-made screen, explained in plain words</span></div></div>
   <div class="dz-chips" role="group" aria-label="Screens">
-    {% for s in screens %}<a class="dz-chip {{ 'on' if s.key == screen.key else '' }} {{ 'star' if s.star else '' }}" href="/analytics?screen={{ s.key }}&market={{ market }}">{{ s.label }}</a>{% endfor %}
+    {% for s in screens %}<a class="dz-chip {{ 'on' if s.key == screen.key else '' }} {{ 'star' if s.star else '' }}" href="{{ link(screen=s.key) }}">{{ s.label }}</a>{% endfor %}
   </div>
+
+  {% if cap or sector %}
+  <div class="dz-filters"><span>Showing</span>
+    {% if cap %}<a class="dz-pill" href="{{ link(cap='') }}" title="Remove this filter">{{ cap|capitalize }} cap ✕</a>{% endif %}
+    {% if sector %}<a class="dz-pill" href="{{ link(sector='') }}" title="Remove this filter">{{ sector }} ✕</a>{% endif %}
+  </div>
+  {% endif %}
 
   <div class="card dz-card">
     <div class="card-head">
       <div>
-        <h3 class="card-title">{{ screen.label }}</h3>
+        <h3 class="card-title">{{ screen.label }}{% if screen.key == 'browse' %}{% if sector %} · {{ sector }}{% endif %}{% if cap %} · {{ cap|capitalize }} cap{% endif %}{% endif %}</h3>
         <span class="section-note">{{ screen.desc }}</span>
       </div>
       <div class="card-tools">
         <div class="seg" role="group" aria-label="Market">
-          {% for m, lbl in (('IN', 'India'), ('US', 'US'), ('ALL', 'Both')) %}<a class="{{ 'active' if m == market else '' }}" href="/analytics?screen={{ screen.key }}&market={{ m }}">{{ lbl }}</a>{% endfor %}
+          {% for m, lbl in (('IN', 'India'), ('US', 'US'), ('ALL', 'Both')) %}<a class="{{ 'active' if m == market else '' }}" href="{{ link(market=m) }}">{{ lbl }}</a>{% endfor %}
         </div>
       </div>
     </div>
@@ -41,7 +58,7 @@
           {% for r in result.rows %}
           <tr>
             <td><a class="row-ticker" href="/analytics/{{ r.symbol }}">{{ r.name }}</a><span class="row-sub">{{ r.symbol }}{% if r.sector and r.sector != 'Unclassified' %} · {{ r.sector }}{% endif %}{% if r.cap_tier %} · {{ r.cap_tier|capitalize }}{% endif %}</span></td>
-            <td>{% if screen.key == 'rules' %}<span class="vchip {{ 'pos-chip' if not r.judge.failing else '' }}">{{ r.why }}</span>{% else %}{{ r.why }}{% endif %}</td>
+            <td>{% if r.judge %}<span class="vchip {{ 'pos-chip' if not r.judge.failing else '' }}">{{ r.why }}</span>{% else %}{{ r.why }}{% endif %}</td>
             <td>{{ "%.0f×"|format(r.pe) if r.pe else '—' }}</td>
             <td>{{ "%.0f%%"|format(r.roce) if r.roce is not none else '—' }}{% if r.bank %}<small class="muted"> ROE</small>{% endif %}</td>
             <td>{% if r.sales_cagr_3y is not none %}<span class="{{ 'val-pos' if r.sales_cagr_3y >= 0 else 'val-neg' }}">{{ "%+.0f%%"|format(r.sales_cagr_3y) }}</span>{% else %}—{% endif %}</td>
@@ -53,16 +70,41 @@
         </tbody>
       </table>
     </div>
-    <div class="dz-foot"><span class="section-note">{% if result.count > result.rows|length %}Showing {{ result.rows|length }} of {{ result.count }} · {% endif %}{% if screen.key == 'rules' %}Stocks that pass every rule come first, then those that miss just one. Stocks with too little data to judge most rules are left out. {% endif %}Open any stock for its full story, or track it to watch it against your rules.</span>
-      {% if screen.key == 'rules' %}<a class="btn btn-sm btn-ghost" href="/rules">Change my rules</a>{% endif %}</div>
+    <div class="dz-foot"><span class="section-note">{% if result.count > result.rows|length %}Showing {{ result.rows|length }} of {{ result.count }} · {% endif %}{% if screen.key in ('rules', 'browse') %}Best match against your rules comes first. {% endif %}{% if screen.key == 'rules' %}Stocks with too little data to judge most rules are left out. {% endif %}Open any stock for its full story, or track it to watch it against your rules.</span>
+      {% if screen.key in ('rules', 'browse') %}<a class="btn btn-sm btn-ghost" href="/rules">Change my rules</a>{% endif %}</div>
     {% else %}
     <div class="empty">
       <svg class="icon"><use href="#i-analytics"/></svg>
       {% if preparing %}<h3>Preparing the screens…</h3><p>The first build takes about half a minute. Refresh in a moment.</p>
-      {% else %}<h3>No matches in {{ {'IN': 'India', 'US': 'the US', 'ALL': 'either market'}[market] }}</h3><p>{% if screen.key == 'rules' %}Your rules are strict for this market. Loosen one on Investment rules, or try another screen.{% else %}Try the other market or another screen.{% endif %}</p>{% endif %}
+      {% else %}<h3>No matches in {{ {'IN': 'India', 'US': 'the US', 'ALL': 'either market'}[market] }}</h3><p>{% if screen.key == 'rules' %}Your rules are strict for this market. Loosen one on Investment rules, or try another screen.{% elif screen.key == 'custom' %}Loosen one of the filters below.{% else %}Try the other market or another screen.{% endif %}</p>{% endif %}
     </div>
     {% endif %}
   </div>
+
+  <div class="section-head dz-browse-head"><div><h2 class="section-title">Or browse</h2><span class="section-note">pick a size or an industry; the best match against your rules comes first</span></div></div>
+  <div class="dz-tiles">
+    {% for c, n in facets.caps %}<a class="dz-tile" href="/analytics?screen=browse&market={{ market }}&cap={{ c }}"><b>{{ c|capitalize }} cap</b><span>{{ "{:,}".format(n) }} stocks</span></a>{% endfor %}
+  </div>
+  <div class="dz-tiles dz-tiles-sm">
+    {% for s, n in facets.sectors %}<a class="dz-tile" href="/analytics?screen=browse&market={{ market }}&sector={{ s|urlencode }}"><b>{{ s }}</b><span>{{ "{:,}".format(n) }}</span></a>{% endfor %}
+  </div>
+
+  <details class="det dz-custom" id="custom" {{ 'open' if custom_open else '' }}>
+    <summary>Build your own screen <span class="section-note">pick any filters; leave the rest on "any"</span></summary>
+    <form class="det-body dz-form" method="get" action="/analytics#custom">
+      <input type="hidden" name="screen" value="custom"><input type="hidden" name="market" value="{{ market }}">
+      <label>Return on capital (ROCE){{ opt('roce', custom.roce, [('', 'Any'), (10, 'Above 10%'), (15, 'Above 15%'), (20, 'Above 20%'), (25, 'Above 25%')]) }}</label>
+      <label>Debt{{ opt('de', custom.de, [('', 'Any'), (1, 'Debt/equity below 1'), (0.5, 'Below 0.5'), (0.1, 'Almost debt-free')]) }}</label>
+      <label>Sales growth, per year (3y){{ opt('growth', custom.growth, [('', 'Any'), (5, 'Above 5%'), (10, 'Above 10%'), (20, 'Above 20%'), (30, 'Above 30%')]) }}</label>
+      <label>Valuation (P/E){{ opt('pe', custom.pe, [('', 'Any'), (15, 'Below 15'), (25, 'Below 25'), (40, 'Below 40')]) }}</label>
+      <label>Operating margin{{ opt('opm', custom.opm, [('', 'Any'), (10, 'Above 10%'), (20, 'Above 20%'), (30, 'Above 30%')]) }}</label>
+      <label>Dividends{{ opt('div', custom.div, [('', 'Any'), (1, 'Pays a dividend'), (20, 'Pays out 20%+ of profit'), (40, 'Pays out 40%+')]) }}</label>
+      <label>Size{{ opt('cap', cap, [('', 'Any size'), ('large', 'Large'), ('mid', 'Mid'), ('small', 'Small')]) }}</label>
+      <label>Industry<select class="form-input" name="sector"><option value="">Any industry</option>{% for s, n in facets.sectors %}<option value="{{ s }}" {{ 'selected' if s == sector else '' }}>{{ s }}</option>{% endfor %}</select></label>
+      <label>Sort by{{ opt('sort', custom.sort or 'roce', [('roce', 'Return on capital'), ('growth', 'Sales growth'), ('pe', 'Cheapest P/E'), ('div', 'Dividend payout'), ('rules', 'Match with my rules')]) }}</label>
+      <div class="dz-form-go"><button class="btn btn-primary" type="submit">Show matches</button><a class="btn btn-ghost" href="/analytics">Clear</a></div>
+    </form>
+  </details>
 </section>
 
 {% endblock %}

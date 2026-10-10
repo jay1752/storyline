@@ -126,7 +126,11 @@ SCREENS = [
     {"key": "big", "label": "Big and stable", "desc": "Large companies with moderate debt and a return on capital above 12%."},
     {"key": "cheap", "label": "Cheap vs own history", "desc": "Trading in the cheapest third of their own three-year P/E range, with a return on capital above 15%."},
 ]
-SCREEN_BY_KEY = {s["key"]: s for s in SCREENS}
+EXTRA_SCREENS = {
+    "browse": {"key": "browse", "label": "Browse", "desc": "Every stock in this group, best match against your rules first."},
+    "custom": {"key": "custom", "label": "Your own screen", "desc": "Stocks that match the filters you picked below."},
+}
+SCREEN_BY_KEY = {**{s["key"]: s for s in SCREENS}, **EXTRA_SCREENS}
 
 
 def _load() -> list[dict]:
@@ -140,6 +144,12 @@ def _load() -> list[dict]:
             rows = []
     for r in rows:
         r["raws"] = json.loads(r["raws"] or "{}")
+        # Screens and sorting only trust sane figures: a 900% ROCE is a near-zero capital base, and a negative debt/equity is negative
+        # equity (not "no debt"). The rule judging keeps the raw numbers, exactly as the story page does.
+        if r["roce"] is not None and abs(r["roce"]) > 150:
+            r["roce"] = None
+        if r["de"] is not None and r["de"] < 0:
+            r["de"] = None
     with _LOCK:
         _CACHE.update(at=time.time(), rows=rows)
     return rows
@@ -156,8 +166,35 @@ def metrics_age_days() -> float | None:
     return (datetime.now(timezone.utc) - datetime.fromisoformat(r["a"].replace(" ", "T") + "+00:00")).total_seconds() / 86400
 
 
-def run_screen(key: str, th: dict, market: str = "IN", limit: int = 60) -> dict:
+CAPS = ("large", "mid", "small", "micro")
+CUSTOM_FIELDS = {  # form field -> (stock_metrics key, comparison, label)
+    "roce": ("roce", ">=", "ROCE"), "de": ("de", "<=", "Debt / equity"), "growth": ("sales_cagr_3y", ">=", "Sales growth (3y)"),
+    "pe": ("pe", "<=", "P/E"), "opm": ("opm", ">=", "Operating margin"), "div": ("div_payout", ">=", "Dividend payout"),
+}
+CUSTOM_SORTS = {"roce": ("roce", True), "growth": ("sales_cagr_3y", True), "pe": ("pe", False), "div": ("div_payout", True), "rules": (None, True)}
+
+
+def facets(market: str = "IN") -> dict:
+    """Counts for the browse tiles: size tiers and the largest sectors in a market."""
     rows = [r for r in _load() if market == "ALL" or r["market"] == market]
+    caps, sectors = {}, {}
+    for r in rows:
+        if r["cap_tier"]:
+            caps[r["cap_tier"]] = caps.get(r["cap_tier"], 0) + 1
+        sec = r["sector"]
+        if sec and sec != "Unclassified":
+            sectors[sec] = sectors.get(sec, 0) + 1
+    return {"caps": [(c, caps.get(c, 0)) for c in CAPS if caps.get(c)],
+            "sectors": sorted(sectors.items(), key=lambda kv: -kv[1])[:14], "total": len(rows)}
+
+
+def run_screen(key: str, th: dict, market: str = "IN", limit: int = 60, cap: str | None = None, sector: str | None = None,
+               custom: dict | None = None) -> dict:
+    rows = [r for r in _load() if market == "ALL" or r["market"] == market]
+    if cap in CAPS:
+        rows = [r for r in rows if r["cap_tier"] == cap]
+    if sector:
+        rows = [r for r in rows if r["sector"] == sector]
     hits: list[tuple] = []
     for r in rows:
         roce, de, bank = r["roce"], r["de"], bool(r["bank"])
@@ -168,6 +205,33 @@ def run_screen(key: str, th: dict, market: str = "IN", limit: int = 60) -> dict:
             miss = len(j["failing"])
             if miss <= 1:
                 hits.append((miss, -j["total"], -(roce or 0), r, j))
+            continue
+        if key == "browse":  # everything in the chosen group, best match against the user's rules first
+            j = judge(r["raws"], bank, th)
+            if j["total"] >= 4:
+                hits.append((len(j["failing"]), -j["total"], -(roce or 0), r, j))
+            continue
+        if key == "custom":
+            c = custom or {}
+            ok = True
+            for f, (col, op, _) in CUSTOM_FIELDS.items():
+                if c.get(f) is None:
+                    continue
+                v = r[col]
+                if v is None or (op == ">=" and v < c[f]) or (op == "<=" and v > c[f]):
+                    ok = False
+                    break
+            if ok and c.get("div") is not None and r["div_payout"] is None:
+                ok = False
+            if not ok:
+                continue
+            col, desc = CUSTOM_SORTS.get(c.get("sort") or "roce", CUSTOM_SORTS["roce"])
+            if col is None:
+                j = judge(r["raws"], bank, th)
+                hits.append((len(j["failing"]), -j["total"], -(roce or 0), r, j))
+            else:
+                v = r[col]
+                hits.append((0 if v is not None else 1, -(v or 0) if desc else (v or 0), 0, r, None))
             continue
         if key == "compounders":
             ok = r["roce_3y"] is not None and r["roce_3y"] >= 20 and r["sales_cagr_3y"] is not None and r["sales_cagr_3y"] >= 10
@@ -200,6 +264,6 @@ def run_screen(key: str, th: dict, market: str = "IN", limit: int = 60) -> dict:
     hits.sort(key=lambda h: (h[0], h[1], h[2]))
     out = []
     for _, _, _, r, j in hits[:limit]:
-        out.append({**{k: r[k] for k in ("symbol", "name", "market", "sector", "cap_tier", "roce", "de", "pe", "sales_cagr_3y", "growth_min4", "cfo_pat", "div_payout", "roce_3y", "bank")},
-                    "judge": judge(r["raws"], bool(r["bank"]), th) if key == "rules" else None})
+        out.append({**{k: r[k] for k in ("symbol", "name", "market", "sector", "cap_tier", "roce", "de", "pe", "sales_cagr_3y", "growth_min4", "cfo_pat", "div_payout", "roce_3y", "bank", "opm")},
+                    "judge": judge(r["raws"], bool(r["bank"]), th) if key in ("rules", "browse") else None})
     return {"count": len(hits), "rows": out}

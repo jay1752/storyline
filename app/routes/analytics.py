@@ -35,11 +35,21 @@ def _refresh_metrics_if_stale() -> None:
         threading.Thread(target=go, daemon=True).start()
 
 
-def _why(key: str, r: dict) -> str:
+def _why(key: str, r: dict, custom: dict | None = None) -> str:
     fmt = lambda v, s="%": f"{v:.0f}{s}" if v is not None else None
-    if key == "rules":
+    if key in ("rules", "browse"):
         j = r["judge"]
         return f"{j['passed']} of {j['total']} rules" + (f" · misses {j['failing'][0]}" if j["failing"] else "")
+    if key == "custom":
+        c = custom or {}
+        bits = []
+        if "roce" in c: bits.append(f"ROCE {fmt(r['roce'])}")
+        if "growth" in c: bits.append(f"sales {r['sales_cagr_3y']:+.0f}%/yr" if r["sales_cagr_3y"] is not None else None)
+        if "de" in c and r["de"] is not None: bits.append(f"debt/equity {r['de']:.2f}")
+        if "pe" in c and r["pe"]: bits.append(f"P/E {r['pe']:.0f}×")
+        if "opm" in c: bits.append(f"margin {fmt(r.get('opm'))}" if r.get("opm") is not None else None)
+        if "div" in c: bits.append(f"pays out {fmt(r['div_payout'])}" if r["div_payout"] is not None else None)
+        return " · ".join(b for b in bits if b) or "matches your filters"
     parts = {
         "compounders": [f"ROCE {fmt(r['roce_3y'])} avg (3y)", f"sales +{fmt(r['sales_cagr_3y'])}/yr"],
         "growers": [f"sales up {fmt(r['growth_min4'])}+ every quarter"],
@@ -52,28 +62,61 @@ def _why(key: str, r: dict) -> str:
     return " · ".join(x for x in parts if x)
 
 
+_GOALS = [  # the "not sure where to start" chooser: plain goal -> screen
+    ("safe", "Safe, low-debt businesses", "debtfree"), ("steady", "Steady growth I can hold for years", "compounders"),
+    ("fast", "Fast growth", "growers"), ("income", "Regular income", "dividend"), ("known", "Big names I may know", "big"),
+]
+
+
 @router.get("/analytics", response_class=HTMLResponse)
-def analytics_landing(request: Request, screen: str = "rules", market: str = "IN"):
+def analytics_landing(request: Request, screen: str = "rules", market: str = "IN", cap: str = "", sector: str = "",
+                      roce: str = "", de: str = "", growth: str = "", pe: str = "", opm: str = "", div: str = "", sort: str = ""):
+    from urllib.parse import urlencode
+
     from app import discovery
     from app import framework as fw
     from app.db import get_users_conn
 
-    screen = screen if screen in discovery.SCREEN_BY_KEY else "rules"
     market = market if market in ("IN", "US", "ALL") else "IN"
+    cap = cap if cap in discovery.CAPS else ""
+    custom = {}
+    for k, v in (("roce", roce), ("de", de), ("growth", growth), ("pe", pe), ("opm", opm), ("div", div)):
+        try:
+            if v != "":
+                custom[k] = float(v)
+        except ValueError:
+            pass
+    if sort in discovery.CUSTOM_SORTS:
+        custom["sort"] = sort
+    if screen == "custom" and not any(k in custom for k in discovery.CUSTOM_FIELDS):
+        screen = "rules"
+    if screen not in discovery.SCREEN_BY_KEY:
+        screen = "rules"
+    if screen == "rules" and (cap or sector):
+        screen = "browse"  # a size/sector pick on the default screen means "browse this group"
     _refresh_metrics_if_stale()
     with get_users_conn() as u:
         th = fw.resolve(u, request.state.user_id)
         tracked = {r["symbol"] for r in u.execute("SELECT symbol FROM tracked_positions WHERE user_id = ? AND status = 'active'", (request.state.user_id,))}
-    res = discovery.run_screen(screen, th, market)
+    res = discovery.run_screen(screen, th, market, cap=cap or None, sector=sector or None, custom=custom if screen == "custom" else None)
     for r in res["rows"]:
-        r["why"] = _why(screen, r)
+        r["why"] = _why(screen, r, custom)
         r["tracked"] = r["symbol"] in tracked
+    fc = discovery.facets(market)
+
+    def link(**kw):
+        q = {"screen": screen, "market": market, "cap": cap, "sector": sector}
+        q.update(kw)
+        return "/analytics?" + urlencode({k: v for k, v in q.items() if v not in ("", None)})
+
     with get_market_conn() as conn:
         total_with_data = conn.execute("SELECT COUNT(DISTINCT symbol) c FROM quarterly_data").fetchone()["c"]
     return templates.TemplateResponse(
         "analytics_landing.html",
         {"request": request, "active_nav": "analytics", "total_with_data": total_with_data, "screens": discovery.SCREENS,
-         "screen": discovery.SCREEN_BY_KEY[screen], "market": market, "result": res, "preparing": discovery.metrics_age_days() is None},
+         "screen": discovery.SCREEN_BY_KEY[screen], "market": market, "cap": cap, "sector": sector, "custom": custom, "result": res,
+         "facets": fc, "goals": _GOALS, "link": link, "preparing": discovery.metrics_age_days() is None,
+         "custom_open": screen == "custom"},
     )
 
 def _delta(cur, prev, unit=""):
