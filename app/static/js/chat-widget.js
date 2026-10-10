@@ -58,14 +58,40 @@ function _pageContext() {
   const path = window.location.pathname;
   const analyticsMatch = path.match(/^\/analytics\/(.+)$/);
   if (analyticsMatch) return { page: "analytics", symbol: decodeURIComponent(analyticsMatch[1]), label: decodeURIComponent(analyticsMatch[1]) };
+  if (path === "/analytics" || path === "/analytics/") return { page: "analytics", symbol: null, label: "Find a stock" };
   if (path.startsWith("/management")) return { page: "management", symbol: null, label: "Tracked stocks" };
   if (path.startsWith("/portfolio")) return { page: "portfolio", symbol: null, label: "Portfolio" };
+  if (path.startsWith("/community")) return { page: "community", symbol: null, label: "Community" };
+  if (path.startsWith("/rules")) return { page: "rules", symbol: null, label: "Investment rules" };
   return { page: null, symbol: null, label: "General" };
 }
 
 function _ctxKey(ctx) { return (ctx.page || "") + "|" + (ctx.symbol || ""); }
 
+// Starter questions come from the server (built from the page's own data); this static set is the fallback until they arrive.
+const _sugg = { key: null, data: null };
+
+function _loadSuggestions() {
+  const ctx = _pageContext();
+  const key = _ctxKey(ctx);
+  if (_sugg.key === key) return;
+  _sugg.key = key;
+  _sugg.data = null;
+  const q = new URLSearchParams();
+  if (ctx.page) q.set("page", ctx.page);
+  if (ctx.symbol) q.set("symbol", ctx.symbol);
+  fetch("/chat/suggestions?" + q.toString())
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      if (!d || !d.items || _sugg.key !== key) return;
+      _sugg.data = d;
+      if (!chat.messages.length) _renderLog();
+    })
+    .catch(() => { /* keep the static set */ });
+}
+
 function _suggestions() {
+  if (_sugg.data && _sugg.key === _ctxKey(_pageContext())) return _sugg.data;
   const ctx = _pageContext();
   const importIt = { label: "Import positions from a statement", attach: true };
   if (ctx.page === "management") {
@@ -81,6 +107,11 @@ function _suggestions() {
 }
 
 const TOOL_LABEL = {
+  get_stock_analytics: (a) => "Stock analytics" + (a ? " · " + a : ""),
+  get_my_rules: () => "Your rules",
+  get_management_overview: () => "Your tracked stocks",
+  get_portfolio_summary: () => "Your portfolio",
+  get_community_briefing: () => "Daily briefing",
   get_stock_summary: (a) => "Fundamentals" + (a ? " · " + a : ""),
   get_price_history: (a) => "Price history" + (a ? " · " + a : ""),
   get_portfolio_or_watchlist: () => "Your tracked stocks",
@@ -259,13 +290,14 @@ function _scrollDown(force) {
 }
 
 function _renderContext() {
+  _loadSuggestions();
   const box = $("chat-context");
   if (!box) return;
   const ctx = _pageContext();
   box.textContent = "";
   box.append("Viewing ", Object.assign(_el("b"), { textContent: ctx.label }));
   const input = $("chat-input");
-  if (input) input.placeholder = ctx.page === "analytics" ? "Ask about " + ctx.symbol + "…" : ctx.page ? "Ask about this page…" : "Ask anything about your stocks…";
+  if (input) input.placeholder = ctx.page === "analytics" && ctx.symbol ? "Ask about " + ctx.symbol + " or anything else…" : ctx.page ? "Ask about this page…" : "Ask anything about your stocks…";
 }
 
 function _sourcesRow(tools) {

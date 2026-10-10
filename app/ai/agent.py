@@ -39,9 +39,19 @@ def _note_tool(name: str, arg: str | None = None) -> None:
     if used is not None:
         used.append({"name": name, "arg": arg})
 
-SYSTEM_PROMPT = """You are Stocktale's in-app assistant, answering questions about stocks \
-and the user's own tracked positions/watchlist using the app's own data via your tools — \
-never from general knowledge or memory, since numbers you'd recall are very likely stale.
+SYSTEM_PROMPT = """You are Stocktale's in-app assistant. You help the user with (1) the screen they are on, using the \
+page data you are given and your tools, and (2) general investing questions and research.
+
+Facts about this app's data (a stock's numbers, the user's holdings, their rules, the daily briefing, result dates) must come from the \
+page data or a tool call, never from memory - numbers you'd recall are likely stale. If the data you have does not cover the question, \
+say so and offer the nearest thing. For general questions (what a ratio means, how a business model works, how to think about valuation, \
+comparing approaches) answer from your own knowledge, clearly separate it from the user's data, and note when something may be out of date. \
+You have no live web access: for news after your knowledge, say you can't check.
+
+Tools: get_stock_analytics (everything the Analytics page shows for any stock), get_my_rules, get_management_overview (the user's tracked \
+stocks and their latest stories), get_portfolio_summary, get_community_briefing, get_stock_summary, get_price_history, search_stocks. \
+Call a tool when the user asks about something other than the screen they are on. To judge any stock against the user's rules, use get_stock_analytics (it carries the pass/fail per rule); get_stock_summary is only a quick look. Speak to the user as \"you\" / \"your\", never \"the user\". Do not narrate before calling a tool; just call it, \
+then answer.
 
 The user's personal framework (not yours to invent) classifies holdings into buckets — \
 Core, Steady, Emerging, Reserve, Trim/Exit — and watches for exits on three speeds: \
@@ -218,3 +228,48 @@ def propose_positions(rows: list[StatementRow], statement_date: Optional[str] = 
     if created is not None:
         created.append(proposal["proposal_id"])
     return proposal
+
+
+@agent.tool_plain
+def get_stock_analytics(symbol: str) -> str:
+    """Everything the Analytics page shows for one stock: the user's rules verdict (pass/fail per rule), the last 8 quarters (revenue, growth,
+    margin, profit, EPS, promoter/pledge/FII/DII), annual figures incl. cash flow, valuation, analyst targets and estimates, the next results
+    date, a company description and peers. `symbol` is exchange-qualified, e.g. "NSE:INFY"; use search_stocks if unsure."""
+    _note_tool("get_stock_analytics", symbol)
+    from app.ai.page_context import stock_digest
+    return stock_digest(current_user_id.get(), symbol) or f"no stock found for symbol {symbol!r}"
+
+
+@agent.tool_plain
+def get_my_rules() -> str:
+    """The user's own investment-rule thresholds (ROCE, debt/equity, pledge, growth...), position-sizing limits and daily-story settings."""
+    _note_tool("get_my_rules")
+    from app.ai.page_context import rules_digest
+    uid = current_user_id.get()
+    return (rules_digest(uid) if uid else None) or "not available"
+
+
+@agent.tool_plain
+def get_management_overview() -> str:
+    """Every stock the user tracks (positions and watchlist) with return, valuation label and the latest AI story verdict, summary and flags."""
+    _note_tool("get_management_overview")
+    from app.ai.page_context import management_digest
+    uid = current_user_id.get()
+    return (management_digest(uid) if uid else None) or "not available"
+
+
+@agent.tool_plain
+def get_portfolio_summary() -> str:
+    """The user's portfolio: holdings with weights, P&L, sector mix, and whether any position or sector breaks their sizing limits."""
+    _note_tool("get_portfolio_summary")
+    from app.ai.page_context import portfolio_digest
+    uid = current_user_id.get()
+    return (portfolio_digest(uid) if uid else None) or "not available"
+
+
+@agent.tool_plain
+def get_community_briefing(date: Optional[str] = None) -> str:
+    """The daily AI market briefing posted in Community. `date` is yyyy-mm-dd; omit for the latest."""
+    _note_tool("get_community_briefing", date)
+    from app.ai.page_context import briefing_digest
+    return briefing_digest(date) or "no briefing found"

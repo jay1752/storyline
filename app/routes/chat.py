@@ -14,11 +14,13 @@ import logging
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic_ai.messages import BinaryContent, ModelMessagesTypeAdapter
+from pydantic_ai import Agent
+from pydantic_ai.messages import BinaryContent, ModelMessagesTypeAdapter, PartDeltaEvent, PartStartEvent, TextPart, TextPartDelta
 
 from app import positions as positions_mod
 from app.ai.agent import agent, proposals_created, tools_used
 from app.ai import errors
+from app.ai.page_context import page_instructions, suggestions
 from app.ai.providers import PROVIDERS, build_chain, get_user_settings
 
 router = APIRouter()
@@ -77,6 +79,33 @@ def _sse(event: str | None, data) -> str:
     return f"{prefix}data: {payload}\n\n"
 
 
+async def _run_events(prompt, model, message_history, instructions):
+    """Yields ("text", delta) as the answer streams, then ("done", all_messages). Walks the agent graph itself instead of using
+    run_stream(): run_stream treats the FIRST text as the final answer, so a model that writes "Let me check..." and then calls a tool
+    (free models do this constantly) had its answer cut off after the preamble. Here tools run, and the text after them streams too."""
+    emitted = False
+    async with agent.iter(prompt, model=model, message_history=message_history, instructions=instructions or None) as run:
+        async for node in run:
+            if not Agent.is_model_request_node(node):
+                continue
+            first = True
+            async with node.stream(run.ctx) as events:
+                async for ev in events:
+                    text = None
+                    if isinstance(ev, PartStartEvent) and isinstance(ev.part, TextPart):
+                        text = ev.part.content
+                    elif isinstance(ev, PartDeltaEvent) and isinstance(ev.delta, TextPartDelta):
+                        text = ev.delta.content_delta
+                    if not text:
+                        continue
+                    if first and emitted:
+                        yield "text", "\n\n"  # a new model turn after tool calls: start a fresh paragraph
+                    first = False
+                    emitted = True
+                    yield "text", text
+        yield "done", run.result.all_messages()
+
+
 async def _stream(user_id: int, message: str, history_json: str | None, page: str | None, symbol: str | None, upload=None):
     if user_id is None:
         # AuthMiddleware deliberately lets an unauthenticated request through to this
@@ -94,13 +123,10 @@ async def _stream(user_id: int, message: str, history_json: str | None, page: st
 
     message_history = ModelMessagesTypeAdapter.validate_json(history_json) if history_json else None
 
-    # page/symbol are only a hint prepended to the prompt — the agent still calls its
-    # own tools for real data, never trusting this as the actual financial fact.
-    hint = ""
-    if page == "analytics" and symbol:
-        hint = f"[The user is currently viewing the Analytics page for {symbol}.] "
-    elif page in ("management", "portfolio"):
-        hint = f"[The user is currently viewing the {page.capitalize()} page (their tracked positions/watchlist).] "
+    # The screen's data goes in as per-run instructions (rebuilt every turn, so it is never stale and never piles up in the history);
+    # the short hint in the prompt itself keeps the model oriented when the user moves between pages mid-conversation.
+    instructions = page_instructions(user_id, page, symbol)
+    hint = f"[Now on the {page} page" + (f" for {symbol}" if symbol else "") + ".] " if page else ""
 
     prompt = hint + message
     if upload is not None:
@@ -133,26 +159,30 @@ async def _stream(user_id: int, message: str, history_json: str | None, page: st
             announced = False
             reported = 0  # how many tool calls the client already knows about
             try:
-                async with agent.run_stream(prompt, model=link["model"], message_history=message_history) as result:
-                    async for text in result.stream_text(delta=True):
+                history = None
+                async for kind, val in _run_events(prompt, link["model"], message_history, instructions):
+                    if kind == "text":
                         if not announced:
                             announced = True
                             yield _sse(None, {"type": "model", "label": link["label"], "fallback": link["role"] == "fallback"})
-                        if len(used) > reported:  # tools run before the first token — surface them as the answer starts
+                        if len(used) > reported:  # tools run before the first token - surface them as the answer starts
                             yield _sse(None, {"type": "tools", "items": used[reported:]})
                             reported = len(used)
                         sent_any = True
-                        yield _sse(None, {"type": "text", "delta": text})
-                    if not announced:
-                        yield _sse(None, {"type": "model", "label": link["label"], "fallback": link["role"] == "fallback"})
-                    if len(used) > reported:
-                        yield _sse(None, {"type": "tools", "items": used[reported:]})
-                    history = ModelMessagesTypeAdapter.dump_json(_strip_binary(result.all_messages())).decode()
-                    yield _sse(None, {"type": "history", "messages": history})
-                    for proposal_id in created:
-                        proposal = positions_mod.get_proposal(user_id, proposal_id)
-                        if proposal:
-                            yield _sse(None, {"type": "proposal", "proposal": proposal})
+                        yield _sse(None, {"type": "text", "delta": val})
+                    else:
+                        history = ModelMessagesTypeAdapter.dump_json(_strip_binary(val)).decode()
+                if not announced:
+                    yield _sse(None, {"type": "model", "label": link["label"], "fallback": link["role"] == "fallback"})
+                if len(used) > reported:
+                    yield _sse(None, {"type": "tools", "items": used[reported:]})
+                if not sent_any:
+                    raise RuntimeError("the model returned no answer")
+                yield _sse(None, {"type": "history", "messages": history})
+                for proposal_id in created:
+                    proposal = positions_mod.get_proposal(user_id, proposal_id)
+                    if proposal:
+                        yield _sse(None, {"type": "proposal", "proposal": proposal})
                 yield "data: [DONE]\n\n"
                 return
             except Exception as e:  # noqa: BLE001 — a model/tool-call failure must reach the widget as a visible error, not a dropped connection
@@ -195,6 +225,12 @@ async def chat_stream(request: Request):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/chat/suggestions")
+def chat_suggestions(request: Request, page: str | None = None, symbol: str | None = None):
+    """Starter questions for the screen the user is on, built from that screen's own data."""
+    return suggestions(request.state.user_id, page, symbol)
 
 
 @router.post("/chat/proposals/{proposal_id}/confirm")
