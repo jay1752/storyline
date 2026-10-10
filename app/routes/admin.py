@@ -183,11 +183,14 @@ async def job_save(request: Request, key: str):
     if key not in sched.JOBS:
         return JSONResponse({"error": "Unknown job."}, status_code=404)
     try:
-        hm = sched.parse_hm(str(d.get("time", "")))
-        days = [int(x) for x in d.get("days", [])]
+        if sched.JOBS[key].get("every"):  # interval job: minutes between runs
+            hm, days = int(d.get("every")), list(sched.ALL_DAYS)
+        else:
+            hm = sched.parse_hm(str(d.get("time", "")))
+            days = [int(x) for x in d.get("days", [])]
         sched.save_job(key, bool(d.get("enabled", True)), hm, days)
-    except (ValueError, AttributeError):
-        return JSONResponse({"error": "Enter a time like 19:00 and pick at least one weekday."}, status_code=400)
+    except (ValueError, AttributeError, TypeError):
+        return JSONResponse({"error": "Enter a time like 19:00 and pick at least one weekday (or, for an hourly job, 5 to 1440 minutes)."}, status_code=400)
     return {"ok": True}
 
 

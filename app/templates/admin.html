@@ -19,9 +19,9 @@
         <tbody>
           {% for j in jobs %}
           <tr data-key="{{ j.key }}" data-time="{{ j.time }}" data-days="{{ j.days|join(',') }}" data-enabled="{{ 1 if j.enabled else 0 }}"
-              data-default-time="{{ j.default_time }}" data-default-days="{{ j.default_days|join(',') }}">
+              data-default-time="{{ j.default_time }}" data-default-days="{{ j.default_days|join(',') }}" data-every="{{ j.every or '' }}" data-default-every="{{ j.default_every or '' }}">
             <td><b>{{ j.label }}</b><span class="row-sub">{{ j.desc }}</span></td>
-            <td class="job-sched">{{ j.time }} · {% set names = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}{% if j.days|length == 7 %}every day{% elif j.days == [0,1,2,3,4] %}Mon–Fri{% else %}{% for d in j.days %}{{ names[d] }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}
+            <td class="job-sched">{% if j.every %}{{ 'every hour' if j.every == 60 else ('every ' ~ (j.every // 60) ~ ' hours' if j.every % 60 == 0 else 'every ' ~ j.every ~ ' min') }}{% else %}{{ j.time }} · {% set names = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}{% if j.days|length == 7 %}every day{% elif j.days == [0,1,2,3,4] %}Mon–Fri{% else %}{% for d in j.days %}{{ names[d] }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}{% endif %}
               {% if j.customised %}<span class="badge accent">changed</span>{% endif %}</td>
             <td><label class="switch"><input type="checkbox" class="job-on" {{ 'checked' if j.enabled else '' }} aria-label="Run {{ j.label }} automatically"><span></span></label></td>
             <td>{% if j.last %}<span class="badge {{ 'pos' if j.last.status == 'success' else ('neg' if j.last.status in ('failed','not_configured') else 'neutral') }}">{{ j.last.status }}</span>

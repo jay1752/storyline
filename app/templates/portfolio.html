@@ -35,7 +35,7 @@
       <div><span class="kpi-label">1D returns</span><b class="{{ sm.day_tone }}">{{ sm.day }}</b><span class="pf-pill {{ sm.day_tone }}">{{ sm.day_pct }}</span></div>
       <div><span class="kpi-label">Holdings</span><b>{{ sm.count }}</b></div>
     </div>
-    {% if key == 'all' and has_us %}<span class="section-note">US holdings are converted at a fixed ₹{{ fx|int }}/$ in this combined view.</span>{% endif %}
+    {% if key == 'all' and has_us %}<span class="section-note">US holdings are converted at ₹{{ '%.2f'|format(fx) }}/$ in this combined view{% if fx_info.stale %} (estimate: no live rate yet){% elif fx_info.fetched_at %} (updated <time data-utc="{{ fx_info.fetched_at }}">{{ fx_info.fetched_at[:16] }} UTC</time>){% endif %}.</span>{% endif %}
     {% if sm.costed < sm.count %}<span class="section-note">Returns cover the {{ sm.costed }} holding{{ '' if sm.costed == 1 else 's' }} with a buy price.</span>{% endif %}
   </div>
   {% endfor %}

@@ -127,7 +127,7 @@ SQLite runs with a rollback journal (not WAL) and **one writer at a time**: run 
 |---|---|---|
 | US macro (fed funds, CPI, unemployment, GDP) | FRED (free key) | Primary; one row per quarter |
 | India macro (CPI inflation, GDP growth) | World Bank | Primary; annual only; no policy rate |
-| USD/INR for the combined portfolio view | **Fixed constant ₹83** (`app/routes/portfolio.py`) | Known gap — live RBI rate is ~₹96 |
+| USD/INR for the combined portfolio view and position weights | Frankfurter (ECB reference rate), then open.er-api.com, then Yahoo `INR=X`; stored in `fx_rates` | Primary; refreshed hourly by the `fx_usd_inr` job (Admin > Scheduled jobs, interval editable); a quote more than 8% from the last one is rejected |
 | Market news for the Community briefing and daily analysis | Finnhub | Reference |
 
 ### 3.8 User data (never part of syncs)
@@ -189,7 +189,7 @@ Two defects in our own pipeline were found by this validation and fixed: (1) BSE
 - **IndianAPI has no data for:** ETFs, Bajaj Auto, Nippon Life AMC, HCL Infosystems, Bosch Home Comfort and ~1,150 other mostly small or illiquid names; M&M Financial and J&K Bank are not found by its search; tickers with `&` or `-` resolve unreliably and were skipped or looked up by name with an identity check.
 - **Analyst coverage:** ~68 priority stocks have no consensus; quarterly EPS estimates exist for ~270 of 493.
 - **IndianAPI EPS and the filings:** IndianAPI EPS is bonus/split-adjusted; BSE EPS is not. Mixed series show a step at the switch-over quarter.
-- **FX:** fixed ₹83.
+- **FX:** the ECB rate is one fixing per working day, so the hourly job mostly re-confirms it; Yahoo is the only intraday source and is last in the chain.
 - **India fund expense ratio / AUM:** not available.
 - **US:** debt is null for ~40% of stocks; some data gaps are real ceilings of the free sources.
 

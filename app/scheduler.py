@@ -40,6 +40,10 @@ JOBS = {
         "label": "Community briefing", "source": "community_briefing", "hm": 7 * 60 + 30, "days": ALL_DAYS,
         "desc": "The AI-written market briefing at the top of Community. After the US close, before India opens.",
     },
+    "fx_usd_inr": {
+        "label": "USD/INR exchange rate", "source": "fx_usd_inr", "every": 60, "hm": 0, "days": ALL_DAYS,
+        "desc": "The rupee value of a dollar, used wherever a US holding is shown in rupees (Portfolio's combined view, position weight in the daily analysis). ECB reference rate, with two backups.",
+    },
     "insights": {
         "label": "Daily stock analysis", "source": "insights", "hm": 8 * 60 + 30, "days": ALL_DAYS,
         "desc": "Each user's per-stock story and flags (users with tracked stocks, a usable AI model, and automatic analysis on). Which stocks run follows each user's Investment rules: platform default, own setting, per-stock switch.",
@@ -62,7 +66,7 @@ def parse_hm(text: str) -> int:
 def job_config(key: str, u=None) -> dict:
     """Effective settings for one job: defaults, overridden by an admin's saved row."""
     d = JOBS[key]
-    cfg = {"enabled": True, "hm": d["hm"], "days": set(d["days"]), "customised": False}
+    cfg = {"enabled": True, "hm": d["hm"], "days": set(d["days"]), "customised": False, "every": d.get("every")}
 
     def read(conn):
         return conn.execute("SELECT enabled, hm, days FROM job_settings WHERE key = ?", (key,)).fetchone()
@@ -74,16 +78,22 @@ def job_config(key: str, u=None) -> dict:
         row = read(u)
     if row:
         cfg.update(enabled=bool(row["enabled"]), hm=row["hm"], days={int(x) for x in row["days"].split(",") if x != ""}, customised=True)
+        if d.get("every"):  # interval jobs keep their interval (minutes) in the hm column; they run every day
+            cfg.update(every=row["hm"], days=set(ALL_DAYS))
     return cfg
 
 
 def save_job(key: str, enabled: bool, hm: int, days) -> None:
+    if key in JOBS and JOBS[key].get("every"):  # interval job: `hm` is the interval in minutes
+        if not (5 <= hm <= 1440):
+            raise ValueError("Pick an interval between 5 minutes and 24 hours.")
+        days = list(ALL_DAYS)
     days = sorted({int(x) for x in days})
     if key not in JOBS or not days or any(x not in ALL_DAYS for x in days):
         raise ValueError("Pick at least one valid weekday.")
     d = JOBS[key]
     with get_users_conn() as u:
-        if enabled and hm == d["hm"] and tuple(days) == tuple(d["days"]):  # identical to the defaults: not a customisation
+        if enabled and hm == (d.get("every") or d["hm"]) and tuple(days) == tuple(d["days"]):  # identical to the defaults: not a customisation
             u.execute("DELETE FROM job_settings WHERE key = ?", (key,))
         else:
             u.execute("INSERT INTO job_settings (key, enabled, hm, days) VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET "
@@ -102,6 +112,8 @@ def _due(key: str, now: datetime | None = None) -> bool:
     """Enabled, scheduled for today's weekday, and past its start time (IST)."""
     now = now or datetime.now(IST)
     cfg = job_config(key)
+    if cfg.get("every"):
+        return cfg["enabled"]
     return cfg["enabled"] and now.weekday() in cfg["days"] and now.hour * 60 + now.minute >= cfg["hm"]
 
 
@@ -110,6 +122,15 @@ def next_run_text(key: str, last_success_utc: str | None = None) -> str:
     cfg, now = job_config(key), datetime.now(IST)
     if not cfg["enabled"]:
         return "paused"
+    if cfg.get("every"):
+        if not last_success_utc:
+            return "due now — starts within 5 minutes"
+        try:
+            nxt = datetime.fromisoformat(last_success_utc).replace(tzinfo=timezone.utc) if "+" not in last_success_utc and "Z" not in last_success_utc else datetime.fromisoformat(last_success_utc)
+        except ValueError:
+            return "—"
+        nxt = nxt + timedelta(minutes=cfg["every"])
+        return "due now — starts within 5 minutes" if nxt <= datetime.now(timezone.utc) else nxt.astimezone(IST).strftime("%H:%M") + " IST"
     if now.weekday() in cfg["days"] and now.hour * 60 + now.minute >= cfg["hm"]:
         start = now.replace(hour=cfg["hm"] // 60, minute=cfg["hm"] % 60, second=0, microsecond=0).astimezone(timezone.utc).isoformat()
         if not last_success_utc or last_success_utc < start:
@@ -142,6 +163,7 @@ def jobs_view() -> list[dict]:
         out.append({
             "key": key, "label": d["label"], "desc": d["desc"], "enabled": cfg["enabled"], "time": hm_text(cfg["hm"]),
             "days": sorted(cfg["days"]), "customised": cfg["customised"], "default_time": hm_text(d["hm"]), "default_days": list(d["days"]),
+            "every": cfg.get("every"), "default_every": d.get("every"),
             "last": ({**last, "started_ist": ist_text(last["started_at"]),
                       "took": _took(last)} if last else None),
             "next": next_run_text(key, r["last_success"]),
@@ -193,9 +215,37 @@ def _loop() -> None:
 
 
 def _tick() -> None:
-    _tick_prices()      # first: the briefing and the position analyses should read today's prices
+    _tick_fx()          # first of all: everything that shows US holdings in rupees should use a fresh rate
+    _tick_prices()      # then prices: the briefing and the position analyses should read today's prices
     _tick_briefing()
     _tick_insights()
+
+
+FX_RETRY = timedelta(minutes=10)
+
+
+def _tick_fx() -> None:
+    """Hourly (admin-editable) USD/INR refresh. Interval jobs run when their interval has passed since the last SUCCESS; after a failure they
+    retry after 10 minutes rather than the 2 hours the daily jobs wait."""
+    from app.ingestion.runner import enqueue_ingestion
+
+    key = "fx_usd_inr"
+    if not _due(key):
+        return
+    cfg = job_config(key)
+    with get_market_conn() as m:
+        last = m.execute("SELECT started_at, status FROM ingestion_runs WHERE source_name = ? ORDER BY id DESC LIMIT 1", (JOBS[key]["source"],)).fetchone()
+        ok = m.execute("SELECT started_at FROM ingestion_runs WHERE source_name = ? AND status = 'success' ORDER BY id DESC LIMIT 1", (JOBS[key]["source"],)).fetchone()
+    now = datetime.now(timezone.utc)
+    stamp = lambda s: datetime.fromisoformat(s).replace(tzinfo=timezone.utc) if ("+" not in s and "Z" not in s) else datetime.fromisoformat(s)
+    if last and last["status"] in ("queued", "running"):
+        return
+    if ok and now - stamp(ok["started_at"]) < timedelta(minutes=cfg["every"]):
+        return
+    if last and last["status"] != "success" and now - stamp(last["started_at"]) < FX_RETRY:
+        return
+    logger.info("scheduler: enqueueing %s", key)
+    enqueue_ingestion(JOBS[key]["source"], "prices")
 
 
 def _tick_prices() -> None:

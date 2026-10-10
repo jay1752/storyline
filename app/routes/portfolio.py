@@ -3,13 +3,13 @@ import pandas as pd
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
+from app import fx as fx_mod
 from app.db import get_market_conn, get_users_conn
 from app.routes.analytics import _spark
 from app.templates_config import templates
 
 router = APIRouter()
 
-FX_RATE_INR_PER_USD = 83.0
 
 BENCHMARKS = {"nifty50": 4.2, "sp500": 5.8}  # still illustrative — no real index-level
 # price feed sourced yet, separate task from wiring this page to real positions
@@ -108,7 +108,7 @@ def _donut(items: list[tuple[str, float]], max_items: int = 7) -> list[dict]:
 
 def _summary(hs: list[dict], cur: str, fx: float) -> dict:
     """Totals for a set of holdings in one display currency (`fx` converts each holding's value
-    into it: 1.0 for same-currency, 83 for USD→INR in the combined view)."""
+    into it: 1.0 for same-currency, the live USD→INR rate in the combined view)."""
     conv = lambda h, k: (h[k] * (fx if h["market"] == "US" and cur == "₹" and fx != 1.0 else 1.0)) if h[k] is not None else None
     value = sum(conv(h, "value") for h in hs)
     costed = [h for h in hs if h["invested"] is not None]
@@ -130,6 +130,8 @@ def _summary(hs: list[dict], cur: str, fx: float) -> dict:
 
 @router.get("/portfolio", response_class=HTMLResponse)
 def portfolio_screen(request: Request):
+    fx_info = fx_mod.usd_inr()  # live USD->INR from the hourly job (Admin > Scheduled jobs)
+    FX = fx_info["rate"]
     user_id = request.state.user_id
     with get_users_conn() as u:
         rows = u.execute(
@@ -177,7 +179,7 @@ def portfolio_screen(request: Request):
             })
 
     for h in holdings:
-        h["value_inr"] = h["value"] * (FX_RATE_INR_PER_USD if h["market"] == "US" else 1.0)
+        h["value_inr"] = h["value"] * (FX if h["market"] == "US" else 1.0)
     total_inr = sum(h["value_inr"] for h in holdings)
     for h in holdings:
         h["weight_pct"] = round(h["value_inr"] / total_inr * 100, 1) if total_inr else 0
@@ -191,7 +193,7 @@ def portfolio_screen(request: Request):
     india = [h for h in holdings if h["market"] == "IN"]
     us = [h for h in holdings if h["market"] == "US"]
     summaries = {
-        "all": _summary(holdings, "₹", FX_RATE_INR_PER_USD),
+        "all": _summary(holdings, "₹", FX),
         "in": _summary(india, "₹", 1.0) if india else None,
         "us": _summary(us, "$", 1.0) if us else None,
     }
@@ -237,7 +239,7 @@ def portfolio_screen(request: Request):
             "movers": movers,
             "needs_details": needs_details,
             "as_of": as_of,
-            "fx": FX_RATE_INR_PER_USD,
+            "fx": FX, "fx_info": fx_info,
             "has_us": bool(us),
             "has_in": bool(india),
             "max_weight": max_weight,

@@ -36,7 +36,6 @@ logger = logging.getLogger(__name__)
 
 DISCLAIMER = ("Not SEBI-registered advice. This is your own framework applied by an AI to public data — it can be wrong. "
               "Verify the numbers before acting.")
-FX_INR_PER_USD = 83.0  # same fixed rate the Portfolio page uses for its combined view
 VERDICT_TO_SIGNAL = {"BUY": "buy_consider", "HOLD": "hold", "TRIM": "trim_consider", "EXIT": "exit_consider", "WATCH": "watch"}
 
 SYSTEM_PROMPT = """You are the analyst inside Stocktale, applying the user's personal stock-investment-analysis framework
@@ -226,6 +225,8 @@ def position_weight(u, pos, price) -> float | None:
     qty, sym = pos["quantity"], pos["symbol"]
     if pos["anchor_type"] != "position" or not qty or not price:
         return None
+    from app import fx
+    FX_INR_PER_USD = fx.rate()  # live USD->INR (hourly job), the same rate the Portfolio page uses
     total = 0.0
     with get_market_conn() as m:
         for p in u.execute("SELECT symbol, quantity FROM tracked_positions WHERE user_id = ? AND anchor_type = 'position' AND status = 'active' AND quantity IS NOT NULL", (pos["user_id"],)):

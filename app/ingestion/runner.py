@@ -51,6 +51,7 @@ from app.ingestion.nse_results_source import NseResultsSource
 from app.ingestion.sec13f_source import Sec13FSource
 from app.ingestion.bse_ratio_inputs_source import BseRatioInputsSource
 from app.ingestion.daily_prices_source import DailyPriceSource
+from app.ingestion.fx_source import FxSource
 from app.ingestion.nse_integrated_source import NseIntegratedSource
 from app.ingestion.sec_edgar_source import SecEdgarSource
 from app.ingestion.tiingo_source import TiingoSource
@@ -76,6 +77,7 @@ SOURCES = {
     "moneycontrol": MoneyControlSource(),
     "sec_13f": Sec13FSource(),
     "worldbank": WorldBankSource(),
+    "fx_usd_inr": FxSource(),
     "fred": FredSource(),
 }
 

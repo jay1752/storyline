@@ -125,6 +125,15 @@ CREATE TABLE IF NOT EXISTS stock_metrics (   -- one row per stock with fundament
     updated_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS fx_rates (        -- USD/INR (INR per 1 USD) fetched by the hourly fx_usd_inr job; the newest row is the platform rate
+    pair TEXT NOT NULL,
+    rate REAL NOT NULL,
+    source TEXT NOT NULL,         -- frankfurter (ECB) | open.er-api.com | yfinance
+    as_of TEXT,                   -- the quote's own date/time as the source reports it
+    fetched_at TEXT NOT NULL,     -- UTC
+    PRIMARY KEY (pair, fetched_at)
+);
+
 CREATE TABLE IF NOT EXISTS institutional_holdings (
     symbol                TEXT NOT NULL REFERENCES stocks(symbol),
     period_end_date       TEXT NOT NULL,      -- 13F reporting quarter-end, e.g. "2026-06-30"

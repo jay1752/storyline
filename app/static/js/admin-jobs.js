@@ -21,7 +21,7 @@
     const days = () => row.dataset.days.split(",").filter(Boolean).map(Number);
 
     on.addEventListener("change", async () => {
-      try { await post(key, "save", { enabled: on.checked, time: row.dataset.time, days: days() }); location.reload(); }
+      try { await post(key, "save", row.dataset.every ? { enabled: on.checked, every: +row.dataset.every } : { enabled: on.checked, time: row.dataset.time, days: days() }); location.reload(); }
       catch (e) { on.checked = !on.checked; say(e.message, true); }
     });
 
@@ -37,6 +37,20 @@
       ed = document.createElement("tr"); ed.className = "job-editor";
       const td = document.createElement("td"); td.colSpan = 6;
       const wrap = document.createElement("div"); wrap.className = "job-edit-form";
+      if (row.dataset.every) {  // interval job (e.g. the hourly exchange rate): just the number of minutes
+        const n = document.createElement("input"); n.type = "number"; n.min = 5; n.max = 1440; n.step = 5; n.value = row.dataset.every; n.className = "form-input"; n.setAttribute("aria-label", "Minutes between runs");
+        const lab2 = document.createElement("span"); lab2.className = "section-note"; lab2.textContent = "minutes between runs (5 to 1440)";
+        const save2 = document.createElement("button"); save2.type = "button"; save2.className = "btn btn-sm btn-primary"; save2.textContent = "Save";
+        const reset2 = document.createElement("button"); reset2.type = "button"; reset2.className = "btn btn-sm"; reset2.textContent = "↺ Reset to default"; reset2.title = "Back to every " + row.dataset.defaultEvery + " minutes";
+        const cancel2 = document.createElement("button"); cancel2.type = "button"; cancel2.className = "btn btn-sm btn-ghost"; cancel2.textContent = "Cancel";
+        const m3 = document.createElement("span"); m3.className = "rule-msg";
+        wrap.append(n, lab2, save2, reset2, cancel2, m3); td.appendChild(wrap); ed.appendChild(td); row.after(ed);
+        const bad = (e) => { m3.textContent = e.message; m3.classList.add("bad"); };
+        save2.onclick = async () => { try { await post(key, "save", { enabled: on.checked, every: +n.value }); location.reload(); } catch (e) { bad(e); } };
+        reset2.onclick = async () => { try { await post(key, "reset"); location.reload(); } catch (e) { bad(e); } };
+        cancel2.onclick = () => ed.remove();
+        return;
+      }
       const t = document.createElement("input"); t.type = "time"; t.value = row.dataset.time; t.className = "form-input"; t.setAttribute("aria-label", "Start time, IST");
       const lab = document.createElement("span"); lab.className = "section-note"; lab.textContent = "starts at (IST) on:";
       const dayBoxes = NAMES.map((n, i) => {
