@@ -1699,3 +1699,16 @@ details.auth-pw[open] > summary { margin-bottom: 0.8rem; }
   body .fin th, body table th, body .eyebrow, body .user-sub, body .chat-context, body .chat-foot, body small, body label, body .pf-lg-val, body time { font-size: 0.78rem; }
   body time, body small, body label, body .hint { font-size: 0.78rem !important; }
 }
+
+
+/* install hint: phones only, sits just above the tab bar */
+.install-hint { display: none; }
+@media (max-width: 1000px) {
+  .install-hint:not([hidden]) {
+    display: flex; align-items: center; gap: 0.6rem; position: fixed; z-index: 34; left: 0.7rem; right: 0.7rem;
+    bottom: calc(3.8rem + env(safe-area-inset-bottom)); padding: 0.55rem 0.6rem 0.55rem 0.9rem;
+    background: var(--structure); color: var(--on-structure, #F4F2EC); border-radius: var(--r-lg); box-shadow: var(--shadow-lg); font-size: 0.85rem; line-height: 1.35;
+  }
+  .install-hint [data-text] { flex: 1; }
+  .install-hint .icon-btn { color: inherit; }
+}

@@ -6,6 +6,13 @@
   <title>Tenetfolio · Research any stock. Check your portfolio against your own rules</title>
   <meta name="description" content="Research any stock to the quarter, write the rules you invest by, and have your portfolio checked against them every day. India and US stocks. Descriptive research, not investment advice.">
   <link rel="canonical" href="https://tenetfolio.com/">
+  <meta name="theme-color" content="#12261F">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Tenetfolio">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Tenetfolio">
   <meta property="og:title" content="Tenetfolio: write your investing rules while you're calm">
@@ -122,5 +129,6 @@
  <div class="wrap close"><h2>Rules written in calm <em>are easier to keep.</em></h2><a class="btn btn-a" href="{{ "/analytics" if user else cta_href }}">{{ "Open Tenetfolio" if user else "Continue with Google" }}</a><p class="fine" style="margin:14px 0 0">Free to start. Your data stays yours, with one-click delete.</p></div>
 </div>
 <footer><div class="wrap"><span>Tenetfolio · A tenet is a rule you hold to. · <a href="mailto:tenetfolio@gmail.com">tenetfolio@gmail.com</a></span><span>A descriptive research tool. It does not give investment advice. Figures come from filings and public sources and can contain errors. · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span></div></footer>
+<script src="/static/js/pwa.js?v={{ asset_version('js/pwa.js') }}" defer></script>
 </body>
 </html>

@@ -20,7 +20,7 @@ from app.auth.tokens import get_session_user
 SESSION_COOKIE = "session_id"
 
 # Paths (or prefixes) reachable with no session at all.
-PUBLIC_PATHS = {"/", "/auth/google", "/auth/google/callback", "/login", "/signup", "/logout", "/forgot-password", "/reset-password", "/verify-email", "/privacy", "/terms"}
+PUBLIC_PATHS = {"/", "/auth/google", "/auth/google/callback", "/login", "/signup", "/logout", "/forgot-password", "/reset-password", "/verify-email", "/privacy", "/terms", "/sw.js", "/manifest.webmanifest", "/offline"}
 PUBLIC_PREFIXES = ("/static/",)
 
 current_user_id: contextvars.ContextVar[int | None] = contextvars.ContextVar("current_user_id", default=None)

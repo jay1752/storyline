@@ -7,6 +7,7 @@
   <script src="/static/js/htmx.min.js?v={{ asset_version('js/htmx.min.js') }}"></script>
   <script src="/static/js/shell.js?v={{ asset_version('js/shell.js') }}" defer></script>
   <script src="/static/js/chat-widget.js?v={{ asset_version('js/chat-widget.js') }}" defer></script>
+  <script src="/static/js/pwa.js?v={{ asset_version('js/pwa.js') }}" defer></script>
 </head>
 <body>
   {% include "_icons.html" %}
@@ -81,6 +82,14 @@
       </main>
     </div>
   </div>
+
+  {% if user %}
+  <div class="install-hint" id="install-hint" hidden role="region" aria-label="Install the app">
+    <span data-text>Add Tenetfolio to your home screen for one-tap access.</span>
+    <button type="button" class="btn btn-sm btn-primary" data-install hidden>Install</button>
+    <button type="button" class="icon-btn" data-dismiss aria-label="Dismiss"><svg class="icon icon-sm"><use href="#i-x"/></svg></button>
+  </div>
+  {% endif %}
 
   {% if user %}
   <nav class="tabbar" aria-label="Main">

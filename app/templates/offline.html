@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2B4A45">
+  <title>Offline · Tenetfolio</title>
+  <style>
+    :root { color-scheme: light; }
+    body { margin: 0; min-height: 100dvh; display: grid; place-items: center; background: #F4F2EC; color: #12261F; font: 16px/1.55 system-ui, -apple-system, "IBM Plex Sans", sans-serif; padding: 24px; }
+    main { max-width: 22rem; text-align: center; }
+    .mk { width: 52px; height: 52px; border-radius: 14px; background: #2B4A45; display: inline-grid; place-items: center; margin-bottom: 18px; }
+    h1 { font: 500 1.7rem/1.15 Georgia, "Newsreader", serif; margin: 0 0 8px; }
+    p { margin: 0 0 22px; color: #44504A; font-size: 0.95rem; }
+    button { background: #2B4A45; color: #F4F2EC; border: 0; border-radius: 10px; padding: 13px 22px; font: 500 15px system-ui, sans-serif; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="mk"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><path d="M8 21l5-6 4 3 7-9" fill="none" stroke="#E0A34C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <h1>You're offline</h1>
+    <p>Tenetfolio shows live prices and your current holdings, so it needs a connection. Nothing is shown from memory, so you never see an old number as if it were current.</p>
+    <button type="button" onclick="location.reload()">Try again</button>
+  </main>
+</body>
+</html>
