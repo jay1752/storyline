@@ -858,7 +858,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const input = $("chat-input");
   input.addEventListener("input", _autoGrow);
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("chat-form").requestSubmit(); }
+    // Enter sends on a computer (Shift+Enter makes a new line). On a phone or tablet Enter is a new line, since there is no Shift key
+    // on the touch keyboard and the arrow button sends. Ctrl/Cmd+Enter sends everywhere.
+    const touch = window.matchMedia && matchMedia("(pointer: coarse)").matches;
+    if (e.key === "Enter" && !e.isComposing && (e.ctrlKey || e.metaKey || (!e.shiftKey && !touch))) { e.preventDefault(); $("chat-form").requestSubmit(); }
   });
 
   document.addEventListener("keydown", (e) => {
