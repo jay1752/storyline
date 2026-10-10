@@ -28,6 +28,7 @@ class Parsed:
     mapping: str                    # human-readable "how I read it"
     skipped: int = 0
     notes: list = field(default_factory=list)
+    market: str | None = None      # "IN" when the file is plainly Indian (NSE/BSE exchange column or INE/INF ISINs)
 
 
 class NotPositions(Exception):
@@ -39,6 +40,12 @@ class NotPositions(Exception):
 def read_sheets(filename: str, data: bytes) -> list[tuple[str, list[list]]]:
     """[(sheet name, rows)] with cells as str / number / datetime. Raises ValueError for an unreadable file."""
     name = filename.lower()
+    if name.endswith(".pdf"):
+        from app.pdf_tables import pdf_sheets
+        sheets = pdf_sheets(data)
+        if not sheets:
+            raise ValueError("no readable text layer in this PDF")
+        return sheets
     if name.endswith((".xlsx", ".xlsm")):
         from openpyxl import load_workbook
         wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
@@ -120,7 +127,7 @@ def _num(v):
     return -x if neg else x
 
 
-_DATE_FORMATS = ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d-%b-%Y", "%d %b %Y", "%d-%b-%y", "%d/%m/%y", "%Y/%m/%d", "%d-%B-%Y", "%m/%d/%Y")
+_DATE_FORMATS = ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d-%b-%Y", "%d %b %Y", "%d-%b-%y", "%d/%m/%y", "%Y/%m/%d", "%d-%B-%Y", "%m/%d/%Y", "%b %d %Y", "%B %d %Y", "%b %d, %Y", "%d.%m.%Y", "%d %B %Y")
 
 
 def _date(v):
@@ -153,21 +160,26 @@ def _first(norms, *tests, exclude=()):
 
 def _map_columns(header: list) -> dict | None:
     n = [_norm(h) for h in header]
-    isin = _first(n, "isin", exclude=("name", "desc"))
+    isin = next((i for i, h in enumerate(n) if "isin" in h and "name" not in h and "desc" not in h), None)
     sym = _first(n, "symbol", "ticker", "tradingsymbol", "scripsymbol", "scripcode", "instrument", "scrip", "securitysymbol")
     name = _first(n, "companyname", "stockname", "securityname", "scripname", "isinname", "instrumentname", "company", "security", "stock", "name", exclude=("client", "exchange", "broker", "customer", "account"))
-    side = _first(n, "tradetype", "buysell", "buyorsell", "transactiontype", "side", "action", "trantype", "type", exclude=("order", "segment", "product", "instrumenttype", "sectype", "assettype", "security"))
-    qty = _first(n, "quantityavailable", "quantity", "qty", "tradedquantity", "tradedqty", "netqty", "holdingquantity", "totalquantity", "shares", "units", "currentbalance", "balance",
+    side = next((i for tst in ("tradetype", "buysell", "buyorsell", "transactiontype", "trantype", "side", "action", "orderside", "type", "buysellflag", "tradeside")
+                 for i, h in enumerate(n) if h == tst), None)
+    qty = _first(n, "totqty", "totalqty", "totalquantity", "quantityheld", "qtyheld", "quantityavailable", "quantity", "qty", "tradedquantity", "tradedqty", "netqty", "holdingquantity", "totalquantity", "shares", "units", "currentbalance", "balance",
                  exclude=("pledge", "longterm", "discrepant", "value", "amount", "price", "rate", "cost", "pnl", "unrealised", "unrealized", "t1", "collateral", "free"))
     price_hold = _first(n, "averageprice", "avgprice", "averagecost", "avgcost", "averagebuyprice", "avgbuyprice", "buyaverage", "buyavg", "costprice", "purchaseprice", "averagecostprice", "avgcostprice", "acquisitionprice",
                         exclude=("total", "value", "previous", "closing", "ltp", "market", "current"))
     price_trade = _first(n, "tradeprice", "netrate", "executionprice", "tradedprice", "rate", "price", "avgprice", "averageprice", exclude=("previous", "closing", "ltp", "market", "current", "total", "value", "buy", "sell", "stop", "trigger"))
     dt = _first(n, "tradedate", "transactiondate", "executiondate", "orderexecutiontime", "purchasedate", "buydate", "datebought", "dateofpurchase", "acquisitiondate", "datepurchased", "boughton", "date", "tradetime", exclude=("expiry", "settlement", "maturity"))
+    if dt is None:  # a header wrapped over two lines in a PDF can leave just "Transaction" / "Trade"
+        dt = _first(n, "transaction", "trade", "executed", "orderdate")
     if qty is None or not (isin is not None or sym is not None or name is not None):
         return None
+    remarks = _first(n, "remarks", "narration", "description", "particulars")
     extra_qty = [i for i, h in enumerate(n) if i != qty and h and ("pledge" in h or "t1" in h or "collateral" in h) and ("qty" in h or "quantity" in h or "units" in h) and "value" not in h and "amount" not in h]
     seg = _first(n, "segment", "exchangesegment")
-    return {"isin": isin, "sym": sym, "name": name, "side": side, "qty": qty, "extra_qty": extra_qty, "price_hold": price_hold, "price_trade": price_trade, "date": dt, "seg": seg,
+    exch = next((i for i, h in enumerate(n) if h in ("exchange", "exch", "market")), None)
+    return {"isin": isin, "sym": sym, "name": name, "side": side, "qty": qty, "extra_qty": extra_qty, "price_hold": price_hold, "price_trade": price_trade, "date": dt, "seg": seg, "remarks": remarks, "exch": exch,
             "sellmark": any(re.search(r"sellvalue|sellprice|sellamount|(?<!un)realised|(?<!un)realized|profitloss", h) for h in n)}
 
 
@@ -193,7 +205,8 @@ def _parse_sheet(rows: list[list]) -> Parsed | None:
     if not is_trades and cols["sellmark"] and cols["price_hold"] is None:
         raise NotPositions("This looks like a profit-and-loss / realised-gains report: it lists what you SOLD, not what you hold. "
                            "Upload your holdings statement or tradebook instead.")
-    txns, skipped = [], 0
+    txns, skipped, corp = [], 0, 0
+    exchanges: set[str] = set()
     for r in rows[header_at + 1:]:
         if not r or all(c in (None, "") for c in r):
             continue
@@ -208,6 +221,9 @@ def _parse_sheet(rows: list[list]) -> Parsed | None:
         label = (_clean_symbol(sym) if sym not in (None, "") else (str(nm).strip() if nm not in (None, "") else (isin or "")))
         if not label or any(label.lower().startswith(w) for w in _SKIP_WORDS):
             continue
+        ex = str(cell("exch") or "").strip().upper()
+        if ex:
+            exchanges.add(ex)
         seg = str(cell("seg") or "").upper()
         if seg and any(k in seg for k in ("FO", "FUT", "OPT", "CD", "COM", "MCX")) and "EQ" not in seg:
             skipped += 1
@@ -227,6 +243,8 @@ def _parse_sheet(rows: list[list]) -> Parsed | None:
                 q = -q
             if q == 0:
                 continue
+            if price == 0 and re.search(r"split|bonus", str(cell("remarks") or ""), re.I):
+                corp += 1
             txns.append(Txn(label, side, q, price, _date(cell("date")), None, isin, None))
         else:
             if q <= 0:
@@ -243,9 +261,12 @@ def _parse_sheet(rows: list[list]) -> Parsed | None:
     if cols["extra_qty"]:
         parts.append("+ " + ", ".join(f"“{hdr[i]}”" for i in cols["extra_qty"]))
     notes = []
+    if corp:
+        notes.append(f"{corp} split/bonus row{'s' if corp != 1 else ''} counted as free shares, so average cost is adjusted for them.")
     if not is_trades and all(t.price is None for t in txns):
         notes.append("This file has no average price, so cost has to be added by hand.")
-    return Parsed("trades" if is_trades else "holdings", txns, "; ".join(parts), skipped, notes)
+    india = (exchanges and exchanges <= {"NSE", "BSE", "NSEI", "BSEI", "NSE_EQ", "BSE_EQ"}) or (txns and all((t.isin or "").startswith("IN") for t in txns))
+    return Parsed("trades" if is_trades else "holdings", txns, "; ".join(parts), skipped, notes, "IN" if india else None)
 
 
 def parse_statement(sheets: list[tuple[str, list[list]]]) -> Parsed | None:

@@ -599,31 +599,40 @@ function _renderProposal(p) {
     editors.push(ed);
   }
 
-  if (p.skipped && p.skipped.length) {
-    const sk = _el("div", "chat-card-skipped");
-    sk.appendChild(_el("div", "chat-card-title", "Couldn't place — add by hand if you want them"));
-    for (const s of p.skipped) {
-      const item = _el("div", "chat-card-row");
-      item.appendChild(_el("div", "chat-card-sub", s.label + " — " + s.reason));
-      const d = s.draft || {};
-      const form = _el("div", "card-form");
-      form.hidden = true;
-      const entry = { sym: s.symbol || null, qty: _numInput(d.quantity), avg: _numInput(d.avg_price), when: _dateInput(d.anchor_date) };
-      const chosen = _el("div", "chat-card-head");
-      const chosenSym = _el("strong", null, s.symbol || "Pick the stock below");
-      chosen.appendChild(chosenSym);
-      const pick = _stockPicker((hit) => { entry.sym = hit.symbol; chosenSym.textContent = hit.symbol + " · " + hit.name; }, "Search the stock…");
-      const fields = _el("div", "card-fields");
-      fields.append(_field("Shares", entry.qty), _field("Avg price", entry.avg), _field("Since", entry.when));
-      form.append(chosen, pick, fields);
-      const open = _el("button", "linklike", "Add by hand");
-      open.type = "button";
-      open.onclick = () => { form.hidden = !form.hidden; if (!added.includes(entry)) added.push(entry); };
-      item.append(open, form);
-      sk.appendChild(item);
-    }
-    card.appendChild(sk);
-  }
+  const skippedItem = (s) => {
+    const item = _el("div", "chat-card-row");
+    item.appendChild(_el("div", "chat-card-sub", s.label + " — " + s.reason));
+    const d = s.draft || {};
+    const form = _el("div", "card-form");
+    form.hidden = true;
+    const entry = { sym: s.symbol || null, qty: _numInput(d.quantity), avg: _numInput(d.avg_price), when: _dateInput(d.anchor_date) };
+    const chosen = _el("div", "chat-card-head");
+    const chosenSym = _el("strong", null, s.symbol || "Pick the stock below");
+    chosen.appendChild(chosenSym);
+    const pick = _stockPicker((hit) => { entry.sym = hit.symbol; chosenSym.textContent = hit.symbol + " · " + hit.name; }, "Search the stock…");
+    if (s.symbol) pick.hidden = true;
+    const fields = _el("div", "card-fields");
+    fields.append(_field("Shares", entry.qty), _field("Avg price", entry.avg), _field("Since", entry.when));
+    form.append(chosen, pick, fields);
+    const open = _el("button", "linklike", "Add by hand");
+    open.type = "button";
+    open.onclick = () => { form.hidden = !form.hidden; if (!added.includes(entry)) added.push(entry); };
+    item.append(open, form);
+    return item;
+  };
+  const kinds = { pick: [], history: [], sold: [], other: [] };
+  for (const s of p.skipped || []) (kinds[s.kind] || kinds.other).push(s);
+  const section = (title, items, collapsed, render) => {
+    if (!items.length) return;
+    const box = collapsed ? _el("details", "chat-card-skipped") : _el("div", "chat-card-skipped");
+    const head = _el(collapsed ? "summary" : "div", "chat-card-title", title);
+    box.appendChild(head);
+    for (const s of items) box.appendChild(render(s));
+    card.appendChild(box);
+  };
+  section("Pick the right stock (" + (kinds.pick.length + kinds.other.length) + ") — we couldn't match these names", kinds.pick.concat(kinds.other), false, skippedItem);
+  section(kinds.history.length + " sold more than this file shows — you held them before it starts", kinds.history, true, skippedItem);
+  section(kinds.sold.length + " bought and sold completely — nothing to add", kinds.sold, true, (s) => _el("div", "chat-card-sub", s.label));
 
   const status = _el("div", "chat-card-status");
   const actions = _el("div", "chat-card-actions");

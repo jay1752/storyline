@@ -115,6 +115,9 @@ def resolve_symbol(company_text, lookup, names):
         return None, []
     if text in lookup:
         return lookup[text], []
+    compact = re.sub(r"[^A-Z0-9&]", "", text)  # "PC Jeweller" -> PCJEWELLER, a ticker some broker statements spell out as words
+    if len(compact) >= 4 and compact in lookup:
+        return lookup[compact], []
     token = re.split(r"[\-\s]", text)[0]
     if token in lookup:
         return lookup[token], []

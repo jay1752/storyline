@@ -77,7 +77,9 @@ def _aggregate_symbol(rows: list[Txn], statement_date: Optional[str]):
                 txns = later
 
     # Stable sort keeps the statement's own order for same-day trades; undated rows sort first.
-    txns = sorted(txns, key=lambda r: r.date or "")
+    # Same-day trades: buys first. Statements often list newest-first, so a day's sell can precede its buy in the file; netting the sell
+    # first would call it a sale of shares we never saw bought.
+    txns = sorted(txns, key=lambda r: (r.date or "", r.side == "sell"))
     for t in txns:
         if t.quantity is None or t.quantity <= 0:
             warnings.append(f"Skipped a {t.side} row with no usable quantity.")
@@ -116,10 +118,16 @@ PASS_RATE = 0.6
 FETCH_BUDGET_SECONDS = 25.0
 
 
+_SPLIT_FACTORS = (1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 10.0, 20.0)
+
+
 def _price_check(conn, sym: str, group: list) -> dict:
     """Do this statement's prices fit THIS stock? Transactions are compared with the close on their trade date; a
     'holding' row carries an average COST (not a market price), so it is checked against the stock's whole price range."""
     ratios: list[float] = []
+    # A group with free-share rows (price 0: a split or bonus the broker booked as a buy) has older trades printed at the pre-action
+    # price while our history is adjusted: accept the usual split/bonus factors for those instead of calling it a mismatch.
+    corp = any(t.side == "buy" and t.price == 0 and t.quantity for t in group)
     strong = 0  # lines compared with the close on their own trade date (a holding's average cost can only be range-checked)
     for t in group:
         if t.price is None or t.price <= 0:
@@ -131,8 +139,11 @@ def _price_check(conn, sym: str, group: list) -> dict:
                 ratios.append(1.0 if lo <= t.price <= hi else (t.price / r["hi"] if t.price > hi else t.price / r["lo"]))
         else:
             c = close_near(conn, sym, t.date)
-            if c:
-                ratios.append(t.price / c)
+            if c and c > 0:  # a bad stored close (0 or negative) must not crash the whole import
+                x = t.price / c
+                if corp:
+                    x = min((x / f for f in _SPLIT_FACTORS), key=lambda v: abs(math.log(v)))
+                ratios.append(x)
                 strong += 1
     if not ratios:
         return {"status": "unverified", "n": 0, "rate": None, "err": None, "strong": False, "text": "No price history to verify against."}
@@ -189,10 +200,13 @@ def _draft(group: list, statement_date: Optional[str]) -> dict:
             "anchor_date": anchor or (dates[0] if dates else None) or statement_date or date_cls.today().isoformat(), "isin": next((t.isin for t in group if t.isin), None)}
 
 
-def propose(user_id: int, transactions: list[Txn], statement_date: Optional[str] = None) -> dict:
+def propose(user_id: int, transactions: list[Txn], statement_date: Optional[str] = None, market: Optional[str] = None) -> dict:
     deadline = time.monotonic() + FETCH_BUDGET_SECONDS
     with get_market_conn() as m:
         lookup, names = build_symbol_lookup(m)
+        if market == "IN":  # an Indian broker file: never match "PC Jeweller" to a US ticker called PC
+            names = {k: v for k, v in names.items() if k.startswith("NSE:")}
+            lookup = {k: v for k, v in lookup.items() if v in names}
         isin_map = {r["isin"].upper(): r["symbol"] for r in m.execute("SELECT symbol, isin FROM stocks WHERE isin IS NOT NULL")}
     valid_symbols = set(names)
 
@@ -279,14 +293,14 @@ def propose(user_id: int, transactions: list[Txn], statement_date: Optional[str]
                     if close:
                         opts = "; ".join(describe(c, r) for c, r in close)
                         skipped.append({"label": label, "reason": f"Ambiguous — several stocks fit these prices: {opts}. Ask the user which one, "
-                                        "then resubmit the full list with the `symbol` field set on these rows.", "draft": _draft(grp, statement_date)})
+                                        "then resubmit the full list with the `symbol` field set on these rows.", "draft": _draft(grp, statement_date), "kind": "pick"})
                         continue
                     if sym:
                         confidence, note = "low", "Name matched but prices don't — please verify this is the right stock."
                     else:
                         near = ", ".join(f"{c} ({names.get(c, '?')})" for c, _ in scored[:4])
                         skipped.append({"label": label, "reason": "No stock in our list matches this name and these prices"
-                                        + (f" (closest: {near})" if near else "") + ". Use search_stocks, then resubmit with `symbol` set.", "draft": _draft(grp, statement_date)})
+                                        + (f" (closest: {near})" if near else "") + ". Use search_stocks, then resubmit with `symbol` set.", "draft": _draft(grp, statement_date), "kind": "pick"})
                         continue
 
             entry = resolved.setdefault(sym, {"group": [], "match": None, "check": None, "notes": []})
@@ -312,10 +326,10 @@ def propose(user_id: int, transactions: list[Txn], statement_date: Optional[str]
             group = info["group"]
             qty, avg, anchor, warnings, error = _aggregate_symbol(group, statement_date)
             if error:
-                skipped.append({"label": names[sym] + f" ({sym})", "reason": error, "symbol": sym, "draft": _draft(group, statement_date)})
+                skipped.append({"label": names[sym] + f" ({sym})", "reason": error, "symbol": sym, "draft": _draft(group, statement_date), "kind": "history"})
                 continue
             if qty <= EPS:
-                skipped.append({"label": names[sym] + f" ({sym})", "reason": "Fully sold within this file — nothing left to track."})
+                skipped.append({"label": names[sym] + f" ({sym})", "reason": "Fully sold within this file — nothing left to track.", "kind": "sold"})
                 continue
             warnings = warnings + info["notes"]
             ensure_prices(sym, deadline)

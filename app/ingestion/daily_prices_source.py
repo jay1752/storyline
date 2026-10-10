@@ -14,6 +14,7 @@ Rules that keep the stored history trustworthy:
 import csv
 import io
 import logging
+import re
 import time
 from datetime import date, timedelta
 
@@ -92,6 +93,7 @@ class DailyPriceSource(DataSource):
         by_isin = {r[0].upper(): r[1] for r in conn.execute("SELECT isin, symbol FROM stocks WHERE market = 'IN' AND isin IS NOT NULL")}
         written, jumped = 0, []
         checked: set[str] = set()
+        isins: dict[str, str] = {}  # NSE's file names every security's ISIN: fills the ones (ETFs, newer listings) our universe lacks
 
         def put(full, ts, o, h, l, c, v, pc, source):
             nonlocal written
@@ -123,6 +125,8 @@ class DailyPriceSource(DataSource):
                 res = None
             if res is not None:
                 schema, rows = res
+                if schema == "udiff":
+                    isins.update({f"NSE:{r.get('TckrSymb')}": (r.get("ISIN") or "").strip().upper() for r in rows if r.get("ISIN")})
                 for row in rows:
                     if schema == "udiff":
                         sym, series, ts = row.get("TckrSymb"), row.get("SctySrs"), row.get("TradDt")
@@ -145,6 +149,16 @@ class DailyPriceSource(DataSource):
             if progress:
                 progress(written)
         written += self._refresh(conn, jumped, deadline)
+        try:
+            n = 0
+            for sym, isin in isins.items():
+                if re.fullmatch(r"IN[A-Z0-9]{9}[0-9]", isin):
+                    n += conn.execute("UPDATE stocks SET isin = ? WHERE symbol = ? AND (isin IS NULL OR isin = '')", (isin, sym)).rowcount
+            conn.commit()
+            if n:
+                logger.info("filled %d missing ISINs from NSE bhavcopy", n)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("ISIN fill failed: %s", e)
         try:  # delivery % rides along with the daily India run; its failure must not fail the price job
             from app.ingestion import nse_delivery
             nse_delivery.ingest_days(conn, nse_delivery.recent_days(conn), known)

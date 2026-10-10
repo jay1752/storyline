@@ -31,7 +31,7 @@ MAX_FILE_BYTES = 20 * 1024 * 1024
 MAX_TEXT_CHARS = 400_000
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
 TEXT_TYPES = (".csv", ".tsv", ".txt")
-SHEET_TYPES = (".csv", ".tsv", ".xlsx", ".xlsm", ".xls")
+SHEET_TYPES = (".csv", ".tsv", ".xlsx", ".xlsm", ".xls", ".pdf")
 
 
 class FileRejected(Exception):
@@ -148,7 +148,7 @@ async def _stream(user_id: int, message: str, history_json: str | None, page: st
             parsed = None
         if parsed is not None:
             try:
-                proposal = await asyncio.to_thread(positions_mod.propose, user_id, parsed.txns, None)
+                proposal = await asyncio.to_thread(positions_mod.propose, user_id, parsed.txns, None, parsed.market)
             except Exception as e:  # noqa: BLE001
                 logger.warning("direct import failed: %s: %s", type(e).__name__, str(e)[:200])
                 proposal = None
