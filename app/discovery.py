@@ -128,6 +128,14 @@ def build_metrics(progress=None, only: str | None = None) -> int:
             """SELECT symbol, name, market, sector, cap_tier FROM stocks s
                WHERE EXISTS (SELECT 1 FROM quarterly_data q WHERE q.symbol = s.symbol AND q.quarter_label NOT LIKE '%annual%')"""
             + (" AND symbol = ?" if only else ""), ((only,) if only else ())).fetchall()
+        try:  # IndianAPI's 3-year compounded sales growth: used only where our own (annual or quarterly) figure is missing; it agrees with ours within 3 pp for 99% of stocks that have both
+            from app.indianapi_db import INDIANAPI_DB
+            import sqlite3 as _sq
+            _ia = _sq.connect(f"file:{INDIANAPI_DB}?mode=ro", uri=True)
+            ia_g3 = {r[0]: r[1] for r in _ia.execute("SELECT symbol, pct FROM ia_growth WHERE metric = 'Compounded Sales Growth' AND horizon = '3Y' AND pct IS NOT NULL")}
+            _ia.close()
+        except Exception:  # noqa: BLE001 - IndianAPI staging absent: the screens simply have fewer 3-year figures
+            ia_g3 = {}
         us_tickers = {x["symbol"].split(":", 1)[1]: x["name"] for x in stocks if x["market"] == "US"}
         for i, s in enumerate(stocks, 1):
             sym = s["symbol"]
@@ -158,6 +166,8 @@ def build_metrics(progress=None, only: str | None = None) -> int:
             ex = _annual_extras(annual)
             if ex["sales_cagr_3y"] is None:
                 ex["sales_cagr_3y"] = _ttm_cagr_3y(quarterly)
+            if ex["sales_cagr_3y"] is None and sym in ia_g3:
+                ex["sales_cagr_3y"] = ia_g3[sym]
             mcap = None
             if s["market"] == "IN":
                 mcap = in_mcap.get(sym)

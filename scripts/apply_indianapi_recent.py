@@ -40,7 +40,9 @@ def main() -> None:
     m.row_factory = sqlite3.Row
     ia = sqlite3.connect(f"file:{DATA_DIR}/indianapi.db?mode=ro", uri=True)
     cur = {r["symbol"]: r["status"] for r in m.execute("SELECT symbol, status FROM ia_basis_status")}
-    cand = {s for s, v in cur.items() if v in ("reverted", "recent_ok")} | {r[0] for r in ia.execute("SELECT symbol FROM ia_stock WHERE status='held_out'")}
+    wrong_dir = DATA_DIR / "indianapi" / "raw" / "historical_stats_wrong"  # answers indianapi_by_name.py set aside after the full-history identity test
+    wrong = {"NSE:" + p.stem for p in wrong_dir.glob("*.json")} if wrong_dir.exists() else set()
+    cand = {s for s, v in cur.items() if v in ("reverted", "recent_ok")} | {r[0] for r in ia.execute("SELECT symbol FROM ia_stock WHERE status='held_out'")} | wrong
     bank = {r[0] for r in m.execute("SELECT symbol FROM stock_metrics WHERE bank=1")}
     orig: dict[str, dict] = collections.defaultdict(dict)
     for r in m.execute("SELECT symbol, period_end_date, net_profit_cr, revenue_cr FROM quarterly_data_original WHERE quarter_label LIKE 'Q ending%'"):
@@ -50,6 +52,8 @@ def main() -> None:
     passed, tally = [], collections.Counter()
     for sym in sorted(cand):
         p = RAW / f"{sym.split(':', 1)[1]}.json"
+        if sym in wrong:
+            p = wrong_dir / f"{sym.split(':', 1)[1]}.json"
         if not p.exists():
             tally["no raw file"] += 1
             continue
@@ -83,6 +87,8 @@ def main() -> None:
     if a.dry:
         return
     for sym in passed:
+        if sym in wrong:  # promote the file so load_indianapi.py reads it
+            (wrong_dir / f"{sym.split(':', 1)[1]}.json").replace(RAW / f"{sym.split(':', 1)[1]}.json")
         m.execute("INSERT OR REPLACE INTO ia_basis_status (symbol, status, np_agree, n_overlap) VALUES (?,?,?,?)", (sym, "recent_ok", 2, 2))
     m.commit()
     print("ia_basis_status updated for", len(passed))
