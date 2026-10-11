@@ -166,14 +166,27 @@ def _extended_candidates(conn, text: str, limit: int = 40) -> list[str]:
     tok = (re.split(r"[^A-Z0-9&]+", (text or "").upper()) or [""])[0]
     if len(tok) < 3:
         return []
+    etf_like = bool(re.search(r"ETF|BEES|INDEX|NIFTY|SENSEX", (text or "").upper()))
     bare = "UPPER(substr(symbol, instr(symbol, ':') + 1))"
+    extra: list[str] = []
+    if etf_like:
+        # Brokers print ETFs under their own abbreviations ("ICICINN50ETF", "MOSt N100ETF", "HDFNSC250ETF") that are neither the NSE ticker nor the
+        # fund's name. Offer the ETFs whose ticker or name begins like the text (3 to 5 letters); the statement's own prices then pick the right one.
+        seen: set[str] = set()
+        for n in (5, 4, 3):
+            pre = tok[:n]
+            if len(pre) < 3 or pre in seen:
+                continue
+            seen.add(pre)
+            extra += [r["symbol"] for r in conn.execute(
+                f"SELECT symbol FROM stocks WHERE market = 'IN' AND isin LIKE 'INF%' AND ({bare} LIKE ? OR UPPER(name) LIKE ?) ORDER BY length(symbol) LIMIT 25", (f"{pre}%", f"%{pre}%")).fetchall()]
     rows = conn.execute(
         f"SELECT symbol FROM stocks WHERE {bare} LIKE ? OR UPPER(name) LIKE ? "
         f"ORDER BY CASE WHEN {bare} = ? THEN 0 WHEN {bare} LIKE ? THEN 1 WHEN UPPER(name) LIKE ? THEN 2 ELSE 3 END, "
         "(symbol LIKE 'NSE:%') DESC, length(symbol) LIMIT ?",
         (f"{tok}%", f"%{tok}%", tok, f"{tok}%", f"{tok}%", limit),
     ).fetchall()
-    return [r["symbol"] for r in rows]
+    return list(dict.fromkeys(extra + [r["symbol"] for r in rows]))[:limit + len(extra)]
 
 
 def _amount_warning(group: list) -> Optional[str]:
@@ -279,6 +292,9 @@ def propose(user_id: int, transactions: list[Txn], statement_date: Optional[str]
                     note = (f"Switched from {label!r} to {sym}: the statement's prices fit {sym} closely and nothing else does."
                             if method else "Matched using the statement's prices.")
                     method, confidence = "price match", "medium"
+                    if chk["n"] < 3:  # one or two lines can fit a stranger by coincidence: never settle a match on that alone
+                        confidence = "low"
+                        note += f" Only {chk['n']} trade line{'s' if chk['n'] != 1 else ''} support{'s' if chk['n'] == 1 else ''} this match, so please confirm it."
                 elif best and best[1].get("strong") and best[1]["err"] <= 0.45 and orig_err >= 3 * best[1]["err"] \
                         and (runner is None or runner[1]["err"] >= 1.5 * best[1]["err"]):
                     sym, chk = best
