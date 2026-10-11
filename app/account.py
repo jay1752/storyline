@@ -26,7 +26,7 @@ def delete_account(user_id: int) -> dict:
                 marks = ",".join("?" * len(pos_ids))
                 u.execute(f"DELETE FROM position_snapshots WHERE position_id IN ({marks})", pos_ids)
             for table in ("position_events", "insight_runs", "tracked_positions", "pending_imports", "framework_overrides", "user_provider_keys",
-                          "user_settings", "auth_tokens", "sessions"):
+                          "user_settings", "auth_tokens", "sessions", "user_activity"):
                 counts[table] = u.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,)).rowcount
             mine = [r[0] for r in u.execute("SELECT id FROM community_posts WHERE user_id = ?", (user_id,))]
             if mine:

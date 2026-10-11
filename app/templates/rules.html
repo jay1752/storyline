@@ -1,60 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Investment rules · Tenetfolio{% endblock %}
-{% macro rule_table(rows, scope) %}
-<div class="table-wrap">
-  <table class="fin rules-table" data-scope="{{ scope }}">
-    <thead><tr><th>Rule</th><th>Passes when</th><th>On</th><th>Where it comes from</th><th></th></tr></thead>
-    <tbody>
-      {% for d in defs %}{% set r = rows[d.key] %}
-      <tr data-key="{{ d.key }}" data-base="{{ r.reset_value }}" data-base-on="{{ 1 if r.reset_enabled else 0 }}">
-        <td>{{ d.label }}<span class="row-sub">{{ d.note }}</span></td>
-        <td class="rule-edit"><span class="rule-op">{{ d.op }}</span> <input type="number" class="form-input rule-val" step="any" value="{{ '%g' % r.value }}" aria-label="{{ d.label }} threshold"> <span class="rule-unit">{{ d.unit }}</span></td>
-        <td><label class="switch"><input type="checkbox" class="rule-on" {{ 'checked' if r.enabled else '' }} aria-label="Use this rule"><span></span></label></td>
-        <td>
-          {% if r.customised %}<span class="badge accent">{{ 'Your setting' if scope == 'user' else 'Platform setting' }}</span>
-          {% else %}<span class="badge neutral">{{ {'built-in': 'Built-in default', 'platform': 'Platform default', 'user': 'Your default'}[r.source] }}</span>{% endif %}
-        </td>
-        <td class="rule-actions">
-          <button type="button" class="btn btn-sm btn-primary rule-save" disabled>Save</button>
-          <button type="button" class="btn btn-sm rule-reset" {{ '' if r.customised else 'disabled' }} title="Back to {{ 'the platform default' if scope == 'user' else 'the built-in default' }}: {{ r.op }} {{ '%g' % r.reset_value }}{{ d.unit }}">↺ Reset</button>
-          <span class="rule-msg" role="status"></span>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% endmacro %}
-{% macro story_table(rows, scope, items) %}
-<div class="table-wrap">
-  <table class="fin rules-table" data-scope="{{ scope }}">
-    <thead><tr><th>Setting</th><th>Value</th><th>Where it comes from</th><th></th></tr></thead>
-    <tbody>
-      {% for d in items %}{% set r = rows[d.key] %}
-      <tr data-key="{{ d.key }}" data-base="{{ r.reset_value }}">
-        <td>{{ d.label }}<span class="row-sub">{{ d.note }}</span></td>
-        <td class="rule-edit">
-          {% if d.kind == 'choice' %}
-          <select class="form-input rule-val" aria-label="{{ d.label }}">{% for v, lbl in d.choices %}<option value="{{ v }}" {{ 'selected' if v == r.value|int else '' }}>{{ lbl }}</option>{% endfor %}</select>
-          {% else %}
-          <input type="number" class="form-input rule-val" step="1" value="{{ '%g' % r.value }}" aria-label="{{ d.label }}"> <span class="rule-unit">{{ d.unit }}</span>
-          {% endif %}
-        </td>
-        <td>
-          {% if r.customised %}<span class="badge accent">{{ 'Your setting' if scope == 'user' else 'Platform setting' }}</span>
-          {% else %}<span class="badge neutral">{{ {'built-in': 'Built-in default', 'platform': 'Platform default', 'user': 'Your default'}[r.source] }}</span>{% endif %}
-        </td>
-        <td class="rule-actions">
-          <button type="button" class="btn btn-sm btn-primary rule-save" disabled>Save</button>
-          <button type="button" class="btn btn-sm rule-reset" {{ '' if r.customised else 'disabled' }} title="Back to {{ 'the platform default' if scope == 'user' else 'the built-in default' }}">↺ Reset</button>
-          <span class="rule-msg" role="status"></span>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% endmacro %}
+{% from "_rules_macros.html" import rule_table, story_table with context %}
 {% block content %}
 <div class="page-head">
   <div class="page-head-main">
@@ -113,25 +59,8 @@
   {% else %}<p class="prose">None yet — every stock follows your defaults.</p>{% endif %}
 </section>
 
-{% if platform %}
-<section class="section">
-  <div class="section-head">
-    <div><h2 class="section-title">Platform defaults <span class="badge accent">admin</span></h2><span class="section-note">what every user inherits until they set their own</span></div>
-    <button type="button" class="btn btn-sm" id="reset-all-platform">↺ Reset all to built-in</button>
-  </div>
-  {{ rule_table(platform, 'platform') }}
-</section>
-{% endif %}
-
-{% if story_platform %}
-<section class="section">
-  <div class="section-head"><div><h2 class="section-title">Platform daily story <span class="badge accent">admin</span></h2><span class="section-note">the default for every user until they set their own</span></div></div>
-  {{ story_table(story_platform, 'platform', story_defs) }}
-</section>
-<section class="section">
-  <div class="section-head"><div><h2 class="section-title">Platform sizing &amp; discipline <span class="badge accent">admin</span></h2><span class="section-note">the default for every user until they set their own</span></div></div>
-  {{ story_table(story_platform, 'platform', sizing_defs) }}
-</section>
+{% if request.state.is_admin %}
+<p class="section-note">Platform defaults (what every user inherits) now live in <a href="/admin?tab=rules">Platform admin → Platform rules</a>.</p>
 {% endif %}
 
 <script src="/static/js/rules-page.js?v={{ asset_version('js/rules-page.js') }}" defer></script>

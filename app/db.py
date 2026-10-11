@@ -366,6 +366,20 @@ CREATE TABLE IF NOT EXISTS pending_imports (
     payload_json TEXT NOT NULL
 );
 
+-- What a signed-in user did and for how long, for the Platform admin > Users tab (app/activity.py). Event type, page area and time only:
+-- never holdings, prices, file contents or chat text. Deleted with the account and purged after 90 days.
+CREATE TABLE IF NOT EXISTS user_activity (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    ts      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,   -- UTC
+    kind    TEXT NOT NULL,                              -- signin | beat | step
+    area    TEXT,                                       -- page area for a beat (stock, portfolio...) or the step's name
+    secs    INTEGER,                                    -- seconds this beat adds to time on site
+    detail  TEXT                                        -- short and non-personal, e.g. 'xlsx' or '16 rows'
+);
+CREATE INDEX IF NOT EXISTS idx_user_activity_user_ts ON user_activity(user_id, ts);
+CREATE INDEX IF NOT EXISTS idx_user_activity_ts ON user_activity(ts);
+
 -- Server-side sessions (app/auth/tokens.py). session_id is a high-entropy random
 -- string used as an opaque bearer credential in an HttpOnly cookie — not signed/JWT,
 -- so logout/revocation is a plain DELETE, not a blocklist.

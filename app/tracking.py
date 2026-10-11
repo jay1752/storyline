@@ -19,6 +19,8 @@ def create_tracked_position(conn, user_id, symbol, company_name, anchor_type, an
         (user_id, symbol, company_name, anchor_type, anchor_date, buy_price, quantity),
     )
     position_id = cur.lastrowid
+    from app import activity
+    activity.log(user_id, "step", "position_added", detail=anchor_type, conn=conn)
     conn.execute(
         """INSERT INTO position_snapshots
         (position_id, price_at_check, since_anchor_pct, one_yr_pct, valuation_label, signal, reasoning_json, trigger_type)

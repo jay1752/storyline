@@ -222,7 +222,21 @@ def _loop() -> None:
         time.sleep(TICK_SECONDS)
 
 
+_last_purge: str | None = None
+
+
+def _tick_housekeeping() -> None:
+    """Once a day: drop user-activity rows older than the retention period (app/activity.py)."""
+    global _last_purge
+    today = datetime.now(IST).date().isoformat()
+    if _last_purge != today:
+        from app import activity
+        activity.purge()
+        _last_purge = today
+
+
 def _tick() -> None:
+    _tick_housekeeping()
     _tick_fx()          # first of all: everything that shows US holdings in rupees should use a fresh rate
     _tick_prices()      # then prices: the briefing and the position analyses should read today's prices
     _tick_briefing()

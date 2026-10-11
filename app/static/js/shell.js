@@ -98,7 +98,7 @@
     { label: "Investment rules", href: "/rules", icon: "i-check" },
     { label: "AI settings", href: "/settings", icon: "i-settings" },
     { label: "Your profile", href: "/profile", icon: "i-smile" },
-    { label: "Data ingestion", href: "/admin", icon: "i-admin", admin: true },
+    { label: "Platform admin", href: "/admin", icon: "i-admin", admin: true },
   ].filter((p) => !p.admin || palette.dataset.admin === "1");
 
   let reqId = 0;

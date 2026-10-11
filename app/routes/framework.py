@@ -5,7 +5,7 @@ the layering (built-in < platform < user < stock) and what "reset" returns to.""
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app import framework as fw
+from app import activity, framework as fw
 from app.db import get_users_conn
 from app.templates_config import templates
 
@@ -51,6 +51,8 @@ async def rules_save(request: Request):
             u.commit()
     except fw.RuleError as e:
         return _err(str(e))
+    if scope == "user":
+        activity.log(request.state.user_id, "step", "rules_changed")
     return {"ok": True}
 
 

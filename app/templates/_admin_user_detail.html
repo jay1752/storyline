@@ -1,0 +1,28 @@
+<section class="card au-card">
+  <div class="au-head">
+    <div><h3 class="card-title">{{ d.email }} <span class="badge {{ {'g': 'pos', 'w': 'accent', 'r': 'neg'}.get(d.tone, 'neutral') }}">{{ d.status }}</span></h3>
+      <span class="section-note">{{ d.name or 'No name' }} · joined {{ d.joined }} · {{ d.n_visits }} visit{{ '' if d.n_visits == 1 else 's' }} · {{ d.total }} on site</span></div>
+    {% if not d.revealed %}<button type="button" class="btn btn-sm" hx-get="/admin/users/{{ d.id }}?reveal=1" hx-target="#user-detail" hx-swap="innerHTML">Reveal email</button>{% endif %}
+  </div>
+  <div class="au-steps-row">{% for ok in d.reached %}<span class="au-step {{ 'd' if ok else '' }}">{{ d.steps[loop.index0] }}</span>{% endfor %}</div>
+  <div class="au-two">
+    <div>
+      <h4 class="au-h">Activity</h4>
+      <p class="section-note">Events and durations only. No holdings, prices or chat text.</p>
+      <ul class="au-tl">
+        {% for e in d.events %}<li><time>{{ e.t }}</time><i class="{{ e.tone }}"></i><span>{{ e.label }}{% if e.note %}<small>{{ e.note }}</small>{% endif %}</span></li>
+        {% else %}<li><span class="stub">No activity recorded yet.</span></li>{% endfor %}
+      </ul>
+    </div>
+    <div>
+      <h4 class="au-h">Time by page <span class="section-note">last 30 days</span></h4>
+      {% for p in d.pages %}<div class="au-pg"><span>{{ p.label }}</span><span class="au-pb"><div style="width: {{ p.pct }}%"></div></span><span class="au-n">{{ p.secs }}</span></div>
+      {% else %}<p class="section-note">No time recorded yet.</p>{% endfor %}
+      <h4 class="au-h" style="margin-top:1rem">Recent visits</h4>
+      {% for v in d.visits %}<div class="au-pg au-visit"><span>{{ v.start }}</span><span class="row-sub">{{ v.where }}</span><span class="au-n">{{ v.dur }}</span></div>
+      {% else %}<p class="section-note">None recorded.</p>{% endfor %}
+      <h4 class="au-h" style="margin-top:1rem">Sign-ins</h4>
+      <p class="section-note">{% for s in d.sessions %}{{ s.at }}{{ ' · ' if not loop.last }}{% else %}—{% endfor %}</p>
+    </div>
+  </div>
+</section>

@@ -77,8 +77,18 @@ def _fetch_runs(conn, q: Optional[str] = None, cap: int = 25):
     return conn.execute("SELECT * FROM ingestion_runs ORDER BY id DESC LIMIT ?", (cap,)).fetchall()
 
 
+TABS = [("ingestion", "Data ingestion"), ("users", "Users"), ("rules", "Platform rules")]
+
+
 @router.get("/admin", response_class=HTMLResponse)
-def admin_dashboard(request: Request):
+def admin_dashboard(request: Request, tab: str = "ingestion"):
+    """The Platform admin shell. Only the chosen tab is loaded (by htmx, when opened): the others cost nothing until they are clicked."""
+    tab = tab if tab in dict(TABS) else "ingestion"
+    return templates.TemplateResponse("admin.html", {"request": request, "active_nav": "admin", "tabs": TABS, "tab": tab})
+
+
+@router.get("/admin/tab/ingestion", response_class=HTMLResponse)
+def admin_tab_ingestion(request: Request):
     with get_market_conn() as m:
         runs = _fetch_runs(m)
         market_counts = {
@@ -91,8 +101,7 @@ def admin_dashboard(request: Request):
         }
         stocks = _fetch_stocks(m)
         stocks_shown = len(stocks)
-        # Layer 5 is market-wide, not per-stock — a single fact per market, checked
-        # once here rather than repeated identically on every row.
+        # Layer 5 is market-wide, not per-stock: a single fact per market, checked once here.
         macro_markets = {r["market"] for r in m.execute("SELECT DISTINCT market FROM macro_context").fetchall()}
 
     with get_users_conn() as u:
@@ -103,21 +112,34 @@ def admin_dashboard(request: Request):
         }
 
     return templates.TemplateResponse(
-        "admin.html",
-        {
-            "request": request,
-            "active_nav": "admin",
-            "runs": runs,
-            "market_counts": market_counts,
-            "user_counts": user_counts,
-            "stocks": stocks,
-            "stocks_shown": stocks_shown,
-            "macro_markets": macro_markets,
-            "sources": list(SOURCES.keys()),
-            "targets": TARGETS,
-            "jobs": sched.jobs_view(),
-        },
+        "_admin_tab_ingestion.html",
+        {"request": request, "runs": runs, "market_counts": market_counts, "user_counts": user_counts, "stocks": stocks, "stocks_shown": stocks_shown,
+         "macro_markets": macro_markets, "sources": list(SOURCES.keys()), "targets": TARGETS, "jobs": sched.jobs_view()},
     )
+
+
+@router.get("/admin/tab/rules", response_class=HTMLResponse)
+def admin_tab_rules(request: Request):
+    from app import framework as fw
+    with get_users_conn() as u:
+        ctx = {"defs": fw.DEFS, "platform": fw.platform_layers(u), "story_defs": fw.STORY_DEFS, "sizing_defs": fw.SIZING_DEFS, "story_platform": fw.story_platform_layers(u)}
+    return templates.TemplateResponse("_admin_tab_rules.html", {"request": request, **ctx})
+
+
+@router.get("/admin/tab/users", response_class=HTMLResponse)
+def admin_tab_users(request: Request, days: int = 7, flt: str = "all", q: str = ""):
+    from app import admin_users
+    o = admin_users.overview(days if days in (1, 7, 30) else 7, flt if flt in ("all", "new", "returning", "stuck") else "all", q.strip()[:60])
+    return templates.TemplateResponse("_admin_tab_users.html", {"request": request, "o": o})
+
+
+@router.get("/admin/users/{uid:int}", response_class=HTMLResponse)
+def admin_user_detail(request: Request, uid: int, reveal: int = 0):
+    from app import admin_users
+    d = admin_users.detail(uid, bool(reveal))
+    if d is None:
+        return HTMLResponse('<p class="section-note">That user no longer exists.</p>')
+    return templates.TemplateResponse("_admin_user_detail.html", {"request": request, "d": d})
 
 
 @router.get("/admin/stocks-rows", response_class=HTMLResponse)

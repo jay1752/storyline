@@ -23,6 +23,7 @@ import requests
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
+from app import activity
 from app.auth.tokens import create_session
 from app.db import get_users_conn
 from app.routes.auth import _set_session_cookie
@@ -127,6 +128,7 @@ def google_callback(request: Request, code: str | None = None, state: str | None
         u.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))  # housekeeping: expired sessions were never purged
         u.commit()
 
+    activity.log(user_id, "signin", detail="new" if is_new else "returning")
     resp = RedirectResponse("/welcome" if is_new else "/analytics", status_code=303)  # a brand-new account gets the getting-started page
     resp.delete_cookie(STATE_COOKIE, path="/auth/google")
     _set_session_cookie(resp, create_session(user_id))

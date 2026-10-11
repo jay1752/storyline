@@ -1,0 +1,123 @@
+<details class="expandable" open>
+  <summary><span class="summary-title">Scheduled jobs</span><span class="section-note">run automatically by the app · all times IST · changes apply at the next 5-minute check</span></summary>
+  <div class="details-body">
+    <div class="table-wrap">
+      <table class="data jobs-table" id="jobs-table">
+        <thead><tr><th>Job</th><th>Schedule</th><th>On</th><th>Last run</th><th>Next run</th><th></th></tr></thead>
+        <tbody>
+          {% for j in jobs %}
+          <tr data-key="{{ j.key }}" data-time="{{ j.time }}" data-days="{{ j.days|join(',') }}" data-enabled="{{ 1 if j.enabled else 0 }}"
+              data-default-time="{{ j.default_time }}" data-default-days="{{ j.default_days|join(',') }}" data-every="{{ j.every or '' }}" data-default-every="{{ j.default_every or '' }}">
+            <td><b>{{ j.label }}</b><span class="row-sub">{{ j.desc }}</span></td>
+            <td class="job-sched">{% if j.every %}{{ 'every hour' if j.every == 60 else ('every ' ~ (j.every // 60) ~ ' hours' if j.every % 60 == 0 else 'every ' ~ j.every ~ ' min') }}{% else %}{{ j.time }} · {% set names = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}{% if j.days|length == 7 %}every day{% elif j.days == [0,1,2,3,4] %}Mon–Fri{% else %}{% for d in j.days %}{{ names[d] }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}{% endif %}
+              {% if j.customised %}<span class="badge accent">changed</span>{% endif %}</td>
+            <td><label class="switch"><input type="checkbox" class="job-on" {{ 'checked' if j.enabled else '' }} aria-label="Run {{ j.label }} automatically"><span></span></label></td>
+            <td>{% if j.last %}<span class="badge {{ 'pos' if j.last.status == 'success' else ('neg' if j.last.status in ('failed','not_configured') else 'neutral') }}">{{ j.last.status }}</span>
+                <span class="row-sub">{{ j.last.started_ist }}{% if j.last.took %} · {{ j.last.took }}{% endif %}{% if j.last.rows_written %} · {{ "{:,}".format(j.last.rows_written) }} rows{% endif %}</span>
+                {% if j.last.error_message %}<span class="row-sub job-err" title="{{ j.last.error_message }}">{{ j.last.error_message[:90] }}</span>{% endif %}
+                {% else %}<span class="stub">never run</span>{% endif %}</td>
+            <td class="job-next">{{ j.next }}</td>
+            <td class="job-actions"><button type="button" class="btn btn-sm job-run">Run now</button> <button type="button" class="btn btn-sm job-edit">Edit</button><span class="rule-msg job-msg" role="status"></span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">Switch a job off to pause it (it keeps its history and can still be run by hand). "Run now" ignores the schedule and the on/off switch. A job that failed is retried after 2 hours. Details of every run are in "Ingestion runs" below.</p>
+  </div>
+</details>
+
+<details class="expandable" open>
+  <summary><span class="summary-title">Run ingestion</span><span class="section-note">runs in the background — refresh to see progress</span></summary>
+  <div class="details-body">
+    <form class="run-form" method="post" action="/admin/run-ingestion">
+      <select name="source" class="form-input" aria-label="Source">
+        {% for s in sources %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+      </select>
+      <select name="target" class="form-input" aria-label="Target">
+        {% for t in targets %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+      </select>
+      <input type="text" name="symbol" class="form-input" placeholder="symbol e.g. NASDAQ:AAPL (re-ingest one)" aria-label="Symbol">
+      <input type="number" name="limit" class="form-input" placeholder="limit" min="1" aria-label="Limit">
+      <button class="btn btn-primary" type="submit">Run</button>
+    </form>
+    <p class="prose">"universe" syncs the full symbol list (cheap, one call). "quarterly"/"prices" fetch per-symbol data — leave symbol/limit blank to run the whole universe (can be slow at scale), set a <strong>symbol</strong> to re-ingest one stock after a correction, or a <strong>limit</strong> to test on the first N first. A symbol always overrides limit.</p>
+  </div>
+</details>
+
+<details class="expandable">
+  <summary><span class="summary-title">Community daily briefing</span><span class="section-note">auto-posts at 07:30 IST · uses the shared Gemini key</span></summary>
+  <div class="details-body">
+    <form class="inline-controls" method="post" action="/admin/run-community-briefing">
+      <button class="btn btn-primary" type="submit">Generate today's briefing now</button>
+      <label class="inline-check"><input type="checkbox" name="force" value="1"> replace today's if it already exists</label>
+    </form>
+    <p class="prose">Live quotes (oil, yields, dollar, rupee, indices, theme ETFs) + the last 48 hours of headlines per theme, summarised by the model with numbered citations. Progress shows in "Ingestion runs" below as <code>community_briefing</code>.</p>
+  </div>
+</details>
+
+<details class="expandable" open>
+  <summary><span class="summary-title">Ingestion runs</span><span class="section-note">last 25 · filter by source, target, or status</span></summary>
+  <div class="details-body">
+    <input class="search-input" type="search" name="q" placeholder="filter runs…"
+           hx-get="/admin/runs-rows" hx-trigger="keyup changed delay:300ms, search" hx-target="#runs-tbody" hx-swap="innerHTML">
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>ID</th><th>Source</th><th>Target</th><th>Started</th><th>Finished</th><th>Status</th><th>Rows</th><th>Error</th></tr></thead>
+        <tbody id="runs-tbody">{% include "_admin_runs_rows.html" %}</tbody>
+      </table>
+    </div>
+  </div>
+</details>
+
+<details class="expandable" open>
+  <summary><span class="summary-title">Stock coverage</span><span class="section-note">{{ market_counts.stocks }} symbols · search the whole universe, not just what's shown</span></summary>
+  <div class="details-body">
+    <div class="kpi-grid">
+      <div class="kpi"><span class="kpi-label">Stocks</span><span class="kpi-value">{{ "{:,}".format(market_counts.stocks) }}</span></div>
+      <div class="kpi"><span class="kpi-label">Quarterly rows</span><span class="kpi-value">{{ "{:,}".format(market_counts.quarterly_data) }}</span></div>
+      <div class="kpi"><span class="kpi-label">Price points</span><span class="kpi-value">{{ "{:,}".format(market_counts.price_history) }}</span></div>
+      <div class="kpi"><span class="kpi-label">Macro rows</span><span class="kpi-value" style="{{ 'color:var(--muted);' if market_counts.macro_context == 0 else '' }}">{{ market_counts.macro_context }}</span>{% if market_counts.macro_context == 0 %}<span class="kpi-sub">phase 2</span>{% endif %}</div>
+    </div>
+
+    <div id="stocks-filters" class="toolbar">
+      <input class="search-input" type="search" name="q" placeholder="search symbol or company name…"
+             hx-get="/admin/stocks-rows" hx-trigger="keyup changed delay:300ms, search" hx-target="#stocks-tbody" hx-swap="innerHTML" hx-include="#stocks-filters">
+      <select name="market" class="form-input" style="width:auto;" aria-label="Country"
+              hx-get="/admin/stocks-rows" hx-trigger="change" hx-target="#stocks-tbody" hx-swap="innerHTML" hx-include="#stocks-filters"
+              >
+        <option value="">All countries</option>
+        <option value="IN">India</option>
+        <option value="US">US</option>
+      </select>
+      <select name="cap_tier" id="cap-tier-select" class="form-input" style="width:auto;" aria-label="Cap tier"
+              hx-get="/admin/stocks-rows" hx-trigger="change" hx-target="#stocks-tbody" hx-swap="innerHTML" hx-include="#stocks-filters">
+        <option value="">All caps</option>
+        <option value="large">Large</option>
+        <option value="mid">Mid</option>
+        <option value="small">Small</option>
+        <option value="micro">Micro (US)</option>
+      </select>
+    </div>
+    <p class="section-note" id="stocks-shown-note">showing {{ stocks_shown }} of {{ market_counts.stocks }} (symbols with data first). Cap tier: India by SEBI/AMFI rank, US by market cap (large ≥ $10B, mid ≥ $2B, small ≥ $300M, micro below).</p>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Symbol</th><th>Name</th><th>Market</th><th>Cap</th><th>L1 · Company</th><th>L2 · Relative</th><th>L3 · Institutional</th><th>L4 · Momentum</th><th>L5 · Macro</th></tr></thead>
+        <tbody id="stocks-tbody">{% include "_admin_stocks_rows.html" %}</tbody>
+      </table>
+    </div>
+  </div>
+</details>
+
+<details class="expandable">
+  <summary><span class="summary-title">Users snapshot</span></summary>
+  <div class="details-body">
+    <div class="kpi-grid">
+      <div class="kpi"><span class="kpi-label">Users</span><span class="kpi-value">{{ user_counts.users }}</span></div>
+      <div class="kpi"><span class="kpi-label">Tracked positions</span><span class="kpi-value">{{ user_counts.tracked_positions }}</span></div>
+      <div class="kpi"><span class="kpi-label">Position snapshots</span><span class="kpi-value">{{ user_counts.position_snapshots }}</span></div>
+    </div>
+  </div>
+</details>
+
+<script src="/static/js/admin-jobs.js?v={{ asset_version('js/admin-jobs.js') }}"></script>

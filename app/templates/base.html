@@ -8,6 +8,7 @@
   <script src="/static/js/shell.js?v={{ asset_version('js/shell.js') }}" defer></script>
   <script src="/static/js/chat-widget.js?v={{ asset_version('js/chat-widget.js') }}" defer></script>
   <script src="/static/js/pwa.js?v={{ asset_version('js/pwa.js') }}" defer></script>
+  {% if request.state.user %}<script src="/static/js/activity.js?v={{ asset_version('js/activity.js') }}" defer></script>{% endif %}
 </head>
 <body>
   {% include "_icons.html" %}
@@ -35,7 +36,7 @@
         <div class="side-label">System</div>
         <a class="nav-item {{ 'active' if active_nav == 'rules' else '' }}" href="/rules" title="Investment rules"><svg class="icon"><use href="#i-check"/></svg><span class="label">Investment rules</span></a>
         <a class="nav-item {{ 'active' if active_nav == 'settings' else '' }}" href="/settings" title="AI settings"><svg class="icon"><use href="#i-settings"/></svg><span class="label">AI settings</span></a>
-        {% if request.state.is_admin %}<a class="nav-item {{ 'active' if active_nav == 'admin' else '' }}" href="/admin" title="Data ingestion (admin)"><svg class="icon"><use href="#i-admin"/></svg><span class="label">Data ingestion</span></a>{% endif %}
+        {% if request.state.is_admin %}<a class="nav-item {{ 'active' if active_nav == 'admin' else '' }}" href="/admin" title="Platform admin"><svg class="icon"><use href="#i-admin"/></svg><span class="label">Platform admin</span></a>{% endif %}
       </nav>
 
       <div class="side-spacer"></div>

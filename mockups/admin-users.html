@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin users mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400&display=swap">
+<style>
+:root{--paper:#F1F0EB;--card:#F8F8F4;--ink:#17261F;--muted:#5E6B66;--line:rgba(26,36,32,.14);--st:#2B4A45;--amber:#E0A34C;--amberd:#9A6212;--pos:#2F7D5B;--neg:#B3402F;--warn:#C8841E;--mono:"IBM Plex Mono",monospace;--serif:"Newsreader",Georgia,serif}
+*{box-sizing:border-box}
+body{margin:0;background:#D8D6CC;font-family:"IBM Plex Sans",system-ui,sans-serif;color:var(--ink);line-height:1.5;font-size:14px}
+.note{max-width:1180px;margin:0 auto;padding:16px 20px 0;font:12px var(--mono);color:#4B554F}
+.app{max-width:1180px;margin:8px auto 40px;background:var(--paper);border:1px solid rgba(26,36,32,.25);border-radius:14px;overflow:hidden;display:grid;grid-template-columns:200px minmax(0,1fr)}
+.side{background:#E7E6DF;border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;gap:2px}
+.logo{display:flex;align-items:center;gap:8px;font-family:var(--serif);font-size:19px;margin:0 6px 14px}
+.mk{width:24px;height:24px;border-radius:7px;background:var(--st);color:var(--amber);display:inline-flex;align-items:center;justify-content:center;font-size:13px}
+.lab{font:10.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:12px 8px 4px}
+.nav{padding:8px 10px;border-radius:9px;color:#34423C;font-size:13.5px}
+.nav.on{background:var(--card);box-shadow:inset 3px 0 0 var(--amber);color:var(--st);font-weight:500}
+.main{padding:22px 26px 28px;min-width:0}
+.eyebrow{font:11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font-family:var(--serif);font-weight:500;font-size:30px;margin:2px 0 2px}
+.sub{color:var(--muted);margin:0 0 16px;font-size:13.5px}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;background:var(--card);overflow:hidden}
+.seg span{padding:7px 12px;font-size:12.5px;color:var(--muted)}
+.seg .on{background:#fff;color:var(--st);font-weight:500}
+.in{border:1px solid var(--line);background:var(--card);border-radius:9px;padding:7px 12px;font-size:12.5px;color:var(--muted);min-width:230px}
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.kpi small{display:block;font:10.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.kpi b{display:block;font-size:24px;font-weight:500;margin:2px 0 0}
+.kpi i{font-style:normal;font-size:11.5px;color:var(--muted)}
+.up{color:var(--pos)}.dn{color:var(--neg)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:16px}
+.card h2{margin:0 0 2px;font-size:15px;font-weight:500}
+.card .hint{font-size:12px;color:var(--muted);margin:0 0 12px}
+.funnel{display:grid;gap:7px}
+.fr{display:grid;grid-template-columns:190px minmax(0,1fr) 120px;gap:12px;align-items:center;font-size:13px}
+.fb{height:22px;background:#E4E3DB;border-radius:6px;overflow:hidden}
+.fb div{height:100%;background:var(--st);border-radius:6px}
+.fr .n{font:12px var(--mono);text-align:right;color:var(--muted)}
+.fr .n em{font-style:normal;color:var(--neg)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font:10.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:400;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+tr.sel td{background:#fff}
+.em{font-family:var(--mono);font-size:12.5px}
+.sub2{display:block;font-size:11.5px;color:var(--muted)}
+.steps{display:flex;gap:3px}
+.steps i{width:16px;height:8px;border-radius:3px;background:#DAD8CE;display:block}
+.steps i.d{background:var(--st)}
+.pill{display:inline-block;font-size:11.5px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);background:#fff}
+.pill.g{background:#E3F0E8;border-color:#BFD9C9;color:#1F5A3F}
+.pill.w{background:#F8EBD3;border-color:#E6CB93;color:#7A4D0A}
+.pill.r{background:#F6DDD7;border-color:#E3B2A6;color:#8A2F20}
+.two{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px}
+.tl{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.tl li{display:grid;grid-template-columns:54px 14px minmax(0,1fr);gap:8px;padding:7px 0;font-size:13px}
+.tl time{font:11.5px var(--mono);color:var(--muted);padding-top:2px}
+.tl .dot{width:9px;height:9px;border-radius:50%;background:var(--st);margin-top:6px}
+.tl .dot.bad{background:var(--neg)}.tl .dot.mid{background:var(--warn)}
+.tl small{display:block;color:var(--muted);font-size:12px}
+.pg{display:grid;gap:8px}
+.pgr{display:grid;grid-template-columns:96px minmax(0,1fr) 54px;gap:10px;align-items:center;font-size:12.5px}
+.pgr .b{height:10px;background:#E4E3DB;border-radius:5px;overflow:hidden}.pgr .b div{height:100%;background:var(--amber)}
+.pgr span:last-child{font:12px var(--mono);text-align:right;color:var(--muted)}
+.priv{border:1px dashed rgba(26,36,32,.35);border-radius:12px;padding:12px 16px;font-size:12.5px;color:#44504A;background:rgba(255,255,255,.4)}
+.priv b{color:var(--ink)}
+.how{font-size:12.5px;color:#44504A}
+@media(max-width:900px){.app{grid-template-columns:1fr}.side{display:none}.kpis{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}.fr{grid-template-columns:120px 1fr 90px}}
+</style>
+</head>
+<body>
+<div class="note">Mockup · placeholder data · emails masked as in the real page</div>
+<div class="app">
+  <aside class="side">
+    <div class="logo"><span class="mk">↗</span>Tenetfolio</div>
+    <div class="lab">Research</div><div class="nav">Analytics</div><div class="nav">Community</div>
+    <div class="lab">Tracking</div><div class="nav">Management</div><div class="nav">Portfolio</div>
+    <div class="lab">System</div><div class="nav">Investment rules</div><div class="nav">AI settings</div>
+    <div class="lab">Admin</div><div class="nav">Data ingestion</div><div class="nav on">Users</div>
+  </aside>
+  <main class="main">
+    <span class="eyebrow">Admin</span>
+    <h1>Users</h1>
+    <p class="sub">Who is on the platform, how long they stay, and which steps they reach.</p>
+
+    <div class="bar">
+      <span class="seg"><span>Today</span><span class="on">7 days</span><span>30 days</span></span>
+      <span class="seg"><span class="on">All users</span><span>New</span><span>Returning</span><span>Stuck</span></span>
+      <span class="in">Search by email or name…</span>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><small>New sign-ups</small><b>24</b><i class="up">+18 vs prior 7 days</i></div>
+      <div class="kpi"><small>Active now</small><b>3</b><i>last 5 minutes</i></div>
+      <div class="kpi"><small>Time per visit</small><b>3m 40s</b><i>median</i></div>
+      <div class="kpi"><small>Reached a first step</small><b>22%</b><i>5 of 23 new users</i></div>
+      <div class="kpi"><small>Came back</small><b>4</b><i>on a later day</i></div>
+      <div class="kpi"><small>AI failures</small><b class="dn">8</b><i>3 ETF, 5 usage limit</i></div>
+    </div>
+
+    <div class="card">
+      <h2>Where new users drop off</h2>
+      <p class="hint">New users in the last 7 days. Each bar is the share who reached that step.</p>
+      <div class="funnel">
+        <div class="fr"><span>Signed in with Google</span><div class="fb"><div style="width:100%"></div></div><span class="n">23</span></div>
+        <div class="fr"><span>Saw the welcome page</span><div class="fb"><div style="width:96%"></div></div><span class="n">22 <em>−4%</em></span></div>
+        <div class="fr"><span>Searched or opened a stock</span><div class="fb"><div style="width:48%"></div></div><span class="n">11 <em>−50%</em></span></div>
+        <div class="fr"><span>Added a stock or imported</span><div class="fb"><div style="width:22%"></div></div><span class="n">5 <em>−55%</em></span></div>
+        <div class="fr"><span>Opened rules or a story</span><div class="fb"><div style="width:13%"></div></div><span class="n">3 <em>−40%</em></span></div>
+        <div class="fr"><span>Came back another day</span><div class="fb"><div style="width:9%"></div></div><span class="n">2 <em>−33%</em></span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Users</h2>
+      <p class="hint">Steps: sign-in · welcome · explored · added or imported · rules or story · returned</p>
+      <table>
+        <thead><tr><th>User</th><th>Joined</th><th>Last seen</th><th>Visits</th><th>Time on site</th><th>Steps reached</th><th>Key actions</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr class="sel"><td><span class="em">me***@gmail.com</span><span class="sub2">Demo Person</span></td><td>11 Oct 06:42</td><td>11 Oct 06:58</td><td>1</td><td>14m 20s<span class="sub2">avg 14m 20s</span></td><td><span class="steps"><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i></i></span></td><td>Import: 16 positions · 14 AI ok, 5 failed</td><td><span class="pill g">Imported</span></td></tr>
+          <tr><td><span class="em">pr***@gmail.com</span><span class="sub2">—</span></td><td>11 Oct 06:38</td><td>11 Oct 06:49</td><td>2</td><td>9m 05s<span class="sub2">avg 4m 32s</span></td><td><span class="steps"><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i></i><i></i></span></td><td>3 positions added · AI limit hit</td><td><span class="pill w">Hit AI limit</span></td></tr>
+          <tr><td><span class="em">ay***@gmail.com</span><span class="sub2">—</span></td><td>11 Oct 06:40</td><td>11 Oct 06:41</td><td>1</td><td>2m 10s<span class="sub2">avg 2m 10s</span></td><td><span class="steps"><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i></i><i></i></span></td><td>1 position added</td><td><span class="pill g">Added a stock</span></td></tr>
+          <tr><td><span class="em">dr***@gmail.com</span><span class="sub2">—</span></td><td>11 Oct 06:41</td><td>11 Oct 06:41</td><td>1</td><td>0m 20s<span class="sub2">avg 0m 20s</span></td><td><span class="steps"><i class="d"></i><i class="d"></i><i></i><i></i><i></i><i></i></span></td><td>None</td><td><span class="pill r">Stuck at welcome</span></td></tr>
+          <tr><td><span class="em">up***@gmail.com</span><span class="sub2">—</span></td><td>11 Oct 06:51</td><td>11 Oct 07:12</td><td>1</td><td>6m 40s<span class="sub2">avg 6m 40s</span></td><td><span class="steps"><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i></i><i></i></span></td><td>1 watchlist stock</td><td><span class="pill w">Hit AI limit</span></td></tr>
+          <tr><td><span class="em">vi***@gmail.com</span><span class="sub2">—</span></td><td>11 Oct 06:56</td><td>11 Oct 06:56</td><td>1</td><td>0m 12s<span class="sub2">avg 0m 12s</span></td><td><span class="steps"><i class="d"></i><i class="d"></i><i></i><i></i><i></i><i></i></span></td><td>None</td><td><span class="pill r">Stuck at welcome</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="two">
+      <div class="card">
+        <h2>me***@gmail.com · activity</h2>
+        <p class="hint">Events and durations only. No holdings, prices or chat text.</p>
+        <ul class="tl">
+          <li><time>06:42</time><span class="dot"></span><span>Signed in with Google</span></li>
+          <li><time>06:42</time><span class="dot"></span><span>Welcome page<small>20 seconds</small></span></li>
+          <li><time>06:43</time><span class="dot"></span><span>Statement attached: Excel file<small>Notice shown, read on our server</small></span></li>
+          <li><time>06:44</time><span class="dot"></span><span>Import proposed: 16 positions, 0 to place<small>14 matched by ISIN, 2 by name</small></span></li>
+          <li><time>06:46</time><span class="dot"></span><span>Import confirmed<small>16 positions saved</small></span></li>
+          <li><time>06:47</time><span class="dot"></span><span>Portfolio page<small>2 minutes 40 seconds</small></span></li>
+          <li><time>06:50</time><span class="dot mid"></span><span>Daily analysis: 7 ran fine<small>3 skipped: fund, no fundamentals</small></span></li>
+          <li><time>06:52</time><span class="dot bad"></span><span>Daily analysis failed: AI usage limit</span></li>
+          <li><time>06:55</time><span class="dot"></span><span>Stock page opened<small>5 minutes</small></span></li>
+          <li><time>06:58</time><span class="dot"></span><span>Left the site</span></li>
+        </ul>
+      </div>
+      <div style="display:grid;gap:16px;align-content:start">
+        <div class="card">
+          <h2>Time by page</h2>
+          <p class="hint">me***@gmail.com · this visit, 14m 20s</p>
+          <div class="pg">
+            <div class="pgr"><span>Stock pages</span><span class="b"><div style="width:62%"></div></span><span>8m 50s</span></div>
+            <div class="pgr"><span>Portfolio</span><span class="b"><div style="width:20%"></div></span><span>2m 50s</span></div>
+            <div class="pgr"><span>Tracking</span><span class="b"><div style="width:11%"></div></span><span>1m 35s</span></div>
+            <div class="pgr"><span>Welcome</span><span class="b"><div style="width:2%"></div></span><span>0m 20s</span></div>
+            <div class="pgr"><span>Assistant</span><span class="b"><div style="width:6%"></div></span><span>0m 45s</span></div>
+          </div>
+        </div>
+        <div class="card how">
+          <h2>How time is measured</h2>
+          <p class="hint" style="margin-bottom:6px">Counted while the tab is open and visible. A visit ends after 30 minutes with no activity.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="priv"><b>Privacy.</b> Only the event type, the page area and the time are stored. Never your users' holdings, prices, uploaded files or chat messages. Emails are masked until you click Reveal. Records are kept 90 days. The privacy policy would be updated to say this.</div>
+  </main>
+</div>
+</body>
+</html>

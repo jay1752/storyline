@@ -545,5 +545,7 @@ def commit(user_id: int, proposal_id: int, edits: Optional[dict] = None) -> Opti
             updated += 1
 
         u.execute("UPDATE pending_imports SET status = 'confirmed' WHERE id = ?", (proposal_id,))
+        from app import activity
+        activity.log(user_id, "step", "import_confirmed", detail=f"{created} new, {updated} updated", conn=u)
         u.commit()
     return {"created": created, "updated": updated}

@@ -1,0 +1,25 @@
+{% from "_rules_macros.html" import rule_table, story_table with context %}
+<p class="page-sub" style="margin-top:0">What every user inherits until they set their own. Changing these affects everyone who hasn't changed the same rule.</p>
+{% if platform %}
+<section class="section">
+  <div class="section-head">
+    <div><h2 class="section-title">Platform defaults <span class="badge accent">admin</span></h2><span class="section-note">what every user inherits until they set their own</span></div>
+    <button type="button" class="btn btn-sm" id="reset-all-platform">↺ Reset all to built-in</button>
+  </div>
+  {{ rule_table(platform, 'platform') }}
+</section>
+{% endif %}
+
+{% if story_platform %}
+<section class="section">
+  <div class="section-head"><div><h2 class="section-title">Platform daily story <span class="badge accent">admin</span></h2><span class="section-note">the default for every user until they set their own</span></div></div>
+  {{ story_table(story_platform, 'platform', story_defs) }}
+</section>
+<section class="section">
+  <div class="section-head"><div><h2 class="section-title">Platform sizing &amp; discipline <span class="badge accent">admin</span></h2><span class="section-note">the default for every user until they set their own</span></div></div>
+  {{ story_table(story_platform, 'platform', sizing_defs) }}
+</section>
+{% endif %}
+
+
+<script src="/static/js/rules-page.js?v={{ asset_version('js/rules-page.js') }}"></script>

@@ -21,7 +21,7 @@ from app import positions as positions_mod
 from app.ai.agent import agent, proposals_created, tools_used
 from app.ai import errors
 from app.ai.page_context import page_instructions, suggestions
-from app import statement_parse
+from app import activity, statement_parse
 from app.ai.providers import PROVIDERS, build_chain, get_user_settings
 
 router = APIRouter()
@@ -135,6 +135,7 @@ async def _stream(user_id: int, message: str, history_json: str | None, page: st
     hint = f"[Now on the {page} page" + (f" for {symbol}" if symbol else "") + ".] " if page else ""
 
     prompt = hint + message
+    activity.log(user_id, "step", "import_attached" if upload is not None else "chat_message", detail=(upload[0].rsplit(".", 1)[-1].lower()[:6] if upload is not None and "." in upload[0] else None))
     if upload is not None:
         try:  # the widget shows the processing notice before a file can be sent: keep the time of the first one
             from app.db import get_users_conn
@@ -170,6 +171,7 @@ async def _stream(user_id: int, message: str, history_json: str | None, page: st
                     intro += f" ({parsed.skipped} non-equity or unrecognised rows were left out.)"
                 for note in parsed.notes:
                     intro += " " + note
+                activity.log(user_id, "step", "import_proposed", detail=f"{len(proposal['rows'])} rows, {len(proposal['skipped'])} skipped")
                 yield _sse(None, {"type": "text", "delta": intro})
                 yield _sse(None, {"type": "proposal", "proposal": proposal})
                 yield "data: [DONE]\n\n"
