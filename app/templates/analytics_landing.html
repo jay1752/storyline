@@ -71,7 +71,7 @@
         </tbody>
       </table>
     </div>
-    <div class="dz-foot"><span class="section-note">{% if result.count > result.rows|length %}Showing {{ result.rows|length }} of {{ result.count }} · {% endif %}{% if screen.key in ('rules', 'browse') %}Best match against your rules comes first. {% endif %}{% if screen.key == 'rules' %}Stocks with too little data to judge most rules are left out. {% endif %}Open any stock for its full story, or track it to watch it against your rules.</span>
+    <div class="dz-foot"><span class="section-note">{% if result.count > result.rows|length %}Showing {{ result.rows|length }} of {{ result.count }} · <a href="{{ more_href }}">Show 60 more</a> · {% endif %}{% if screen.key in ('rules', 'browse') %}Best match against your rules comes first. {% endif %}{% if screen.key == 'rules' %}Stocks with too little data to judge most rules are left out. {% endif %}Open any stock for its full story, or track it to watch it against your rules.</span>
       {% if screen.key in ('rules', 'browse') %}<a class="btn btn-sm btn-ghost" href="/rules">Change my rules</a>{% endif %}</div>
     {% else %}
     <div class="empty">
@@ -100,7 +100,7 @@
       <label>Valuation (P/E){{ opt('pe', custom.pe, [('', 'Any'), (15, 'Below 15'), (25, 'Below 25'), (40, 'Below 40')]) }}</label>
       <label>Operating margin{{ opt('opm', custom.opm, [('', 'Any'), (10, 'Above 10%'), (20, 'Above 20%'), (30, 'Above 30%')]) }}</label>
       <label>Dividends{{ opt('div', custom.div, [('', 'Any'), (1, 'Pays a dividend'), (20, 'Pays out 20%+ of profit'), (40, 'Pays out 40%+')]) }}</label>
-      <label>Size{{ opt('cap', cap, [('', 'Any size'), ('large', 'Large'), ('mid', 'Mid'), ('small', 'Small')]) }}</label>
+      <label>Size{{ opt('cap', cap, [('', 'Any size'), ('large', 'Large'), ('mid', 'Mid'), ('small', 'Small'), ('micro', 'Micro (US)')]) }}</label>
       <label>Industry<select class="form-input" name="sector"><option value="">Any industry</option>{% for s, n in facets.sectors %}<option value="{{ s }}" {{ 'selected' if s == sector else '' }}>{{ s }}</option>{% endfor %}</select></label>
       <label>Sort by{{ opt('sort', custom.sort or 'roce', [('roce', 'Return on capital'), ('growth', 'Sales growth'), ('pe', 'Cheapest P/E'), ('div', 'Dividend payout'), ('rules', 'Match with my rules')]) }}</label>
       <div class="dz-form-go"><button class="btn btn-primary" type="submit">Show matches</button><a class="btn btn-ghost" href="/analytics">Clear</a></div>

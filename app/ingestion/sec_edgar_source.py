@@ -689,11 +689,11 @@ class SecEdgarSource(DataSource):
                     assets_val = assets.get(end_str)
                     cur_liab_val = current_liab.get(end_str)
 
-                    if all(v is not None for v in ni_vals) and equity_val:
+                    if all(v is not None for v in ni_vals) and equity_val and equity_val > 0:  # negative equity makes a loss look like a return
                         roe_pct = round(sum(ni_vals) / equity_val * 100, 1)
                     if all(v is not None for v in op_vals) and assets_val is not None and cur_liab_val is not None:
                         denom = assets_val - cur_liab_val
-                        if denom:
+                        if denom > 0:
                             roce_pct = round(sum(op_vals) / denom * 100, 1)
                     if debt_val is not None and equity_val:
                         debt_equity = round(debt_val / equity_val, 2)

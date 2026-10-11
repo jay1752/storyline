@@ -6,7 +6,6 @@ Only what a 10-K states is stored; a missing tag stays NULL (a company that pays
 Resumable: stocks already present are skipped unless --force. Run (Mac or VM):
     docker compose exec -T -w /app -e PYTHONPATH=/app app python scripts/fill_us_annual.py [--limit N] [--symbols NASDAQ:AAPL,...] [--force]"""
 import argparse
-import re
 import sqlite3
 import sys
 import threading
@@ -18,6 +17,7 @@ import requests
 
 from app.db import DATA_DIR
 from app.ingestion import sec_edgar_source as sec
+from app.us_securities import is_derivative
 
 DIV_TAGS = ["PaymentsOfDividends", "PaymentsOfDividendsCommonStock", "PaymentsOfOrdinaryDividends"]
 DPS_TAGS = ["CommonStockDividendsPerShareDeclared", "CommonStockDividendsPerShareCashPaid"]
@@ -37,16 +37,6 @@ def _throttle(gap: float = 0.13) -> None:
         _LAST[0] = max(time.time(), _LAST[0] + gap)
     if wait > 0:
         time.sleep(wait)
-
-
-def is_derivative(ticker: str, tickers: set[str]) -> bool:
-    """Warrants, units, rights and preferred lines of a company: they carry no filings of their own."""
-    if "-" in ticker:
-        return bool(re.fullmatch(r"P[A-Z]?|UN?|WT?S?[A-Z]?|WW|RT?|R", ticker.rsplit("-", 1)[1]))
-    for suf in ("WW", "WS", "W", "RT", "R", "U"):
-        if ticker.endswith(suf) and len(ticker) > len(suf) + 1 and (ticker[:-len(suf)] in tickers or ticker[:-len(suf)] + "U" in tickers):
-            return True
-    return False
 
 
 def _instant(src, facts, tags, scale=1e6):

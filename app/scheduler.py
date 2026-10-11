@@ -235,12 +235,26 @@ def _tick_housekeeping() -> None:
         _last_purge = today
 
 
+def _tick_metrics() -> None:
+    """The Analytics screens read stock_metrics (about 30 s to rebuild). Rebuilt once a day, after the price job has had its turn, so the
+    screens never run more than a day behind new results and prices."""
+    from app import discovery
+
+    age = discovery.metrics_age_days()
+    if age is None or age > 0.9:
+        try:
+            discovery.build_metrics()
+        except Exception:  # noqa: BLE001 - a failed rebuild must not stop the other jobs; the page-view check will retry
+            logger.exception("stock_metrics rebuild failed")
+
+
 def _tick() -> None:
     _tick_housekeeping()
     _tick_fx()          # first of all: everything that shows US holdings in rupees should use a fresh rate
     _tick_prices()      # then prices: the briefing and the position analyses should read today's prices
     _tick_briefing()
     _tick_insights()
+    _tick_metrics()
 
 
 FX_RETRY = timedelta(minutes=10)

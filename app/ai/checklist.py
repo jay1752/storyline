@@ -133,8 +133,12 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
     thr = th[rk]["value"]
     v = _f(latest.get("roe_pct" if bank else "roce_pct"))
     roce_note = "banks/financials use ROE instead of ROCE" if bank else None
+    # A positive return over a year that lost money is a sign error (a loss divided by negative capital), not a return: leave it unknown.
+    ttm = [_f(r.get("net_profit_cr" if bank else "operating_profit_cr")) for r in rows[-4:]]
+    if v is not None and v > 0 and len(ttm) == 4 and all(x is not None for x in ttm) and sum(ttm) < 0:
+        v, roce_note = None, "not meaningful: the last four quarters made a loss, so the capital base is not a fair divisor"
     if v is None and not bank:  # the quarters carry no ROCE: the latest fiscal year's (IndianAPI annual ratios) stands in, said so
-        v, fy_end = _annual_fallback(annual, latest, lambda a: _f(a.get("roce_pct")))
+        v, fy_end = _annual_fallback(annual, latest, lambda a: _f(a.get("roce_pct")) if (_f(a.get("operating_profit_cr")) or 0) >= 0 else None)
         if v is not None:
             roce_note = f"fiscal year ended {fy_end} (annual); the latest quarter has none"
     add(rk, "ROE" if bank else "ROCE", None if v is None else f"{v:.1f}%", f"> {thr:g}%",

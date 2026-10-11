@@ -17,13 +17,13 @@ _REFRESH = {"running": False}
 
 
 def _refresh_metrics_if_stale() -> None:
-    """The discovery screens read stock_metrics. Build it in the background when it is missing or older than 3 days (about 30 s)."""
+    """The discovery screens read stock_metrics. Build it in the background when it is missing or older than a day and a half (about 30 s)."""
     import threading
 
     from app import discovery
 
     age = discovery.metrics_age_days()
-    if (age is None or age > 3) and not _REFRESH["running"]:
+    if (age is None or age > 1.5) and not _REFRESH["running"]:
         _REFRESH["running"] = True
 
         def go():
@@ -57,6 +57,7 @@ def _why(key: str, r: dict, custom: dict | None = None) -> str:
         "cash": [f"cash flow {r['cfo_pat']:.1f}× profit" if r["cfo_pat"] is not None else None],
         "dividend": [f"pays out {fmt(r['div_payout'])} of profit"],
         "big": [f"{(r['cap_tier'] or '').capitalize()} cap"],
+        "largest": [f"{(r['cap_tier'] or '').capitalize()} cap" if r["cap_tier"] else None],
         "cheap": [f"P/E {r['pe']:.0f}× vs its range" if r["pe"] else None],
     }.get(key, [])
     return " · ".join(x for x in parts if x)
@@ -64,13 +65,13 @@ def _why(key: str, r: dict, custom: dict | None = None) -> str:
 
 _GOALS = [  # the "not sure where to start" chooser: plain goal -> screen
     ("safe", "Safe, low-debt businesses", "debtfree"), ("steady", "Steady growth I can hold for years", "compounders"),
-    ("fast", "Fast growth", "growers"), ("income", "Regular income", "dividend"), ("known", "Big names I may know", "big"),
+    ("fast", "Fast growth", "growers"), ("income", "Regular income", "dividend"), ("known", "Big names I may know", "largest"),
 ]
 
 
 @router.get("/analytics", response_class=HTMLResponse)
 def analytics_landing(request: Request, screen: str = "rules", market: str = "IN", cap: str = "", sector: str = "",
-                      roce: str = "", de: str = "", growth: str = "", pe: str = "", opm: str = "", div: str = "", sort: str = ""):
+                      roce: str = "", de: str = "", growth: str = "", pe: str = "", opm: str = "", div: str = "", sort: str = "", n: int = 60):
     from urllib.parse import urlencode
 
     from app import discovery
@@ -98,7 +99,8 @@ def analytics_landing(request: Request, screen: str = "rules", market: str = "IN
     with get_users_conn() as u:
         th = fw.resolve(u, request.state.user_id)
         tracked = {r["symbol"] for r in u.execute("SELECT symbol FROM tracked_positions WHERE user_id = ? AND status = 'active'", (request.state.user_id,))}
-    res = discovery.run_screen(screen, th, market, cap=cap or None, sector=sector or None, custom=custom if screen == "custom" else None)
+    n = min(max(n, 60), 600)
+    res = discovery.run_screen(screen, th, market, limit=n, cap=cap or None, sector=sector or None, custom=custom if screen == "custom" else None)
     for r in res["rows"]:
         r["why"] = _why(screen, r, custom)
         r["tracked"] = r["symbol"] in tracked
@@ -115,7 +117,8 @@ def analytics_landing(request: Request, screen: str = "rules", market: str = "IN
         "analytics_landing.html",
         {"request": request, "active_nav": "analytics", "total_with_data": total_with_data, "screens": discovery.SCREENS,
          "screen": discovery.SCREEN_BY_KEY[screen], "market": market, "cap": cap, "sector": sector, "custom": custom, "result": res,
-         "facets": fc, "goals": _GOALS, "link": link, "preparing": discovery.metrics_age_days() is None,
+         "facets": fc, "goals": _GOALS, "link": link, "preparing": discovery.metrics_age_days() is None, "n": n,
+         "more_href": link(n=n + 60, **{k: v for k, v in (("roce", roce), ("de", de), ("growth", growth), ("pe", pe), ("opm", opm), ("div", div), ("sort", sort)) if v != ""}),
          "custom_open": screen == "custom"},
     )
 

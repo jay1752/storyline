@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from app import framework as fw
 from app.db import get_market_conn
+from app.us_securities import is_derivative
 
 _CACHE: dict = {"at": 0.0, "stamp": None, "rows": []}
 _LOCK = threading.Lock()
@@ -88,6 +89,24 @@ def _us_extras(rows: list, last_quarter_end: str) -> dict:
     return out
 
 
+def _drop_us_duplicates(conn) -> None:
+    """The SEC lists some companies under two tickers (a bond or note line, an old and a new ticker) that carry identical figures. Keep the one
+    that trades the most (then the shorter ticker); a dash share class (BRK-A / BRK-B) is a real second security and stays."""
+    groups: dict[tuple, list] = {}
+    for r in conn.execute("SELECT symbol, name, roce, opm, de, growth_min4, cfo_pat, last_q, mcap FROM stock_metrics WHERE market = 'US'"):
+        if r["roce"] is None and r["opm"] is None and r["growth_min4"] is None:
+            continue
+        groups.setdefault((r["name"], r["roce"], r["opm"], r["de"], r["growth_min4"], r["cfo_pat"], r["last_q"]), []).append(r)
+    drop = []
+    for g in groups.values():
+        if len(g) < 2:
+            continue
+        vol = {r["symbol"]: (conn.execute("SELECT COALESCE(SUM(volume), 0) FROM (SELECT volume FROM price_history WHERE symbol = ? ORDER BY date DESC LIMIT 20)", (r["symbol"],)).fetchone()[0]) for r in g}
+        g.sort(key=lambda r: (-vol[r["symbol"]], len(r["symbol"])))  # the line that actually trades most is the company's own stock
+        drop += [r["symbol"] for r in g[1:] if "-" not in r["symbol"]]
+    conn.executemany("DELETE FROM stock_metrics WHERE symbol = ?", [(x,) for x in drop])
+
+
 def build_metrics(progress=None, only: str | None = None) -> int:
     from app.annual import annual_rows
     from app.ai.checklist import evaluate_framework, is_bank_or_financial
@@ -108,8 +127,11 @@ def build_metrics(progress=None, only: str | None = None) -> int:
             """SELECT symbol, name, market, sector, cap_tier FROM stocks s
                WHERE EXISTS (SELECT 1 FROM quarterly_data q WHERE q.symbol = s.symbol AND q.quarter_label NOT LIKE '%annual%')"""
             + (" AND symbol = ?" if only else ""), ((only,) if only else ())).fetchall()
+        us_tickers = {x["symbol"].split(":", 1)[1] for x in stocks if x["market"] == "US"}
         for i, s in enumerate(stocks, 1):
             sym = s["symbol"]
+            if s["market"] == "US" and is_derivative(sym.split(":", 1)[1], us_tickers):
+                continue  # a warrant / unit / right / preferred line: it copies its parent's numbers, so it is not screened
             allq = conn.execute("SELECT * FROM quarterly_data WHERE symbol = ? ORDER BY period_end_date", (sym,)).fetchall()
             quarterly = [r for r in allq if "annual" not in (r["quarter_label"] or "").lower()]
             if not quarterly:
@@ -150,15 +172,18 @@ def build_metrics(progress=None, only: str | None = None) -> int:
             latest = rows[-1]
             conn.execute(
                 """INSERT OR REPLACE INTO stock_metrics (symbol, market, name, sector, cap_tier, bank, raws, roce, de, growth_min4, opm, cfo_pat,
-                   sales_cagr_3y, roce_3y, div_payout, pe, pe_low, pe_high, price, mcap, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   sales_cagr_3y, roce_3y, div_payout, pe, pe_low, pe_high, price, mcap, last_q, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (sym, s["market"], s["name"], s["sector"], tier, 1 if is_bank_or_financial(s["sector"]) else 0, json.dumps(raws),
                  raws.get("roe" if is_bank_or_financial(s["sector"]) else "roce"), raws.get("de"), raws.get("sales_growth"), raws.get("opm"), raws.get("cfo_pat"),
-                 ex["sales_cagr_3y"], ex["roce_3y"], ex["div_payout"], pe, lo, hi, px["close"] if px else None, mcap, now))
+                 ex["sales_cagr_3y"], ex["roce_3y"], ex["div_payout"], pe, lo, hi, px["close"] if px else None, mcap, quarterly[-1]["period_end_date"], now))
             written += 1
             if i % 250 == 0:
                 conn.commit()
                 if progress:
                     progress(written)
+        if not only:  # a full build: anything not rebuilt (a line that is no longer screened) goes
+            conn.execute("DELETE FROM stock_metrics WHERE updated_at != ?", (now,))
+            _drop_us_duplicates(conn)
         conn.commit()
     with _LOCK:
         _CACHE["at"] = 0.0
@@ -204,6 +229,7 @@ SCREENS = [
 EXTRA_SCREENS = {
     "browse": {"key": "browse", "label": "Browse", "desc": "Every stock in this group, best match against your rules first."},
     "custom": {"key": "custom", "label": "Your own screen", "desc": "Stocks that match the filters you picked below."},
+    "largest": {"key": "largest", "label": "Biggest companies", "desc": "The largest companies in this market by market cap, biggest first. India uses AMFI's 6-month average; US uses today's price times shares."},
 }
 SCREEN_BY_KEY = {**{s["key"]: s for s in SCREENS}, **EXTRA_SCREENS}
 
@@ -225,6 +251,10 @@ def _load() -> list[dict]:
             r["roce"] = None
         if r["de"] is not None and r["de"] < 0:
             r["de"] = None
+        if r["opm"] is not None and abs(r["opm"]) > 100:  # a margin beyond +-100% is a revenue line that isn't the whole top line (lenders, insurers)
+            r["opm"] = None
+        if r["pe"] is not None and r["pe"] < 2:  # under 2x almost always means a price and an EPS that don't belong together
+            r["pe"] = None
     with _LOCK:
         _CACHE.update(at=time.time(), rows=rows)
     return rows
@@ -249,30 +279,52 @@ CUSTOM_FIELDS = {  # form field -> (stock_metrics key, comparison, label)
 CUSTOM_SORTS = {"roce": ("roce", True), "growth": ("sales_cagr_3y", True), "pe": ("pe", False), "div": ("div_payout", True), "rules": (None, True)}
 
 
+STALE_DAYS = 400          # a stock whose latest quarterly result is older than this is not screened (delisted, or results stopped)
+MIN_MCAP = {"IN": 300.0, "US": 150.0}   # Rs crore / USD millions: the named screens leave out the tiniest companies, whose ratios swing wildly
+NOISE_SECTORS = {"Blank Checks"}        # shell companies with no business yet: browsable by search, not offered as an industry tile
+
+
+def _visible(r: dict) -> bool:
+    """Stocks the screens show at all: results not stale (no latest-quarter date yet = a pre-upgrade row, shown)."""
+    lq = r.get("last_q")
+    if not lq:
+        return True
+    return (date.today() - date.fromisoformat(lq)).days <= STALE_DAYS
+
+
 def facets(market: str = "IN") -> dict:
     """Counts for the browse tiles: size tiers and the largest sectors in a market."""
-    rows = [r for r in _load() if market == "ALL" or r["market"] == market]
+    rows = [r for r in _load() if (market == "ALL" or r["market"] == market) and _visible(r)]
     caps, sectors = {}, {}
     for r in rows:
         if r["cap_tier"]:
             caps[r["cap_tier"]] = caps.get(r["cap_tier"], 0) + 1
         sec = r["sector"]
-        if sec and sec != "Unclassified":
+        if sec and sec != "Unclassified" and sec not in NOISE_SECTORS:
             sectors[sec] = sectors.get(sec, 0) + 1
     return {"caps": [(c, caps.get(c, 0)) for c in CAPS if caps.get(c)],
             "sectors": sorted(sectors.items(), key=lambda kv: -kv[1])[:14], "total": len(rows)}
 
 
+def _pos_in_range(r: dict):
+    if r["pe"] and r["pe_low"] is not None and r["pe_high"] and r["pe_high"] > r["pe_low"]:
+        return (r["pe"] - r["pe_low"]) / (r["pe_high"] - r["pe_low"])
+    return None
+
+
 def run_screen(key: str, th: dict, market: str = "IN", limit: int = 60, cap: str | None = None, sector: str | None = None,
                custom: dict | None = None) -> dict:
-    rows = [r for r in _load() if market == "ALL" or r["market"] == market]
+    rows = [r for r in _load() if (market == "ALL" or r["market"] == market) and _visible(r)]
     if cap in CAPS:
         rows = [r for r in rows if r["cap_tier"] == cap]
     if sector:
         rows = [r for r in rows if r["sector"] == sector]
+    named = key in ("rules", "compounders", "growers", "debtfree", "cash", "dividend", "big", "cheap")
     hits: list[tuple] = []
     for r in rows:
         roce, de, bank = r["roce"], r["de"], bool(r["bank"])
+        if named and (r["mcap"] is None or r["mcap"] < MIN_MCAP.get(r["market"], 0)):
+            continue
         if key == "rules":
             j = judge(r["raws"], bank, th)
             if j["total"] < 7:  # too few rules could be judged (missing data) for "passes" to mean much
@@ -283,8 +335,12 @@ def run_screen(key: str, th: dict, market: str = "IN", limit: int = 60, cap: str
             continue
         if key == "browse":  # everything in the chosen group, best match against the user's rules first
             j = judge(r["raws"], bank, th)
-            if j["total"] >= 4:
-                hits.append((len(j["failing"]), -j["total"], -(roce or 0), r, j))
+            if j["total"] >= 1:  # banks and US finance names have only a couple of checkable rules: still listed, ranked by how many they pass
+                hits.append((len(j["failing"]) / j["total"], -j["total"], -(roce or 0), r, j))
+            continue
+        if key == "largest":
+            if r["mcap"]:
+                hits.append((-r["mcap"], 0, 0, r, None))
             continue
         if key == "custom":
             c = custom or {}
@@ -308,34 +364,33 @@ def run_screen(key: str, th: dict, market: str = "IN", limit: int = 60, cap: str
                 v = r[col]
                 hits.append((0 if v is not None else 1, -(v or 0) if desc else (v or 0), 0, r, None))
             continue
+        # The named screens rank by quality first, then size: an extreme figure (1,700% growth, 600x cash cover) is a tiny base, not a better stock.
         if key == "compounders":
             ok = r["roce_3y"] is not None and r["roce_3y"] >= 20 and r["sales_cagr_3y"] is not None and r["sales_cagr_3y"] >= 10
-            sort = -(r["roce_3y"] or 0)
+            sort = -min(r["roce_3y"] or 0, 100)
         elif key == "growers":
             ok = r["growth_min4"] is not None and r["growth_min4"] > 20 and r["opm"] is not None and r["opm"] > 10
-            sort = -(r["growth_min4"] or 0)
+            sort = -min(r["growth_min4"] or 0, 100)
         elif key == "debtfree":
             ok = not bank and de is not None and de < 0.05 and roce is not None and roce >= 12
-            sort = -(roce or 0)
+            sort = -min(roce or 0, 100)
         elif key == "cash":
-            ok = r["cfo_pat"] is not None and r["cfo_pat"] >= 0.9 and roce is not None and roce >= 12 and not bank
-            sort = -(r["cfo_pat"] or 0)
+            ok = r["cfo_pat"] is not None and 0.9 <= r["cfo_pat"] and roce is not None and roce >= 12 and not bank
+            sort = -min(r["cfo_pat"] or 0, 2.0)
         elif key == "dividend":
-            ok = r["div_payout"] is not None and r["div_payout"] >= 20 and roce is not None and roce >= 12
+            ok = r["div_payout"] is not None and 20 <= r["div_payout"] <= 100 and roce is not None and roce >= 12  # over 100% pays out more than it earns
             sort = -(r["div_payout"] or 0)
         elif key == "big":
             ok = r["cap_tier"] == "large" and roce is not None and roce >= 12 and (bank or (de is not None and de < 1))
-            sort = -(roce or 0)
+            sort = -min(roce or 0, 100)
         elif key == "cheap":
-            pos = None
-            if r["pe"] and r["pe_low"] is not None and r["pe_high"] and r["pe_high"] > r["pe_low"]:
-                pos = (r["pe"] - r["pe_low"]) / (r["pe_high"] - r["pe_low"])
+            pos = _pos_in_range(r)
             ok = pos is not None and pos <= 0.34 and roce is not None and roce >= 15
             sort = pos if pos is not None else 9
         else:
             continue
         if ok:
-            hits.append((sort, 0, 0, r, None))
+            hits.append((sort, -(r["mcap"] or 0), 0, r, None))  # same quality score: the bigger company first
     hits.sort(key=lambda h: (h[0], h[1], h[2]))
     out = []
     for _, _, _, r, j in hits[:limit]:

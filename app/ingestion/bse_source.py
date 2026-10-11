@@ -556,11 +556,11 @@ class BseSource(DataSource):
                     ttm_ends = sorted_ends[-4:]
                     ttm_ni = [_first_num(periods[d], NET_PROFIT_TAGS)[0] for d in ttm_ends]
                     ttm_op = [_non_bank_operating_profit(periods[d]) for d in ttm_ends]
-                    if all(v is not None for v in ttm_ni) and equity_val:
+                    if all(v is not None for v in ttm_ni) and equity_val and equity_val > 0:  # negative equity makes a loss look like a return
                         roe_pct = round(sum(ttm_ni) / equity_val * 100, 1)
                     if all(v is not None for v in ttm_op) and assets_val is not None and cur_liab_val is not None:
                         denom = assets_val - cur_liab_val
-                        if denom:
+                        if denom > 0:
                             roce_pct = round(sum(ttm_op) / denom * 100, 1)
                 if total_debt_cr is not None and equity_val:
                     debt_equity = round(total_debt_cr / equity_val, 2)
