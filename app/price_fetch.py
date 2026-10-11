@@ -44,7 +44,7 @@ def _from_yahoo(symbol: str):
 
     for tk in _yahoo_tickers(symbol):
         try:
-            df = yf.Ticker(tk).history(period="max", timeout=12)
+            df = yf.Ticker(tk).history(period="max", timeout=12, auto_adjust=False)  # raw close, split-adjusted only: matches the exchange prints and the daily top-up
         except Exception as e:  # noqa: BLE001 — yfinance fails with assorted internal types for unknown tickers
             logger.info("yahoo %s failed: %s", tk, e)
             continue

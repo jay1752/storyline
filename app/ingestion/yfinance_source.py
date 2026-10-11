@@ -136,7 +136,7 @@ class YFinanceSource(DataSource):
             for ticker in self._yf_tickers(sym):
                 time.sleep(RATE_LIMIT_SECONDS)
                 try:
-                    candidate = yf.Ticker(ticker).history(period="max")
+                    candidate = yf.Ticker(ticker).history(period="max", auto_adjust=False)
                 except Exception:  # noqa: BLE001 — yfinance's own failure modes for a bad/delisted ticker aren't a clean, catchable type
                     continue
                 if candidate is not None and not candidate.empty:

@@ -159,7 +159,7 @@ def sync_in_index_funds(fc) -> int:
 
 def _yahoo_history(ticker: str):
     import yfinance as yf
-    df = yf.Ticker(ticker).history(period="max", timeout=15)
+    df = yf.Ticker(ticker).history(period="max", timeout=15, auto_adjust=False)
     return None if df is None or df.empty else [(i.date().isoformat(), float(r["Close"])) for i, r in df.iterrows() if r["Close"] == r["Close"]]
 
 
