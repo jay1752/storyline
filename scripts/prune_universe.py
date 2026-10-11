@@ -86,6 +86,9 @@ def main() -> None:
         m.execute(f"UPDATE stocks SET sector = 'Exchange traded fund' WHERE symbol IN ({p})", chunk)
     m.commit()
     syms = sorted(reason)
+    if not syms:
+        print("nothing to remove")
+        return
     ph = ",".join("?" * 500)
     tables = [r[0] for r in m.execute("SELECT name FROM sqlite_master WHERE type='table'")
               if r[0] != "excluded_stocks" and "symbol" in {c[1] for c in m.execute(f"PRAGMA table_info({r[0]})")}]
@@ -100,7 +103,7 @@ def main() -> None:
             cols = [d[0] for d in cur.description]
             rows += [list(x) for x in cur.fetchall()]
         back[t] = {"columns": cols, "rows": rows}
-    path = f"{DATA_DIR}/pruned_backup-{today.isoformat()}.json.gz"
+    path = f"{DATA_DIR}/pruned_backup-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}.json.gz"  # never overwrite an earlier backup
     with gzip.open(path, "wt") as f:
         json.dump({"pruned_on": today.isoformat(), "reasons": reason, "data": back}, f)
     print("backup:", path, {t: len(v["rows"]) for t, v in back.items()})
