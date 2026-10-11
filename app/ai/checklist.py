@@ -11,6 +11,7 @@ revenue_growth_pct, opm_pct. There is NO interest coverage, current ratio, quick
 CFO/PAT column anywhere in this schema — those hard filters are explicitly reported as
 "not_computable" below rather than guessed at. Closing that gap is a future ingestion
 project, out of scope here."""
+from datetime import date
 
 NOT_COMPUTABLE = ["interest_coverage", "current_ratio", "quick_ratio", "cfo_pat_ratio"]
 
@@ -82,6 +83,28 @@ def _f(v):
     return None if v is None else float(v)
 
 
+def _annual_fallback(annual: list | None, latest: dict, getter):
+    """Latest fiscal-year value from `getter(row)` (None when the row lacks it), used only where the quarters carry nothing. The year must end
+    within ~18 months of the latest quarter so a long-stale year never stands in for a current figure. Returns (value, period_end) or (None, None)."""
+    if not annual:
+        return None, None
+    try:
+        q_end = date.fromisoformat(latest["period_end_date"])
+    except (KeyError, TypeError, ValueError):
+        return None, None
+    for a in reversed(annual):
+        v = getter(a)
+        if v is None:
+            continue
+        try:
+            if (q_end - date.fromisoformat(a["period_end_date"])).days > 550:
+                return None, None
+        except (TypeError, ValueError):
+            return None, None
+        return v, a["period_end_date"]
+    return None, None
+
+
 def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None, annual: list | None = None) -> dict:
     """`q_rows`: quarterly (non-annual) quarterly_data rows, oldest first, latest last. `th`: the resolved rules from
     app.framework.resolve() (built-in defaults when omitted). Returns {"filters": [...], "facts": {...}, "bucket_guess",
@@ -109,9 +132,13 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
     rk = "roe" if bank else "roce"
     thr = th[rk]["value"]
     v = _f(latest.get("roe_pct" if bank else "roce_pct"))
+    roce_note = "banks/financials use ROE instead of ROCE" if bank else None
+    if v is None and not bank:  # the quarters carry no ROCE: the latest fiscal year's (IndianAPI annual ratios) stands in, said so
+        v, fy_end = _annual_fallback(annual, latest, lambda a: _f(a.get("roce_pct")))
+        if v is not None:
+            roce_note = f"fiscal year ended {fy_end} (annual); the latest quarter has none"
     add(rk, "ROE" if bank else "ROCE", None if v is None else f"{v:.1f}%", f"> {thr:g}%",
-        "unknown" if v is None else ("pass" if v > thr else "fail"),
-        "banks/financials use ROE instead of ROCE" if bank else None, raw=v)
+        "unknown" if v is None else ("pass" if v > thr else "fail"), roce_note, raw=v)
     # Debt / equity
     de = _f(latest.get("debt_equity"))
     de_thr = th["de"]["value"]
@@ -122,8 +149,16 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
             "rule skipped for banks/financials — set your own rule for this stock (gear icon) to apply it" if de is not None else
             "rule does not apply to banks/financials")
     else:
+        de_note = None
+        if de is None:  # borrowings over net worth (equity capital + reserves) at the latest fiscal year end
+            def _annual_de(a):
+                b, e, r = _f(a.get("borrowings_cr")), _f(a.get("equity_capital_cr")), _f(a.get("reserves_cr"))
+                return b / (e + r) if b is not None and e is not None and r is not None and e + r > 0 else None
+            de, fy_end = _annual_fallback(annual, latest, _annual_de)
+            if de is not None:
+                de_note = f"fiscal year ended {fy_end} (annual): borrowings over equity capital plus reserves"
         add("de", "Debt / equity", None if de is None else f"{de:.2f}", f"< {de_thr:g}",
-            "unknown" if de is None else ("pass" if de < de_thr else "fail"), raw=de)
+            "unknown" if de is None else ("pass" if de < de_thr else "fail"), de_note, raw=de)
     # Promoter pledge — the exact % where we hold it (India shareholding filings), else the pledged / no-pledge flag
     pl_thr = th["pledge"]["value"]
     pct, flag = _f(latest.get("promoter_pledge_pct")), latest.get("promoter_pledge")
@@ -144,9 +179,16 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
     # Operating margin
     om = th["opm"]["value"]
     opm = _f(latest.get("opm_pct"))
+    opm_note = "framework threshold is for high-margin businesses" if om >= 25 else None
+    if opm is None and not bank:
+        def _annual_opm(a):
+            rev, op = _f(a.get("revenue_cr")), _f(a.get("operating_profit_cr"))
+            return op / rev * 100 if rev and op is not None else None
+        opm, fy_end = _annual_fallback(annual, latest, _annual_opm)
+        if opm is not None:
+            opm_note = f"fiscal year ended {fy_end} (annual); the latest quarter has none"
     add("opm", "Operating margin", None if opm is None else f"{opm:.1f}%", f"> {om:g}%",
-        "unknown" if opm is None else ("pass" if opm > om else "fail"),
-        "framework threshold is for high-margin businesses" if om >= 25 else None, raw=opm)
+        "unknown" if opm is None else ("pass" if opm > om else "fail"), opm_note, raw=opm)
     # Promoter holding: high and not falling by more than the tolerance
     tol = th["promoter"]["value"]
     prom = [_f(r.get("promoter_pct")) for r in rows[-5:]]

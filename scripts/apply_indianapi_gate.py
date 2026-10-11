@@ -40,8 +40,12 @@ def main() -> None:
     for sym, pe, v in ia.execute("SELECT symbol, period_end, value FROM ia_fact WHERE freq='Q' AND metric='Net Profit'"):
         ianp[sym][pe] = v
     tally, restored, deleted = collections.Counter(), 0, 0
+    try:  # stocks promoted by apply_indianapi_recent.py keep that status on re-runs
+        keep = {r[0] for r in m.execute("SELECT symbol FROM ia_basis_status WHERE status='recent_ok'")}
+    except sqlite3.OperationalError:
+        keep = set()
     for (sym,) in ia.execute("SELECT symbol FROM ia_stock WHERE status IN ('loaded','unchecked') ORDER BY symbol").fetchall():
-        if only is not None and sym not in only:
+        if (only is not None and sym not in only) or sym in keep:
             continue
         n = ok = 0
         for pe, v in ianp[sym].items():

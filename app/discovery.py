@@ -63,6 +63,31 @@ def _ttm_cagr_3y(quarterly: list) -> float | None:
     return round(((n / a) ** (1 / 3) - 1) * 100, 1) if a > 0 and n > 0 else None
 
 
+def _us_extras(rows: list, last_quarter_end: str) -> dict:
+    """US 3-year average ROCE and latest dividend payout from the SEC 10-K years in us_annual (USD millions). ROCE is operating profit over
+    (assets - current liabilities) and only where that capital is positive; payout is dividends paid over net profit and only where both
+    are positive. Nothing is filled from a year the filing doesn't state."""
+    out = {"roce_3y": None, "div_payout": None}
+    rows = sorted((r for r in rows if r["period_end_date"] != "0000-00-00"), key=lambda r: r["period_end_date"])
+    if not rows:
+        return out
+    last3 = rows[-3:]
+    vals = []
+    for r in last3:
+        op, a, cl = r["operating_profit_m"], r["assets_m"], r["current_liabilities_m"]
+        if op is None or a is None or cl is None or a - cl <= 0:
+            vals = []
+            break
+        vals.append(op / (a - cl) * 100)
+    if len(vals) == 3 and (date.fromisoformat(last3[-1]["period_end_date"]) - date.fromisoformat(last3[0]["period_end_date"])).days <= 2 * 366 + 20:
+        out["roce_3y"] = round(sum(vals) / 3, 1)
+    fy = rows[-1]
+    stale = (date.fromisoformat(last_quarter_end) - date.fromisoformat(fy["period_end_date"])).days > 550
+    if not stale and fy["dividends_paid_m"] and fy["dividends_paid_m"] > 0 and fy["net_profit_m"] and fy["net_profit_m"] > 0:
+        out["div_payout"] = round(fy["dividends_paid_m"] / fy["net_profit_m"] * 100, 1)
+    return out
+
+
 def build_metrics(progress=None, only: str | None = None) -> int:
     from app.annual import annual_rows
     from app.ai.checklist import evaluate_framework, is_bank_or_financial
@@ -72,6 +97,13 @@ def build_metrics(progress=None, only: str | None = None) -> int:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     written = 0
     with get_market_conn() as conn:
+        try:
+            in_mcap = {r[0]: r[1] for r in conn.execute("SELECT symbol, mcap_cr FROM india_mcap")}
+            us_ann: dict[str, list] = {}
+            for r in conn.execute("SELECT * FROM us_annual"):
+                us_ann.setdefault(r["symbol"], []).append(r)
+        except Exception:  # noqa: BLE001 - tables not filled yet on this database
+            in_mcap, us_ann = {}, {}
         stocks = conn.execute(
             """SELECT symbol, name, market, sector, cap_tier FROM stocks s
                WHERE EXISTS (SELECT 1 FROM quarterly_data q WHERE q.symbol = s.symbol AND q.quarter_label NOT LIKE '%annual%')"""
@@ -103,13 +135,25 @@ def build_metrics(progress=None, only: str | None = None) -> int:
             ex = _annual_extras(annual)
             if ex["sales_cagr_3y"] is None:
                 ex["sales_cagr_3y"] = _ttm_cagr_3y(quarterly)
+            mcap = None
+            if s["market"] == "IN":
+                mcap = in_mcap.get(sym)
+            else:
+                if sym in us_ann:
+                    ex.update({k: v for k, v in _us_extras(us_ann[sym], quarterly[-1]["period_end_date"]).items() if v is not None})
+                sh = conn.execute("SELECT shares_outstanding sh FROM quarterly_data WHERE symbol = ? AND shares_outstanding IS NOT NULL ORDER BY period_end_date DESC LIMIT 1", (sym,)).fetchone()
+                if sh and sh["sh"] and px and px["close"]:
+                    mcap = round(sh["sh"] * px["close"] / 1e6, 1)
+            tier = s["cap_tier"]
+            if tier is None and s["market"] == "US" and mcap:  # Nasdaq's screener list had no tier: same cut-offs on price x SEC share count
+                tier = "large" if mcap >= 10_000 else "mid" if mcap >= 2_000 else "small" if mcap >= 300 else "micro"
             latest = rows[-1]
             conn.execute(
                 """INSERT OR REPLACE INTO stock_metrics (symbol, market, name, sector, cap_tier, bank, raws, roce, de, growth_min4, opm, cfo_pat,
-                   sales_cagr_3y, roce_3y, div_payout, pe, pe_low, pe_high, price, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (sym, s["market"], s["name"], s["sector"], s["cap_tier"], 1 if is_bank_or_financial(s["sector"]) else 0, json.dumps(raws),
+                   sales_cagr_3y, roce_3y, div_payout, pe, pe_low, pe_high, price, mcap, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (sym, s["market"], s["name"], s["sector"], tier, 1 if is_bank_or_financial(s["sector"]) else 0, json.dumps(raws),
                  raws.get("roe" if is_bank_or_financial(s["sector"]) else "roce"), raws.get("de"), raws.get("sales_growth"), raws.get("opm"), raws.get("cfo_pat"),
-                 ex["sales_cagr_3y"], ex["roce_3y"], ex["div_payout"], pe, lo, hi, px["close"] if px else None, now))
+                 ex["sales_cagr_3y"], ex["roce_3y"], ex["div_payout"], pe, lo, hi, px["close"] if px else None, mcap, now))
             written += 1
             if i % 250 == 0:
                 conn.commit()
@@ -295,6 +339,6 @@ def run_screen(key: str, th: dict, market: str = "IN", limit: int = 60, cap: str
     hits.sort(key=lambda h: (h[0], h[1], h[2]))
     out = []
     for _, _, _, r, j in hits[:limit]:
-        out.append({**{k: r[k] for k in ("symbol", "name", "market", "sector", "cap_tier", "roce", "de", "pe", "sales_cagr_3y", "growth_min4", "cfo_pat", "div_payout", "roce_3y", "bank", "opm")},
+        out.append({**{k: r[k] for k in ("symbol", "name", "market", "sector", "cap_tier", "roce", "de", "pe", "sales_cagr_3y", "growth_min4", "cfo_pat", "div_payout", "roce_3y", "bank", "opm", "mcap")},
                     "judge": judge(r["raws"], bool(r["bank"]), th) if key in ("rules", "browse") else None})
     return {"count": len(hits), "rows": out}

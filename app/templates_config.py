@@ -20,3 +20,15 @@ def _asset_version(path: str) -> int:
 
 
 templates.env.globals["asset_version"] = _asset_version
+
+
+def _mcap(v, market):
+    """Market cap for display: India is stored in Rs crore, US in USD millions."""
+    if v is None:
+        return "—"
+    if market == "IN":
+        return f"₹{v / 1e5:.2f} lakh cr" if v >= 1e5 else f"₹{v:,.0f} cr"
+    return f"${v / 1e6:.2f}T" if v >= 1e6 else f"${v / 1e3:.1f}B" if v >= 1e3 else f"${v:,.0f}M"
+
+
+templates.env.filters["mcap"] = _mcap

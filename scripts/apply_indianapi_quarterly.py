@@ -44,7 +44,7 @@ def main() -> None:
     known = {r[0] for r in m.execute("SELECT symbol FROM stocks WHERE market='IN'")}
     stocks = [s for s in stocks if s["symbol"] in known]
     try:  # a stock the basis gate reverted (IndianAPI on another basis than the filings) stays on BSE/NSE data
-        reverted = {r[0] for r in m.execute("SELECT symbol FROM ia_basis_status WHERE status='reverted'")}
+        reverted = {r[0] for r in m.execute("SELECT symbol FROM ia_basis_status WHERE status IN ('reverted','recent_ok')")}  # recent_ok: annual only, see apply_indianapi_recent.py
     except sqlite3.OperationalError:
         reverted = set()
     stocks = [s for s in stocks if s["symbol"] not in reverted]

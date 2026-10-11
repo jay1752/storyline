@@ -122,7 +122,19 @@ CREATE TABLE IF NOT EXISTS stock_metrics (   -- one row per stock with fundament
     roce REAL, de REAL, growth_min4 REAL, opm REAL, cfo_pat REAL,
     sales_cagr_3y REAL, roce_3y REAL, div_payout REAL,
     pe REAL, pe_low REAL, pe_high REAL, price REAL,
+    mcap REAL,                -- market cap: Rs crore for India (AMFI 6-month average), USD millions for US (price x shares outstanding)
     updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS india_mcap (      -- AMFI half-yearly list: 6-month average market cap (Rs crore) and SEBI category; filled by scripts/fill_india_mcap.py
+    symbol TEXT PRIMARY KEY, mcap_cr REAL, tier TEXT, amfi_rank INTEGER, as_of TEXT, isin TEXT
+);
+
+CREATE TABLE IF NOT EXISTS us_annual (       -- US fiscal years from SEC 10-K facts (USD millions); filled by scripts/fill_us_annual.py
+    symbol TEXT NOT NULL, period_end_date TEXT NOT NULL,
+    revenue_m REAL, operating_profit_m REAL, net_profit_m REAL, assets_m REAL, current_liabilities_m REAL, equity_m REAL,
+    cfo_m REAL, dividends_paid_m REAL, dps REAL, fetched_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (symbol, period_end_date)
 );
 
 CREATE TABLE IF NOT EXISTS fx_rates (        -- USD/INR (INR per 1 USD) fetched by the hourly fx_usd_inr job; the newest row is the platform rate
@@ -605,6 +617,9 @@ def init_db() -> None:
         m.execute("CREATE INDEX IF NOT EXISTS idx_stocks_isin ON stocks(isin) WHERE isin IS NOT NULL")
         if "cap_tier" not in stocks_cols:
             m.execute("ALTER TABLE stocks ADD COLUMN cap_tier TEXT")
+        sm_cols = {row["name"] for row in m.execute("PRAGMA table_info(stock_metrics)").fetchall()}
+        if sm_cols and "mcap" not in sm_cols:
+            m.execute("ALTER TABLE stock_metrics ADD COLUMN mcap REAL")
         _backfill_cap_tiers(m)
         _backfill_eps_adjustments(m)
         # Defensive: if this file was ever left in WAL mode (e.g. from before this fix),

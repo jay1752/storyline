@@ -39,8 +39,9 @@ def main() -> None:
     known = {r[0] for r in m.execute("SELECT symbol FROM stocks WHERE market='IN'")}
     try:
         reverted = {r[0] for r in m.execute("SELECT symbol FROM ia_basis_status WHERE status='reverted'")}
+        recent_ok = {r[0] for r in m.execute("SELECT symbol FROM ia_basis_status WHERE status='recent_ok'")}  # latest 2 quarters agree with the filings: recent years only
     except sqlite3.OperationalError:
-        reverted = set()
+        reverted, recent_ok = set(), set()
     tally = collections.Counter()
     if only:  # a targeted refresh: replace just these stocks' rows
         m.executemany("DELETE FROM annual_data WHERE source = 'indianapi' AND symbol = ?", [(s,) for s in only])
@@ -60,6 +61,8 @@ def main() -> None:
             if col and r["value"] is not None:
                 years[r["period_end"]][col] = r["value"]
         for pe, vals in years.items():
+            if sym in recent_ok and pe not in sorted(years)[-4:]:
+                continue  # older years of a recent_ok stock may be on another basis (restated / demerged): not stored
             if not any(k in vals for k in ("revenue_cr", "net_profit_cr", "cfo_cr")):
                 continue  # a balance-sheet-only column is a half-year snapshot (e.g. Sep), not a fiscal year
             if vals.get("revenue_cr") and vals.get("operating_profit_cr") is not None:

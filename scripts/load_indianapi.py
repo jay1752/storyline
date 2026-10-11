@@ -183,6 +183,10 @@ def main() -> None:
         tickers = [x for x in tickers if x in want]
     if a.limit:
         tickers = tickers[:a.limit]
+    try:  # a stock whose latest quarters agree with the filings (apply_indianapi_recent.py) is loaded despite older restated quarters
+        recent_ok = {r[0] for r in market.execute("SELECT symbol FROM ia_basis_status WHERE status='recent_ok'")}
+    except sqlite3.OperationalError:
+        recent_ok = set()
     tally = {"loaded": 0, "unchecked": 0, "held_out": 0, "facts": 0, "profiles": 0, "targets": 0, "estimates": 0, "bad_file": 0}
     for t in tickers:
         sym = f"NSE:{t}"
@@ -191,7 +195,7 @@ def main() -> None:
             tally["bad_file"] += 1
             continue
         ident = fetcher.identity_ok(t, market)
-        status = "held_out" if ident is False else ("loaded" if ident else "unchecked")
+        status = "held_out" if ident is False and sym not in recent_ok else ("loaded" if ident or sym in recent_ok else "unchecked")
         for tbl in ("ia_fact", "ia_holding", "ia_growth", "ia_target", "ia_target_snapshot", "ia_estimate", "ia_profile", "ia_stmt", "ia_peer", "ia_quote", "ia_technical"):
             c.execute(f"DELETE FROM {tbl} WHERE symbol = ?", (sym,))
         if status == "held_out":

@@ -53,12 +53,13 @@
     {% if result.rows %}
     <div class="table-wrap">
       <table class="fin ia-text dz-table">
-        <thead><tr><th>Stock</th><th>Why it's here</th><th>P/E</th><th>ROCE</th><th>Sales growth (3y)</th><th>Debt / equity</th><th></th></tr></thead>
+        <thead><tr><th>Stock</th><th>Why it's here</th><th>Market cap</th><th>P/E</th><th>ROCE</th><th>Sales growth (3y)</th><th>Debt / equity</th><th></th></tr></thead>
         <tbody>
           {% for r in result.rows %}
           <tr>
             <td><a class="row-ticker" href="/analytics/{{ r.symbol }}">{{ r.name }}</a><span class="row-sub">{{ r.symbol }}{% if r.sector and r.sector != 'Unclassified' %} · {{ r.sector }}{% endif %}{% if r.cap_tier %} · {{ r.cap_tier|capitalize }}{% endif %}</span></td>
             <td>{% if r.judge %}<span class="vchip {{ 'pos-chip' if not r.judge.failing else '' }}">{{ r.why }}</span>{% else %}{{ r.why }}{% endif %}</td>
+            <td>{{ r.mcap|mcap(r.market) }}</td>
             <td>{{ "%.0f×"|format(r.pe) if r.pe else '—' }}</td>
             <td>{{ "%.0f%%"|format(r.roce) if r.roce is not none else '—' }}{% if r.bank %}<small class="muted"> ROE</small>{% endif %}</td>
             <td>{% if r.sales_cagr_3y is not none %}<span class="{{ 'val-pos' if r.sales_cagr_3y >= 0 else 'val-neg' }}">{{ "%+.0f%%"|format(r.sales_cagr_3y) }}</span>{% else %}<span class="muted" title="Under 3 years of full quarterly results, so no 3-year growth figure yet">n/a</span>{% endif %}</td>
