@@ -34,6 +34,35 @@ def _annual_extras(annual: list) -> dict:
     return out
 
 
+def _ttm_cagr_3y(quarterly: list) -> float | None:
+    """Sales growth per year over 3 years from quarterly results, for stocks with no annual statements (US, and India names IndianAPI has
+    no years for): the last four quarters' sales against the same four quarters three years earlier. Only when both windows are four
+    consecutive quarters (a missing quarter would understate a year), otherwise None - never a guess."""
+    rows = [(date.fromisoformat(r["period_end_date"]), r["revenue_cr"]) for r in quarterly if r["revenue_cr"] is not None]
+    rows.sort()
+
+    def window(end_idx: int):
+        w = rows[end_idx - 3:end_idx + 1] if end_idx >= 3 else None
+        if not w or not 250 <= (w[-1][0] - w[0][0]).days <= 285 or any(not 75 <= (b[0] - a[0]).days <= 105 for a, b in zip(w, w[1:])):
+            return None
+        return w
+
+    if len(rows) < 16:
+        return None
+    now = window(len(rows) - 1)
+    if not now:
+        return None
+    target = date.fromordinal(now[-1][0].toordinal() - round(3 * 365.25))
+    ago_idx = min(range(len(rows)), key=lambda i: abs((rows[i][0] - target).days))
+    if abs((rows[ago_idx][0] - target).days) > 20:
+        return None
+    ago = window(ago_idx)
+    if not ago:
+        return None
+    a, n = sum(x[1] for x in ago), sum(x[1] for x in now)
+    return round(((n / a) ** (1 / 3) - 1) * 100, 1) if a > 0 and n > 0 else None
+
+
 def build_metrics(progress=None, only: str | None = None) -> int:
     from app.annual import annual_rows
     from app.ai.checklist import evaluate_framework, is_bank_or_financial
@@ -72,6 +101,8 @@ def build_metrics(progress=None, only: str | None = None) -> int:
                 pe = lo = hi = None
             px = conn.execute("SELECT close FROM price_history WHERE symbol = ? ORDER BY date DESC LIMIT 1", (sym,)).fetchone()
             ex = _annual_extras(annual)
+            if ex["sales_cagr_3y"] is None:
+                ex["sales_cagr_3y"] = _ttm_cagr_3y(quarterly)
             latest = rows[-1]
             conn.execute(
                 """INSERT OR REPLACE INTO stock_metrics (symbol, market, name, sector, cap_tier, bank, raws, roce, de, growth_min4, opm, cfo_pat,

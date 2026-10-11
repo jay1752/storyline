@@ -23,17 +23,30 @@
     history.replaceState(null, "", u);
   }
 
+  function scrollToGroup(grp) {
+    const el = document.querySelector('.grp[data-grp="' + grp + '"]');
+    if (el) el.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  }
+
   if (bar) {
     render(current());
-    tabs.forEach((b) => b.addEventListener("click", () => {
-      const sel = current();
-      const i = sel.indexOf(b.dataset.grp);
-      if (i > -1) { if (sel.length > 1) sel.splice(i, 1); } else { sel.push(b.dataset.grp); }  // keep at least one section on
+    // A chip works like a tab: it shows that section on its own and brings it into view (the sections sit below the price chart,
+    // so a change you can't see reads as "nothing happened"). Shift/Ctrl/Cmd-click adds or removes a section instead.
+    tabs.forEach((b) => b.addEventListener("click", (e) => {
+      const grp = b.dataset.grp;
+      let sel = current();
+      if (e.shiftKey || e.ctrlKey || e.metaKey) {
+        const i = sel.indexOf(grp);
+        if (i > -1) { if (sel.length > 1) sel.splice(i, 1); } else { sel.push(grp); }
+      } else {
+        sel = [grp];
+      }
       render(sel);
+      if (sel.includes(grp)) scrollToGroup(grp);
     }));
     bar.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => {
       const want = b.dataset.preset === "all" ? avail : b.dataset.preset.split(",").filter((k) => avail.includes(k));
-      if (want.length) render(want);
+      if (want.length) { render(want); scrollToGroup(want[0]); }
     }));
   }
 

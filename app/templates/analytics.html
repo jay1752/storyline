@@ -57,7 +57,7 @@
 
 {% if view_groups|length > 1 %}
 <nav class="viewbar" id="viewbar" aria-label="Choose what to show">
-  <div class="viewbar-chips" role="group" aria-label="Sections">
+  <div class="viewbar-chips" role="group" aria-label="Sections" title="Click to jump to a section. Shift-click to show several at once.">
     {% for g in view_groups %}<button type="button" class="vtab" data-grp="{{ g.key }}" aria-pressed="false">{{ g.label }}</button>{% endfor %}
   </div>
   <div class="viewbar-presets"><span>Presets</span>

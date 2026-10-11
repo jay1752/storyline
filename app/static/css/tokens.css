@@ -1488,7 +1488,7 @@ table.ia-text th, table.ia-text td { text-align: left; }
 
 
 /* ---- Analytics: multi-select section groups, verdict strip ---- */
-html[data-view] .grp { display: none; }
+html[data-view] .grp { display: none; scroll-margin-top: 16px; }
 html[data-view~="perf"] .grp[data-grp="perf"],
 html[data-view~="health"] .grp[data-grp="health"],
 html[data-view~="val"] .grp[data-grp="val"],

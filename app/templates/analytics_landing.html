@@ -61,7 +61,7 @@
             <td>{% if r.judge %}<span class="vchip {{ 'pos-chip' if not r.judge.failing else '' }}">{{ r.why }}</span>{% else %}{{ r.why }}{% endif %}</td>
             <td>{{ "%.0f×"|format(r.pe) if r.pe else '—' }}</td>
             <td>{{ "%.0f%%"|format(r.roce) if r.roce is not none else '—' }}{% if r.bank %}<small class="muted"> ROE</small>{% endif %}</td>
-            <td>{% if r.sales_cagr_3y is not none %}<span class="{{ 'val-pos' if r.sales_cagr_3y >= 0 else 'val-neg' }}">{{ "%+.0f%%"|format(r.sales_cagr_3y) }}</span>{% else %}—{% endif %}</td>
+            <td>{% if r.sales_cagr_3y is not none %}<span class="{{ 'val-pos' if r.sales_cagr_3y >= 0 else 'val-neg' }}">{{ "%+.0f%%"|format(r.sales_cagr_3y) }}</span>{% else %}<span class="muted" title="Under 3 years of full quarterly results, so no 3-year growth figure yet">n/a</span>{% endif %}</td>
             <td>{{ "%.2f"|format(r.de) if r.de is not none else '—' }}</td>
             <td class="dz-act">{% if r.tracked %}<span class="badge pos">Tracking</span>{% else %}<button type="button" class="btn btn-sm" hx-post="/track" hx-swap="outerHTML"
                 hx-vals='{"symbol": "{{ r.symbol }}", "company_name": {{ r.name|tojson }}, "anchor_type": "watchlist"}'>Track</button>{% endif %}</td>
