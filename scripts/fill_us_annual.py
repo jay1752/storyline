@@ -100,7 +100,7 @@ def main() -> None:
     want = {x.strip() for x in a.symbols.split(",") if x.strip()}
     rows = m.execute("""SELECT s.symbol FROM stocks s WHERE s.market='US'
                         AND (SELECT COUNT(*) FROM quarterly_data q WHERE q.symbol=s.symbol AND q.quarter_label NOT LIKE '%annual%') >= 4""").fetchall()
-    tickers = {r[0].split(":", 1)[1] for r in rows}
+    tickers = {r[0].split(":", 1)[1]: r[1] for r in m.execute("SELECT symbol, name FROM stocks WHERE market='US'")}
     todo = []
     for (sym,) in rows:
         t = sym.split(":", 1)[1]

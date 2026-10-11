@@ -3,7 +3,8 @@ load_indianapi.py). Both tests look at every overlapping quarter, so one restate
 current numbers are fine. Here only the latest quarters count: a stock qualifies as 'recent_ok' when, over its last 4 quarters present in
 both the BSE filings and IndianAPI,
   - the latest two net profits agree within 2% (+Rs 0.6 cr), and
-  - revenue agrees within 1% in at least 3 of the 4 (waived for banks and lenders, whose IndianAPI 'Sales' is a different line).
+  - revenue agrees within 1% in at least 3 of the 4. Banks and lenders (whose IndianAPI 'Sales' is a different line, and whose IndianAPI profit is group
+    level) are judged on their last-year profit instead: within 10% of the filings.
 recent_ok stocks get IndianAPI ANNUAL rows for their latest 4 fiscal years only (cash flow, balance sheet, dividends, ROCE inputs); their
 quarterly rows stay as filed (BSE/NSE). Status lives in market.db.ia_basis_status. Re-runnable; --dry shows the list.
     docker compose exec -T -w /app -e PYTHONPATH=/app app python scripts/apply_indianapi_recent.py [--dry]
@@ -63,9 +64,16 @@ def main() -> None:
         if len(dates) < 3:
             tally["fewer than 3 recent quarters to compare"] += 1
             continue
-        np_ok = [("np" in got[d] and orig[sym][d][0] is not None and abs(got[d]["np"] - orig[sym][d][0]) <= 0.02 * abs(orig[sym][d][0]) + 0.6) for d in dates]
+        tol = 0.04 if sym in bank else 0.02  # a bank's IndianAPI profit is group level, its BSE row often the bank alone: a few percent apart is the same business
+        np_ok = [("np" in got[d] and orig[sym][d][0] is not None and abs(got[d]["np"] - orig[sym][d][0]) <= tol * abs(orig[sym][d][0]) + 0.6) for d in dates]
         rv_ok = sum(1 for d in dates if got[d].get("rv") and orig[sym][d][1] and abs(got[d]["rv"] - orig[sym][d][1]) <= 0.01 * abs(orig[sym][d][1]) + 1)
-        if all(np_ok[-2:]) and (sym in bank or rv_ok >= min(3, len(dates))):
+        if sym in bank:  # group vs bank-alone profit: judged on the whole recent year (within 10%), not quarter by quarter
+            sia = sum(got[d]["np"] for d in dates if "np" in got[d] and orig[sym][d][0] is not None)
+            sbs = sum(orig[sym][d][0] for d in dates if "np" in got[d] and orig[sym][d][0] is not None)
+            same = sbs > 0 and abs(sia / sbs - 1) <= 0.10
+        else:
+            same = all(np_ok[-2:]) and rv_ok >= min(3, len(dates))
+        if same:
             passed.append(sym)
             tally["recent_ok"] += 1
         else:

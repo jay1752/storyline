@@ -11,16 +11,23 @@ revenue_growth_pct, opm_pct. There is NO interest coverage, current ratio, quick
 CFO/PAT column anywhere in this schema — those hard filters are explicitly reported as
 "not_computable" below rather than guessed at. Closing that gap is a future ingestion
 project, out of scope here."""
+import re
 from datetime import date
 
 NOT_COMPUTABLE = ["interest_coverage", "current_ratio", "quick_ratio", "cfo_pat_ratio"]
 
 
+_FINANCIAL = re.compile(r"bank|financ|insurance|casualty|savings institution|credit institution|credit agenc|loan brokers|security brokers|"
+                        r"security & commodity brokers|commodity contracts brokers|investment advice")
+
+
 def is_bank_or_financial(sector: str | None) -> bool:
+    """Banks, lenders, insurers, brokers and asset managers: businesses whose balance sheet is the product. (An insurance AGENT is a service
+    business and stays with the ordinary rules.)"""
     if not sector:
         return False
     s = sector.lower()
-    return "bank" in s or "financ" in s
+    return "agents" not in s and bool(_FINANCIAL.search(s))
 
 
 def compute_checklist(quarterly_row, sector: str | None) -> dict:
@@ -103,6 +110,41 @@ def _annual_fallback(annual: list | None, latest: dict, getter):
             return None, None
         return v, a["period_end_date"]
     return None, None
+
+
+def _financial_inputs(symbol: str, latest: dict) -> dict:
+    """Latest annual total assets and net worth (India: IndianAPI annual rows; US: SEC 10-K facts) and price-to-book. Empty when we hold none:
+    the rules then read 'unknown', never a guess."""
+    out: dict = {}
+    if not symbol:
+        return out
+    try:
+        from app.db import get_market_conn
+        with get_market_conn() as c:
+            px = c.execute("SELECT close FROM price_history WHERE symbol = ? ORDER BY date DESC LIMIT 1", (symbol,)).fetchone()
+            if symbol.startswith("NSE:"):
+                a = c.execute("SELECT period_end_date, total_assets_cr ta, equity_capital_cr ec, reserves_cr rs FROM annual_data WHERE symbol = ? AND total_assets_cr IS NOT NULL "
+                              "ORDER BY period_end_date DESC LIMIT 1", (symbol,)).fetchone()
+                if a and a["ta"]:
+                    out["assets"], out["as_of"] = a["ta"], a["period_end_date"]
+                    if a["ec"] is not None and a["rs"] is not None and a["ec"] + a["rs"] > 0:
+                        out["equity"] = a["ec"] + a["rs"]
+                m = c.execute("SELECT mcap_cr FROM india_mcap WHERE symbol = ?", (symbol,)).fetchone()
+                if m and m[0] and out.get("equity"):
+                    out["pb"], out["pb_note"] = m[0] / out["equity"], "AMFI 6-month average market cap ÷ net worth at the latest year end"
+            else:
+                a = c.execute("SELECT period_end_date, assets_m, equity_m FROM us_annual WHERE symbol = ? AND assets_m IS NOT NULL AND period_end_date != '0000-00-00' "
+                              "ORDER BY period_end_date DESC LIMIT 1", (symbol,)).fetchone()
+                if a and a["assets_m"]:
+                    out["assets"], out["as_of"] = a["assets_m"], a["period_end_date"]
+                    if a["equity_m"] is not None and a["equity_m"] > 0:
+                        out["equity"] = a["equity_m"]
+                bv = c.execute("SELECT book_value_per_share b FROM quarterly_data WHERE symbol = ? AND book_value_per_share IS NOT NULL ORDER BY period_end_date DESC LIMIT 1", (symbol,)).fetchone()
+                if bv and bv["b"] and bv["b"] > 0 and px and px["close"]:
+                    out["pb"], out["pb_note"] = px["close"] / bv["b"], "price ÷ book value per share, latest filing"
+    except Exception:  # noqa: BLE001 - the rules read 'unknown' rather than the page failing
+        return {}
+    return out
 
 
 def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None, annual: list | None = None) -> dict:
@@ -270,6 +312,39 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
     else:
         add("cfo_pat", "Operating cash flow ÷ profit", None, f"> {cf_thr:g}×", "unknown",
             "no annual operating cash flow stored for this company yet" if india else "operating cash flow isn't reported for 4 quarters")
+
+    # ---- Financials pack: banks, lenders, insurers, brokers. Their balance sheet IS the business, so the ordinary rules above mostly do not
+    # apply; these four use what we hold (latest annual assets and net worth, the last 4 quarters' profit, price against book value).
+    if bank:
+        fin = _financial_inputs(str(latest.get("symbol") or ""), latest)
+        npq = [_f(r.get("net_profit_cr")) for r in rows[-4:]]
+        ttm_np = sum(npq) if len(npq) == 4 and all(x is not None for x in npq) else None
+        roa_thr, ea_thr, pb_thr, pg_thr = (th[k]["value"] for k in ("roa", "equity_assets", "pb", "profit_growth"))
+        assets, equity = fin.get("assets"), fin.get("equity")
+        asof = f"balance sheet of the year ended {fin['as_of']}" if fin.get("as_of") else None
+        roa = ttm_np / assets * 100 if ttm_np is not None and assets and assets > 0 else None
+        add("roa", "Return on assets", None if roa is None else f"{roa:.2f}%", f"> {roa_thr:g}%", "unknown" if roa is None else ("pass" if roa > roa_thr else "fail"),
+            asof if roa is not None else "needs total assets and 4 quarters of profit", raw=roa)
+        ea = equity / assets * 100 if equity is not None and assets and assets > 0 else None
+        add("equity_assets", "Equity ÷ assets", None if ea is None else f"{ea:.1f}%", f"> {ea_thr:g}%", "unknown" if ea is None else ("pass" if ea > ea_thr else "fail"),
+            asof if ea is not None else "needs total assets and net worth", raw=ea)
+        pbv = fin.get("pb")
+        add("pb", "Price ÷ book value", None if pbv is None else f"{pbv:.2f}×", f"< {pb_thr:g}×", "unknown" if pbv is None else ("pass" if pbv < pb_thr else "fail"),
+            fin.get("pb_note") if pbv is not None else "needs net worth and a price", raw=pbv)
+        pg = None
+        if rows and _f(rows[-1].get("net_profit_cr")) is not None:
+            from datetime import date as _d
+            try:
+                end = _d.fromisoformat(rows[-1]["period_end_date"])
+                prev = next((r for r in rows if r.get("period_end_date") and abs((end - _d.fromisoformat(r["period_end_date"])).days - 365) <= 12), None)
+            except (TypeError, ValueError):
+                prev = None
+            if prev is not None and _f(prev.get("net_profit_cr")) is not None and _f(prev["net_profit_cr"]) > 0:
+                pg = (_f(rows[-1]["net_profit_cr"]) / _f(prev["net_profit_cr"]) - 1) * 100
+        add("profit_growth", "Profit growth (YoY)", None if pg is None else f"{pg:+.0f}%", f"> {pg_thr:g}%", "unknown" if pg is None else ("pass" if pg > pg_thr else "fail"),
+            None if pg is not None else "needs the same quarter a year earlier, with a positive profit", raw=pg)
+    else:  # the four financials-only rules are not shown for other companies; keep the rule list the same length for the "off" bookkeeping
+        pass
 
     not_available: list[str] = []
 

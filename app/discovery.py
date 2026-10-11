@@ -118,16 +118,17 @@ def build_metrics(progress=None, only: str | None = None) -> int:
     with get_market_conn() as conn:
         try:
             in_mcap = {r[0]: r[1] for r in conn.execute("SELECT symbol, mcap_cr FROM india_mcap")}
+            us_over = {r[0]: r[1] for r in conn.execute("SELECT symbol, mcap_m FROM us_mcap_override")}
             us_ann: dict[str, list] = {}
             for r in conn.execute("SELECT * FROM us_annual"):
                 us_ann.setdefault(r["symbol"], []).append(r)
         except Exception:  # noqa: BLE001 - tables not filled yet on this database
-            in_mcap, us_ann = {}, {}
+            in_mcap, us_ann, us_over = {}, {}, {}
         stocks = conn.execute(
             """SELECT symbol, name, market, sector, cap_tier FROM stocks s
                WHERE EXISTS (SELECT 1 FROM quarterly_data q WHERE q.symbol = s.symbol AND q.quarter_label NOT LIKE '%annual%')"""
             + (" AND symbol = ?" if only else ""), ((only,) if only else ())).fetchall()
-        us_tickers = {x["symbol"].split(":", 1)[1] for x in stocks if x["market"] == "US"}
+        us_tickers = {x["symbol"].split(":", 1)[1]: x["name"] for x in stocks if x["market"] == "US"}
         for i, s in enumerate(stocks, 1):
             sym = s["symbol"]
             if s["market"] == "US" and is_derivative(sym.split(":", 1)[1], us_tickers):
@@ -166,6 +167,11 @@ def build_metrics(progress=None, only: str | None = None) -> int:
                 sh = conn.execute("SELECT shares_outstanding sh FROM quarterly_data WHERE symbol = ? AND shares_outstanding IS NOT NULL ORDER BY period_end_date DESC LIMIT 1", (sym,)).fetchone()
                 if sh and sh["sh"] and px and px["close"]:
                     mcap = round(sh["sh"] * px["close"] / 1e6, 1)
+                    floor = {"large": 10_000, "mid": 2_000, "small": 300}.get(s["cap_tier"])
+                    if floor and mcap < floor * 0.5:  # the share count disagrees with Nasdaq's size band (multi-class shares, stale cover page)
+                        mcap = us_over.get(sym)
+                if mcap is None and sym in us_over:
+                    mcap = us_over[sym]
             tier = s["cap_tier"]
             if tier is None and s["market"] == "US" and mcap:  # Nasdaq's screener list had no tier: same cut-offs on price x SEC share count
                 tier = "large" if mcap >= 10_000 else "mid" if mcap >= 2_000 else "small" if mcap >= 300 else "micro"
@@ -220,6 +226,7 @@ SCREENS = [
      "desc": "Stocks that clear the thresholds you set on Investment rules. Change them there and this list changes."},
     {"key": "compounders", "label": "Steady compounders", "desc": "High returns on capital that stayed high for three years, with sales growing 10% a year or more. India only for now."},
     {"key": "growers", "label": "Fast growers", "desc": "Sales up more than 20% on the year in each of the last four quarters, and a margin above 10%."},
+    {"key": "financials", "label": "Strong banks & insurers", "desc": "Banks, lenders and insurers that earn a return on equity of 12% or more, more than 1% on assets, keep at least 8% of the balance sheet as equity, and trade below 3 times book value."},
     {"key": "debtfree", "label": "Debt-free", "desc": "Almost no borrowings and a return on capital above 12%. Banks and lenders are left out."},
     {"key": "cash", "label": "Cash-rich", "desc": "Profit that turns into real cash: operating cash flow at least 90% of net profit, with a return on capital above 12%."},
     {"key": "dividend", "label": "Dividend payers", "desc": "Pay out at least 20% of profit as dividends and earn more than 12% on capital. India only for now."},
@@ -319,7 +326,7 @@ def run_screen(key: str, th: dict, market: str = "IN", limit: int = 60, cap: str
         rows = [r for r in rows if r["cap_tier"] == cap]
     if sector:
         rows = [r for r in rows if r["sector"] == sector]
-    named = key in ("rules", "compounders", "growers", "debtfree", "cash", "dividend", "big", "cheap")
+    named = key in ("rules", "compounders", "growers", "financials", "debtfree", "cash", "dividend", "big", "cheap")
     hits: list[tuple] = []
     for r in rows:
         roce, de, bank = r["roce"], r["de"], bool(r["bank"])
@@ -371,6 +378,10 @@ def run_screen(key: str, th: dict, market: str = "IN", limit: int = 60, cap: str
         elif key == "growers":
             ok = r["growth_min4"] is not None and r["growth_min4"] > 20 and r["opm"] is not None and r["opm"] > 10
             sort = -min(r["growth_min4"] or 0, 100)
+        elif key == "financials":
+            rw = r["raws"]
+            ok = bank and all(rw.get(k) is not None for k in ("roe", "roa", "equity_assets", "pb")) and rw["roe"] >= 12 and rw["roa"] >= 1.0 and rw["equity_assets"] >= 8 and 0 < rw["pb"] <= 3
+            sort = -min(rw.get("roe") or 0, 40)
         elif key == "debtfree":
             ok = not bank and de is not None and de < 0.05 and roce is not None and roce >= 12
             sort = -min(roce or 0, 100)
@@ -394,6 +405,6 @@ def run_screen(key: str, th: dict, market: str = "IN", limit: int = 60, cap: str
     hits.sort(key=lambda h: (h[0], h[1], h[2]))
     out = []
     for _, _, _, r, j in hits[:limit]:
-        out.append({**{k: r[k] for k in ("symbol", "name", "market", "sector", "cap_tier", "roce", "de", "pe", "sales_cagr_3y", "growth_min4", "cfo_pat", "div_payout", "roce_3y", "bank", "opm", "mcap")},
+        out.append({**{k: r[k] for k in ("symbol", "name", "market", "sector", "cap_tier", "roce", "de", "pe", "sales_cagr_3y", "growth_min4", "cfo_pat", "div_payout", "roce_3y", "bank", "opm", "mcap")}, "raws": r["raws"],
                     "judge": judge(r["raws"], bool(r["bank"]), th) if key in ("rules", "browse") else None})
     return {"count": len(hits), "rows": out}

@@ -131,6 +131,10 @@ CREATE TABLE IF NOT EXISTS india_mcap (      -- AMFI half-yearly list: 6-month a
     symbol TEXT PRIMARY KEY, mcap_cr REAL, tier TEXT, amfi_rank INTEGER, as_of TEXT, isin TEXT
 );
 
+CREATE TABLE IF NOT EXISTS us_mcap_override (   -- US market cap from Yahoo where price x SEC share count is wrong (multi-class shares, stale cover-page counts)
+    symbol TEXT PRIMARY KEY, mcap_m REAL, as_of TEXT
+);
+
 CREATE TABLE IF NOT EXISTS us_annual (       -- US fiscal years from SEC 10-K facts (USD millions); filled by scripts/fill_us_annual.py
     symbol TEXT NOT NULL, period_end_date TEXT NOT NULL,
     revenue_m REAL, operating_profit_m REAL, net_profit_m REAL, assets_m REAL, current_liabilities_m REAL, equity_m REAL,
