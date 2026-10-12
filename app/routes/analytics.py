@@ -51,7 +51,7 @@ def _why(key: str, r: dict, custom: dict | None = None) -> str:
         if "div" in c: bits.append(f"pays out {fmt(r['div_payout'])}" if r["div_payout"] is not None else None)
         return " · ".join(b for b in bits if b) or "matches your filters"
     parts = {
-        "compounders": [f"ROCE {fmt(r['roce_3y'])} avg (3y)", f"sales +{fmt(r['sales_cagr_3y'])}/yr"],
+        "compounders": [f"ROCE {fmt(r['roce_3y'])}+ every year (3y)", f"sales +{fmt(r['sales_cagr_3y'])}/yr"],
         "growers": [f"sales up {fmt(r['growth_min4'])}+ every quarter"],
         "financials": [f"ROE {r['raws']['roe']:.0f}%", f"ROA {r['raws']['roa']:.1f}%", f"{r['raws']['pb']:.1f}× book"] if all(k in r.get("raws", {}) for k in ("roe", "roa", "pb")) else [],
         "debtfree": [f"debt/equity {r['de']:.2f}" if r["de"] is not None else None],

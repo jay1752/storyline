@@ -29,7 +29,7 @@ def _annual_extras(annual: list) -> dict:
             out["sales_cagr_3y"] = round(((last["revenue_cr"] / ago["revenue_cr"]) ** (1 / years) - 1) * 100, 1)
     roce = [a.get("roce_pct") for a in annual[-3:] if a.get("roce_pct") is not None]
     if len(roce) == 3:
-        out["roce_3y"] = round(sum(roce) / 3, 1)
+        out["roce_3y"] = round(min(roce), 1)  # "stayed high": the LOWEST of the last three years, so one huge year cannot carry a weak one
     dp = next((a.get("dividend_payout_pct") for a in reversed(annual) if a.get("dividend_payout_pct") is not None), None)
     out["div_payout"] = dp
     return out
@@ -93,7 +93,7 @@ def _us_extras(rows: list, last_quarter_end: str) -> dict:
             break
         vals.append(op / (a - cl) * 100)
     if len(vals) == 3 and (date.fromisoformat(last3[-1]["period_end_date"]) - date.fromisoformat(last3[0]["period_end_date"])).days <= 2 * 366 + 20:
-        out["roce_3y"] = round(sum(vals) / 3, 1)
+        out["roce_3y"] = round(min(vals), 1)
     fy = rows[-1]
     stale = (date.fromisoformat(last_quarter_end) - date.fromisoformat(fy["period_end_date"])).days > 550
     if not stale and fy["dividends_paid_m"] and fy["dividends_paid_m"] > 0 and fy["net_profit_m"] and fy["net_profit_m"] > 0:
