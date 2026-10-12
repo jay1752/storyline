@@ -22,11 +22,13 @@
 
   <div class="chat-composer">
     <div class="chat-attachment" id="chat-attachment"></div>
+    <div class="chat-mic-note" id="chat-mic-note" role="status" hidden></div>
     <form class="chat-form" id="chat-form" onsubmit="sendChatMessage(event)">
       <button type="button" class="icon-btn chat-attach" title="Add a photo or screenshot (take one, or pick from your library)" aria-label="Add a photo" onclick="pickChatPhoto()"><svg class="icon"><use href="#i-camera"/></svg></button>
       <input type="file" id="chat-photo" accept="image/*" multiple hidden onchange="onChatPhotoPicked(this)">
       <button type="button" class="icon-btn chat-attach" title="Attach files: statements (Excel, CSV, PDF) or images. Pick several at once." aria-label="Attach files" onclick="pickChatFile(false)"><svg class="icon"><use href="#i-paperclip"/></svg></button>
       <input type="file" id="chat-file" accept=".pdf,.csv,.tsv,.txt,.xlsx,.xlsm,.xls,image/*" multiple hidden onchange="onChatFilePicked(this)">
+      <button type="button" class="icon-btn chat-attach chat-mic" id="chat-mic" hidden title="Speak your message" aria-label="Start dictation" aria-pressed="false"><svg class="icon"><use href="#i-mic"/></svg></button>
       <textarea id="chat-input" rows="1" placeholder="Ask about this page…" autocomplete="off" aria-label="Message"></textarea>
       <button type="submit" class="chat-send" id="chat-send" title="Send" aria-label="Send"><svg class="icon"><use href="#i-arrow-up"/></svg></button>
     </form>
