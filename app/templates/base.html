@@ -34,6 +34,7 @@
         <a class="nav-item {{ 'active' if active_nav == 'management' else '' }}" href="/management" title="Management"><svg class="icon"><use href="#i-management"/></svg><span class="label">Management</span></a>
         <a class="nav-item {{ 'active' if active_nav == 'portfolio' else '' }}" href="/portfolio" title="Portfolio"><svg class="icon"><use href="#i-portfolio"/></svg><span class="label">Portfolio</span></a>
         <div class="side-label">System</div>
+        <a class="nav-item {{ 'active' if active_nav == 'guide' else '' }}" href="/guide" title="Quick start"><svg class="icon"><use href="#i-guide"/></svg><span class="label">Quick start</span></a>
         <a class="nav-item {{ 'active' if active_nav == 'rules' else '' }}" href="/rules" title="Investment rules"><svg class="icon"><use href="#i-check"/></svg><span class="label">Investment rules</span></a>
         <a class="nav-item {{ 'active' if active_nav == 'settings' else '' }}" href="/settings" title="AI settings"><svg class="icon"><use href="#i-settings"/></svg><span class="label">AI settings</span></a>
         {% if request.state.is_admin %}<a class="nav-item {{ 'active' if active_nav == 'admin' else '' }}" href="/admin" title="Platform admin"><svg class="icon"><use href="#i-admin"/></svg><span class="label">Platform admin</span></a>{% endif %}
@@ -90,7 +91,7 @@
     <a href="/management" class="{{ 'active' if active_nav == 'management' else '' }}"><svg class="icon"><use href="#i-management"/></svg><span>Tracking</span></a>
     <a href="/portfolio" class="{{ 'active' if active_nav == 'portfolio' else '' }}"><svg class="icon"><use href="#i-portfolio"/></svg><span>Portfolio</span></a>
     <button type="button" onclick="toggleChat()" aria-label="Open the assistant"><svg class="icon"><use href="#i-sparkle"/></svg><span>Assistant</span></button>
-    <button type="button" class="{{ 'active' if active_nav in ('community', 'rules', 'settings', 'profile', 'admin', 'welcome') else '' }}" onclick="document.getElementById('shell').dataset.drawer='open'" aria-label="More"><svg class="icon"><use href="#i-menu"/></svg><span>More</span></button>
+    <button type="button" class="{{ 'active' if active_nav in ('community', 'rules', 'settings', 'profile', 'admin', 'welcome', 'guide') else '' }}" onclick="document.getElementById('shell').dataset.drawer='open'" aria-label="More"><svg class="icon"><use href="#i-menu"/></svg><span>More</span></button>
   </nav>
   {% endif %}
 

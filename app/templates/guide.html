@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Quick start · Tenetfolio{% endblock %}
+{% macro shot(file, alt) %}<figure class="gd-phone"><img src="/static/img/guide/{{ file }}?v={{ asset_version('img/guide/' ~ file) }}" alt="{{ alt }}" loading="lazy" width="640" height="1350"></figure>{% endmacro %}
+{% macro head(n, key, title, where) %}
+<div class="gd-head">
+  <span class="gd-num {{ 'done' if prog.done[key] else '' }}">{% if prog.done[key] %}<svg class="icon"><use href="#i-check"/></svg>{% else %}{{ n }}{% endif %}</span>
+  <div>
+    <h2>{{ title }}{% if prog.next == key %} <span class="gd-next">Up next</span>{% endif %}</h2>
+    {% if where %}<span class="gd-where">{{ where }}</span>{% endif %}
+  </div>
+</div>
+{% endmacro %}
+{% block content %}
+<section class="hero">
+  <span class="eyebrow">Quick start</span>
+  <h1 class="page-title">From your rules to your first position</h1>
+  <p class="page-sub">Seven short steps. Each one shows the real screen on a phone and takes you straight there. Your progress ticks off as you go.</p>
+  <div class="gd-prog" role="status"><b>{{ prog.count }} of {{ prog.total }}</b> done<span class="gd-bar"><i style="width: {{ (prog.count * 100 / prog.total)|round|int }}%"></i></span></div>
+</section>
+
+<section class="section gd-list">
+
+  <article class="gd-step" id="g1">
+    <div class="gd-text">
+      {{ head(1, 'signin', "You're signed in", None) }}
+      <p>Your account was created the first time you signed in with Google, so there is nothing to fill in.</p>
+      <div class="gd-tip"><b>On iPhone?</b> Open Profile and tap “Show me how” to add Tenetfolio to your Home Screen.</div>
+      <div class="gd-actions"><a class="btn btn-sm" href="/profile">Open Profile</a></div>
+    </div>
+    {{ shot('s1_login.jpg', 'The Tenetfolio log-in screen with a Continue with Google button') }}
+  </article>
+
+  <article class="gd-step" id="g2">
+    <div class="gd-text">
+      {{ head(2, 'rules', 'Set your rules', 'More → Investment rules') }}
+      <p>These are your own tests for a good business. Every screen and every stock page is judged against them.</p>
+      <ul class="gd-points">
+        <li>Switch a rule on or off.</li>
+        <li>Set its threshold, for example ROCE above 20%, debt/equity below 2×, sales growth above 15%.</li>
+      </ul>
+      <div class="gd-tip"><b>Start loose.</b> You can tighten the numbers later and every list updates.</div>
+      <div class="gd-actions"><a class="btn btn-primary" href="/rules">Open Investment rules</a></div>
+    </div>
+    {{ shot('s2_rules.jpg', 'Investment rules list with ROCE, ROE, debt to equity, promoter pledge and sales growth thresholds') }}
+  </article>
+
+  <article class="gd-step" id="g3">
+    <div class="gd-text">
+      {{ head(3, 'screener', 'Check the screener', 'Stocks tab') }}
+      <p>Open <b>Passes your rules</b> to see only the stocks that clear the thresholds you just set.</p>
+      <ul class="gd-points">
+        <li>Pick India, US or Both.</li>
+        <li>Prefer a ready-made idea? Try Steady compounders, Fast growers, Debt-free or Dividend payers.</li>
+        <li>Tap any row to open the stock.</li>
+      </ul>
+      <div class="gd-actions"><a class="btn btn-primary" href="/analytics">Open the screener</a></div>
+    </div>
+    {{ shot('s3_screen.jpg', 'Stocks tab with screens such as Passes your rules, Steady compounders and Fast growers, and a list of matching stocks') }}
+  </article>
+
+  <article class="gd-step" id="g4">
+    <div class="gd-text">
+      {{ head(4, 'analyse', 'Analyse a stock', None) }}
+      <p>The top of the page gives you price, latest sales growth, operating margin, ROCE and P/E against its own history.</p>
+      <p><b>Your rules</b> then says how many pass and names the ones that don't. In this example Titan passes 9 of 10 and misses only the quick ratio.</p>
+      <ul class="gd-points">
+        <li>Use the chips (Performance, Financial health, Valuation…) to go deeper.</li>
+        <li>Tap <em>Edit rules</em> if a miss tells you the rule, not the company, needs a rethink.</li>
+      </ul>
+    </div>
+    {{ shot('s4_stock.jpg', 'Titan Company stock page with price, revenue growth, operating margin, ROCE, P/E and a 9 of 10 rules summary') }}
+  </article>
+
+  <article class="gd-step" id="g5">
+    <div class="gd-text">
+      {{ head(5, 'track', 'Add it to your tracker', None) }}
+      <p>Choose <b>Watchlist</b> if you are only following it, then tap <b>Track</b>. A green “Tracking started” confirms it.</p>
+      <div class="gd-tip"><b>Already own it?</b> Pick “Position” in the same menu instead.</div>
+    </div>
+    {{ shot('s5_tracked.jpg', 'Titan page after tapping Track, showing the Tracking started confirmation') }}
+  </article>
+
+  <article class="gd-step" id="g6">
+    <div class="gd-text">
+      {{ head(6, 'story', 'Check the story', 'Tracking tab → the stock') }}
+      <p>Each tracked stock gets a plain-English story: what the latest numbers say, how it fares on your rules, and what needs your attention.</p>
+      <ul class="gd-points">
+        <li>Tap <em>Run analysis again</em> to refresh it on demand. It also runs daily.</li>
+        <li>Read the headline, then <em>Needs your attention</em> and the exit check.</li>
+      </ul>
+      <div class="gd-tip"><b>In this example:</b> “Watch — not actionable yet”. Nine rules pass, quick ratio doesn't, so keep watching.</div>
+      <div class="gd-actions"><a class="btn btn-sm" href="/management">Open Tracking</a></div>
+    </div>
+    {{ shot('s6_story.jpg', 'Titan story showing a Watch verdict, rules summary and exit check') }}
+  </article>
+
+  <article class="gd-step" id="g7">
+    <div class="gd-text">
+      {{ head(7, 'position', 'Add your position', 'Story page → Journal tab') }}
+      <p>Bought it? Log it in a few taps.</p>
+      <ul class="gd-points">
+        <li>Choose <em>Bought</em>, the date, shares and price per share.</li>
+        <li>Add a one-line reason if you like. Your reasoning becomes part of the story.</li>
+        <li>Tap <em>Add to journal</em>. Quantity and average cost update straight away.</li>
+      </ul>
+      <div class="gd-tip"><b>Next time</b> it reads “Bought more”, and the daily analysis flags where your actions fit, or break, your own rules.</div>
+      <div class="gd-actions"><a class="btn btn-primary" href="/management">Open Tracking</a></div>
+    </div>
+    <div class="gd-pair">
+      {{ shot('s7_form.jpg', 'Journal form filled with Bought, 10 shares at 4400 and a reason') }}
+      {{ shot('s7_after_top.jpg', 'Saved confirmation and the new journal entry showing 10 shares bought') }}
+    </div>
+  </article>
+
+</section>
+
+<p class="gd-foot">Titan Company is shown only as an example, using data as of 12 October 2026. Tenetfolio provides descriptive research and tracking tools, not investment advice. Check figures against company filings before you act.</p>
+{% endblock %}

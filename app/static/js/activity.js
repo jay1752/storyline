@@ -14,6 +14,7 @@
   else if (path.indexOf("/settings") === 0) area = "settings";
   else if (path.indexOf("/profile") === 0) area = "profile";
   else if (path.indexOf("/welcome") === 0) area = "welcome";
+  else if (path.indexOf("/guide") === 0) area = "guide";
   else if (path.indexOf("/admin") === 0) area = "admin";
 
   var lastTouch = Date.now();

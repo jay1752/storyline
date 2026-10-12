@@ -21,6 +21,17 @@
 </section>
 
 <section class="section dz">
+  {% if guide %}
+  <aside class="gd-card" aria-label="Quick start">
+    <div class="gd-card-text">
+      <strong>New here? Seven steps from your rules to your first position.</strong>
+      <span>Set your rules, find stocks that pass, track one and keep its story.</span>
+      <div class="gd-card-prog"><b>{{ guide.count }} of {{ guide.total }}</b> done<span class="gd-bar"><i style="width: {{ (guide.count * 100 / guide.total)|round|int }}%"></i></span></div>
+    </div>
+    <a class="btn btn-primary" href="/guide">{{ 'Continue' if guide.count > 1 else 'Start the quick start' }}</a>
+    <form method="post" action="/guide/dismiss"><button class="gd-x" type="submit">Not now</button></form>
+  </aside>
+  {% endif %}
   <div class="dz-guide">
     <span class="dz-guide-q">New to this? Start with what you want:</span>
     {% for key, label, scr in goals %}<a class="dz-goal" href="{{ link(screen=scr) }}">{{ label }}</a>{% endfor %}

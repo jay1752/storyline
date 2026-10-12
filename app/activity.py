@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 BEAT_MAX_GAP = 45          # seconds: a gap longer than this is not counted as time on site
 VISIT_GAP_MIN = 30         # minutes without a beat that ends a visit
 RETENTION_DAYS = 90
-AREAS = {"home", "stocks", "stock", "tracking", "story", "portfolio", "rules", "community", "settings", "profile", "welcome", "admin", "other"}
+AREAS = {"home", "stocks", "stock", "tracking", "story", "portfolio", "rules", "community", "settings", "profile", "welcome", "guide", "admin", "other"}
 
 
 def log(user_id, kind: str, area: str | None = None, secs: int | None = None, detail: str | None = None, conn=None) -> None:

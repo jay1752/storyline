@@ -114,9 +114,12 @@ def analytics_landing(request: Request, screen: str = "rules", market: str = "IN
 
     with get_market_conn() as conn:
         total_with_data = conn.execute("SELECT COUNT(DISTINCT symbol) c FROM quarterly_data").fetchone()["c"]
+    from app.routes.guide import progress as guide_progress
+
+    gp = guide_progress(request.state.user_id)
     return templates.TemplateResponse(
         "analytics_landing.html",
-        {"request": request, "active_nav": "analytics", "total_with_data": total_with_data, "screens": discovery.SCREENS,
+        {"request": request, "active_nav": "analytics", "guide": None if gp["dismissed"] or gp["done"]["position"] else gp, "total_with_data": total_with_data, "screens": discovery.SCREENS,
          "screen": discovery.SCREEN_BY_KEY[screen], "market": market, "cap": cap, "sector": sector, "custom": custom, "result": res,
          "facets": fc, "goals": _GOALS, "link": link, "preparing": discovery.metrics_age_days() is None, "n": n,
          "more_href": link(n=n + 60, **{k: v for k, v in (("roce", roce), ("de", de), ("growth", growth), ("pe", pe), ("opm", opm), ("div", div), ("sort", sort)) if v != ""}),

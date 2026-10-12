@@ -1750,3 +1750,42 @@ details.auth-pw[open] > summary { margin-bottom: 0.8rem; }
 .ios-share { display: inline-flex; vertical-align: middle; margin-left: 0.2rem; color: var(--accent); }
 .ios-warn { background: var(--stripe); border-radius: var(--r-md); padding: 0.6rem 0.7rem; font-size: 0.85rem; margin: 0 0 0.9rem; }
 .ios-warn .btn { margin-top: 0.5rem; }
+
+/* quick start guide + the card on the Stocks tab */
+.gd-prog { display: flex; align-items: center; justify-content: center; gap: 0.7rem; width: 100%; white-space: nowrap; margin-top: 1rem; font-size: 0.88rem; color: var(--muted); }
+.gd-prog b { color: var(--ink); font-weight: 600; }
+.gd-bar { flex: 0 1 12rem; height: 6px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.gd-bar i { display: block; height: 100%; background: var(--structure); border-radius: inherit; }
+.gd-list { gap: 1.1rem; }
+.gd-step { display: grid; gap: 1.2rem; background: var(--card, var(--paper)); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 1.3rem; box-shadow: var(--shadow-sm); scroll-margin-top: 4.5rem; }
+.gd-text { display: flex; flex-direction: column; gap: 0.7rem; min-width: 0; }
+.gd-text p { margin: 0; color: var(--muted); font-size: 0.92rem; line-height: 1.6; max-width: 44ch; }
+.gd-text p b { color: var(--ink); font-weight: 600; }
+.gd-head { display: flex; gap: 0.8rem; align-items: flex-start; }
+.gd-head h2 { margin: 0; font-size: 1.25rem; line-height: 1.2; text-wrap: balance; }
+.gd-num { flex: none; display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: var(--structure); color: var(--on-structure); font-family: var(--font-mono); font-size: 0.82rem; }
+.gd-num.done { background: color-mix(in srgb, var(--structure) 16%, transparent); color: var(--structure); }
+.gd-num .icon { width: 1.05rem; height: 1.05rem; }
+.gd-where { display: block; margin-top: 0.3rem; font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.gd-next { display: inline-block; vertical-align: middle; margin-left: 0.35rem; padding: 0.15rem 0.5rem; border-radius: 999px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); font-family: var(--font-mono); font-size: 0.64rem; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 500; }
+.gd-points { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.35rem; font-size: 0.88rem; color: var(--ink); max-width: 44ch; }
+.gd-tip { padding: 0.65rem 0.85rem; border-radius: var(--r-md); background: color-mix(in srgb, var(--structure) 8%, transparent); font-size: 0.84rem; color: var(--muted); max-width: 44ch; }
+.gd-tip b { color: var(--ink); font-weight: 600; }
+.gd-actions { margin-top: 0.2rem; display: flex; gap: 0.6rem; flex-wrap: wrap; }
+.gd-phone { margin: 0 auto; width: min(100%, 15rem); border: 5px solid var(--ink); border-radius: 1.6rem; overflow: hidden; background: var(--paper); box-shadow: var(--shadow-md); align-self: start; }
+.gd-phone img { display: block; width: 100%; height: auto; }
+.gd-pair { display: flex; gap: 0.9rem; justify-content: center; align-items: flex-start; }
+.gd-pair .gd-phone { margin: 0; flex: 1 1 0; max-width: 13rem; }
+.gd-pair .gd-phone:last-child { margin-top: 1.6rem; }
+.gd-foot { margin: 1.4rem 0 0; font-size: 0.8rem; color: var(--muted); max-width: 60ch; }
+@media (min-width: 760px) { .gd-step { grid-template-columns: minmax(0, 1fr) 17rem; gap: 2rem; padding: 1.6rem; align-items: center; } .gd-step:has(.gd-pair) { grid-template-columns: minmax(0, 1fr) 27rem; } }
+
+.gd-card { display: flex; align-items: center; gap: 1rem 1.2rem; flex-wrap: wrap; padding: 0.95rem 1.1rem; margin-bottom: 1.4rem; border: 1px solid var(--border-strong); border-radius: var(--r-lg); background: var(--card, var(--paper)); }
+.gd-card-text { flex: 1 1 16rem; min-width: 0; }
+.gd-card-text strong { display: block; font-size: 0.98rem; }
+.gd-card-text span { display: block; font-size: 0.84rem; color: var(--muted); margin-top: 0.15rem; }
+.gd-card-prog { display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; color: var(--muted); margin-top: 0.5rem; }
+.gd-card-prog .gd-bar { flex: 0 1 8rem; }
+.gd-card form { margin: 0; }
+.gd-card .gd-x { background: none; border: 0; color: var(--muted); font-size: 0.82rem; cursor: pointer; padding: 0.4rem 0.2rem; text-decoration: underline; text-underline-offset: 2px; }
+.gd-card .gd-x:hover { color: var(--ink); }

@@ -11,8 +11,8 @@ from app.db import get_users_conn
 
 STEPS = ["Signed in", "Welcome page", "Explored a stock", "Added or imported", "Rules or story", "Came back"]
 AREA_LABEL = {"stock": "Stock pages", "stocks": "Find a stock", "portfolio": "Portfolio", "tracking": "Tracking", "story": "Stock stories",
-              "rules": "Rules", "community": "Community", "welcome": "Welcome", "settings": "AI settings", "profile": "Profile", "home": "Home", "other": "Other"}
-STEP_LABEL = {"welcome_viewed": "Welcome page seen", "import_attached": "Statement attached", "import_proposed": "Import proposed",
+              "rules": "Rules", "community": "Community", "welcome": "Welcome", "guide": "Quick start", "settings": "AI settings", "profile": "Profile", "home": "Home", "other": "Other"}
+STEP_LABEL = {"welcome_viewed": "Welcome page seen", "guide_viewed": "Quick start opened", "guide_dismissed": "Quick start card closed", "import_attached": "Statement attached", "import_proposed": "Import proposed",
               "import_confirmed": "Import confirmed", "position_added": "Stock added", "rules_changed": "Changed investing rules", "chat_message": "Asked the assistant"}
 
 

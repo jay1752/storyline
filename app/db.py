@@ -670,6 +670,8 @@ def init_db() -> None:
             u.execute("ALTER TABLE users ADD COLUMN import_consent_at TEXT")  # first time the user sent a statement, after seeing the processing notice
         if "welcomed_at" not in {row["name"] for row in u.execute("PRAGMA table_info(users)").fetchall()}:
             u.execute("ALTER TABLE users ADD COLUMN welcomed_at TEXT")  # first visit to the /welcome getting-started page
+        if "guide_dismissed_at" not in {row["name"] for row in u.execute("PRAGMA table_info(users)").fetchall()}:
+            u.execute("ALTER TABLE users ADD COLUMN guide_dismissed_at TEXT")  # closed the quick-start card on the Stocks tab
         u.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL")
         us_cols = {row["name"] for row in u.execute("PRAGMA table_info(user_settings)").fetchall()}
         for col in ("fallback_provider", "fallback_model"):
