@@ -911,58 +911,6 @@ async function runTurn(message, files, ctx) {
   _save();
 }
 
-// ---------- dictation (the browser's own speech recognition; the words land in the message box, you check them and send) ----------
-
-function _initDictation() {
-  const btn = $("chat-mic");
-  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!btn || !Rec) return;                       // Firefox and a few others have none: the button stays hidden
-  btn.hidden = false;
-  const note = $("chat-mic-note");
-  let rec = null;
-  let listening = false;
-  let hideNote = 0;
-
-  const say = (text) => {
-    if (!note) return;
-    clearTimeout(hideNote);
-    note.textContent = text;
-    note.hidden = !text;
-    if (text) hideNote = setTimeout(() => { note.hidden = true; }, 6000);
-  };
-  const setListening = (on) => {
-    listening = on;
-    btn.classList.toggle("listening", on);
-    btn.setAttribute("aria-pressed", on ? "true" : "false");
-    btn.setAttribute("aria-label", on ? "Stop dictation" : "Start dictation");
-    btn.title = on ? "Tap to stop" : "Speak your message";
-  };
-
-  btn.addEventListener("click", () => {
-    if (listening) { try { rec.stop(); } catch (e) { /* already ended */ } return; }
-    const input = $("chat-input");
-    const base = input.value ? input.value.replace(/\s+$/, "") + " " : "";
-    rec = new Rec();
-    rec.lang = navigator.language || "en-IN";
-    rec.interimResults = true;
-    rec.continuous = false;
-    rec.onstart = () => { setListening(true); say("Listening… tap the mic again to stop."); };
-    rec.onresult = (e) => {
-      let text = "";
-      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
-      input.value = base + text;
-      _autoGrow();
-    };
-    rec.onerror = (e) => {
-      if (e.error === "not-allowed" || e.error === "service-not-allowed") say("Microphone access is off. Allow it in your browser or phone settings, then try again.");
-      else if (e.error === "no-speech") say("I didn't hear anything. Try again, a little closer to the microphone.");
-      else if (e.error !== "aborted") say("Dictation stopped (" + e.error + "). You can type instead.");
-    };
-    rec.onend = () => { setListening(false); if (note && note.textContent.startsWith("Listening")) say(""); input.focus(); };
-    try { rec.start(); } catch (e) { setListening(false); }
-  });
-}
-
 // ---------- boot ----------
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -972,7 +920,6 @@ document.addEventListener("DOMContentLoaded", () => {
   _renderLog();
   _applyOpen();
   _setStreaming(false);
-  _initDictation();
 
   $("chat-close").onclick = () => toggleChat(false);
   $("chat-new").onclick = newChat;
