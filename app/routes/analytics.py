@@ -377,7 +377,7 @@ def _pl_table(period_rows, peers, money_unit, eps_unit, with_qoq, bank=False):
         None if bank else _row("Financing cash flow", scol("cff_cr"), _money, money_unit, tone="sign"),
         None if bank else _row("Free cash flow", scol("fcf_cr"), _money, money_unit, tone="sign"),
     ]
-    labels = [_period_label(r["period_end_date"], r["quarter_label"]) for r in period_rows]
+    labels = [_lab(r) for r in period_rows]
     fulls = [_public_label(r["quarter_label"]) for r in period_rows]
     charts = [c for c in (
         _bars("Revenue", labels, rev, _money, money_unit),
@@ -412,7 +412,7 @@ def _balance_table(period_rows, money_unit, eps_unit, bank=False):
         at = next((i for i, x in enumerate(rows) if x["label"] == "Inventory"), None)
         extra = [x for x in (_row("Current ratio", crt, _num2, "x", spark=False), _row("Quick ratio", qrt, _num2, "x", spark=False)) if x]
         rows[(at + 1 if at is not None else len(rows)):(at + 1 if at is not None else len(rows))] = extra
-    return {"columns": [_period_label(r["period_end_date"], r["quarter_label"]) for r in cols], "ends": [r["period_end_date"] for r in cols], "rows": rows}
+    return {"columns": [_lab(r) for r in cols], "ends": [r["period_end_date"] for r in cols], "rows": rows}
 
 
 def _half_year_ends(d_from: date, d_to: date, months: set) -> list:
@@ -500,7 +500,7 @@ def _annual_balance_table(annual_rows, money_unit):
         return None
     unit = {"money": money_unit, "%": "%", "days": "days"}
     rows = [x for x in (_row(lbl, [g(r, k) for r in cols], fmt, unit[u], spark=False) for lbl, k, fmt, u in _ANNUAL_BS) if x]
-    return {"columns": [_period_label(r["period_end_date"], r["quarter_label"]) for r in cols], "ends": [r["period_end_date"] for r in cols], "rows": rows} if rows else None
+    return {"columns": [_lab(r) for r in cols], "ends": [r["period_end_date"] for r in cols], "rows": rows} if rows else None
 
 
 def _verdict(request, stock, quarter_rows, annual):
@@ -539,7 +539,7 @@ def _ownership_table(quarter_rows):
         _row("FII holding", [r["fii_pct"] for r in quarter_rows], pct, "%"),
         _row("DII holding", [r["dii_pct"] for r in quarter_rows], pct, "%"),
     ) if x]
-    return {"columns": [_period_label(r["period_end_date"], r["quarter_label"]) for r in quarter_rows], "ends": [r["period_end_date"] for r in quarter_rows], "rows": rows} if rows else None
+    return {"columns": [_lab(r) for r in quarter_rows], "ends": [r["period_end_date"] for r in quarter_rows], "rows": rows} if rows else None
 
 
 def _num(v, suffix="", prefix="", places=None):
@@ -594,16 +594,27 @@ def _compute_pe(conn, symbol: str, quarterly_rows) -> tuple:
     return pe_current, pe_low, pe_high
 
 
-def _period_label(period_end_date: str, quarter_label: str) -> str:
-    """Display label for a column header — "FY2012" for an annual period (keeps the
-    annual/quarterly distinction visible rather than disguising a yearly total as
-    one quarter among many), "Q2 2026" for a real quarter. Calendar quarter, same
-    convention as _quarter_bucket below — this app doesn't try to infer each
-    company's own fiscal-quarter convention, which varies by market and filer."""
+def _period_label(period_end_date: str, quarter_label: str, symbol: str | None = None) -> str:
+    """Display label for a column header: "FY2012" for an annual period (keeps the annual/quarterly distinction visible), and for a quarter
+    the convention of the company's own market. India (NSE: symbols) reports on an April-March fiscal year, so Apr-Jun 2026 is "Q1 FY27" and
+    Jan-Mar 2026 is "Q4 FY26" (what every Indian results announcement says). Other markets keep the calendar quarter ("Q2 2026"): US fiscal
+    years end in all twelve months, so no single fiscal convention fits them. Peer comparison still buckets by calendar quarter (_quarter_bucket)."""
     d = date.fromisoformat(period_end_date)
     if "annual" in quarter_label.lower():
         return f"FY{d.year}"
+    if symbol and symbol.startswith("NSE:"):
+        fy = d.year + 1 if d.month >= 4 else d.year
+        return f"Q{((d.month - 4) % 12) // 3 + 1} FY{fy % 100:02d}"
     return f"Q{(d.month - 1) // 3 + 1} {d.year}"
+
+
+def _lab(r) -> str:
+    """Column label for a quarterly_data / annual row (uses its own symbol to pick the fiscal convention)."""
+    try:
+        sym = r["symbol"]
+    except (KeyError, IndexError):
+        sym = None
+    return _period_label(r["period_end_date"], r["quarter_label"], sym)
 
 
 def _quarter_bucket(period_end_date: str) -> str:
@@ -811,7 +822,7 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
     # annual/quarterly distinction visible instead of hiding it), "Q2 2026" for a
     # real quarter (calendar quarter — this app doesn't try to infer each company's
     # own fiscal-quarter convention, which varies by market and by filer).
-    quarters = [_period_label(r["period_end_date"], r["quarter_label"]) for r in rows]
+    quarters = [_lab(r) for r in rows]
     quarter_full_labels = [_public_label(r["quarter_label"]) for r in rows]
 
     def series(key):
@@ -1000,7 +1011,7 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
     # above, which was never capped either — this table already scrolls
     # horizontally for the same reason that one does.
     bs_source_rows = [r for r in rows if r["total_debt_cr"] is not None or r["net_debt_cr"] is not None or r["cash_cr"] is not None]
-    bs_quarters = [_period_label(r["period_end_date"], r["quarter_label"]) for r in bs_source_rows]
+    bs_quarters = [_lab(r) for r in bs_source_rows]
     bs_total_debt_raw = [r["total_debt_cr"] for r in bs_source_rows]
     bs_net_debt_raw = [r["net_debt_cr"] for r in bs_source_rows]
     bs_cash_raw = [r["cash_cr"] for r in bs_source_rows]
