@@ -28,7 +28,10 @@ def main() -> None:
     want = {x.strip() for x in a.symbols.split(",") if x.strip()}
     tickers = {r[0].split(":", 1)[1]: r[1] for r in m.execute("SELECT symbol, name FROM stocks WHERE market='US'")}
     cand = []
-    if a.stale:
+    if want:  # named stocks: whatever Yahoo has that we lack (new quarters are inserted, existing rows are never touched)
+        sql = """SELECT s.symbol, s.cap_tier, s.sector FROM stocks s WHERE s.market='US'
+                 AND EXISTS (SELECT 1 FROM price_history p WHERE p.symbol=s.symbol AND p.date >= date('now','-20 day'))"""
+    elif a.stale:
         sql = """SELECT s.symbol, s.cap_tier, s.sector FROM stocks s WHERE s.market='US'
                  AND (SELECT MAX(period_end_date) FROM quarterly_data q WHERE q.symbol=s.symbol AND q.quarter_label NOT LIKE '%annual%') < date('now','-400 day')
                  AND EXISTS (SELECT 1 FROM price_history p WHERE p.symbol=s.symbol AND p.date >= date('now','-20 day'))"""

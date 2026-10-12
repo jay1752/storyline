@@ -223,10 +223,10 @@ def build_metrics(progress=None, only: str | None = None) -> int:
             latest = rows[-1]
             conn.execute(
                 """INSERT OR REPLACE INTO stock_metrics (symbol, market, name, sector, cap_tier, bank, raws, roce, de, growth_min4, opm, cfo_pat,
-                   sales_cagr_3y, roce_3y, div_payout, pe, pe_low, pe_high, price, mcap, last_q, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   sales_cagr_3y, roce_3y, div_payout, pe, pe_low, pe_high, price, mcap, last_q, n_q, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (sym, s["market"], s["name"], s["sector"], tier, 1 if is_bank_or_financial(s["sector"]) else 0, json.dumps(raws),
                  raws.get("roe" if is_bank_or_financial(s["sector"]) else "roce"), raws.get("de"), raws.get("sales_growth"), raws.get("opm"), raws.get("cfo_pat"),
-                 ex["sales_cagr_3y"], ex["roce_3y"], ex["div_payout"], pe, lo, hi, px["close"] if px else None, mcap, quarterly[-1]["period_end_date"], now))
+                 ex["sales_cagr_3y"], ex["roce_3y"], ex["div_payout"], pe, lo, hi, px["close"] if px else None, mcap, quarterly[-1]["period_end_date"], len(quarterly), now))
             written += 1
             if i % 250 == 0:
                 conn.commit()
@@ -364,6 +364,11 @@ def _pos_in_range(r: dict):
     return None
 
 
+def _recent(r: dict, days: int = 210) -> bool:
+    lq = r.get("last_q")
+    return bool(lq) and (date.today() - date.fromisoformat(lq)).days <= days
+
+
 def _filled(r: dict) -> int:
     """How many of the five figures shown beside a screen row exist (debt/equity does not apply to a lender, so it counts as present)."""
     return sum(1 for ok in (r["mcap"] is not None, r["pe"] is not None, r["roce"] is not None, r["sales_cagr_3y"] is not None,
@@ -382,6 +387,8 @@ def run_screen(key: str, th: dict, market: str = "IN", limit: int = 60, cap: str
     for r in rows:
         roce, de, bank = r["roce"], r["de"], bool(r["bank"])
         if named and (r["mcap"] is None or r["mcap"] < MIN_MCAP.get(r["market"], 0)):
+            continue
+        if named and ((r.get("n_q") is not None and r["n_q"] < 4) or (r.get("last_q") and not _recent(r))):  # a screen only lists a stock with 4+ quarters of results and a recent one (no more than ~7 months old)
             continue
         if named and _filled(r) < 4:  # a list row must be mostly filled: at least 4 of the 5 figures shown beside it (market cap, P/E, ROCE, 3y growth, debt/equity)
             continue

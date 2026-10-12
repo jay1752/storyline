@@ -123,6 +123,7 @@ CREATE TABLE IF NOT EXISTS stock_metrics (   -- one row per stock with fundament
     sales_cagr_3y REAL, roce_3y REAL, div_payout REAL,
     pe REAL, pe_low REAL, pe_high REAL, price REAL,
     last_q TEXT,              -- period end of the latest quarterly result (screens skip stocks whose results stopped long ago)
+    n_q INTEGER,              -- how many quarters of results we hold (the named screens need at least 4)
     mcap REAL,                -- market cap: Rs crore for India (AMFI 6-month average), USD millions for US (price x shares outstanding)
     updated_at TEXT
 );
@@ -630,6 +631,8 @@ def init_db() -> None:
             m.execute("ALTER TABLE stock_metrics ADD COLUMN mcap REAL")
         if sm_cols and "last_q" not in sm_cols:
             m.execute("ALTER TABLE stock_metrics ADD COLUMN last_q TEXT")
+        if sm_cols and "n_q" not in sm_cols:
+            m.execute("ALTER TABLE stock_metrics ADD COLUMN n_q INTEGER")
         _backfill_cap_tiers(m)
         _backfill_eps_adjustments(m)
         # Defensive: if this file was ever left in WAL mode (e.g. from before this fix),
