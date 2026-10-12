@@ -1209,7 +1209,7 @@ from collections import OrderedDict
 
 _PAGE_CACHE: "OrderedDict[tuple, tuple]" = OrderedDict()
 _PAGE_CACHE_LOCK = threading.Lock()
-_PAGE_CACHE_MAX = 60          # entries: each holds one stock's page data (a few hundred KB), so this stays well inside the VM's memory
+_PAGE_CACHE_MAX = 30          # entries: each holds one stock's page data (about 0.6-0.9 MB), so 30 is roughly 25 MB, small enough for the 1 GB VM
 _PAGE_CACHE_BACKSTOP = 6 * 3600
 
 
