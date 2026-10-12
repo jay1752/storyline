@@ -64,6 +64,18 @@ def _ttm_cagr_3y(quarterly: list) -> float | None:
     return round(((n / a) ** (1 / 3) - 1) * 100, 1) if a > 0 and n > 0 else None
 
 
+def _us_cagr_3y(rows: list):
+    """Sales growth per year over the last 3 fiscal years from the SEC 10-K years we hold (4 consecutive years needed)."""
+    rv = sorted(((r["period_end_date"], r["revenue_m"]) for r in rows if r["period_end_date"] != "0000-00-00" and r["revenue_m"]), key=lambda x: x[0])
+    if len(rv) < 4:
+        return None
+    last, ago = rv[-1], rv[-4]
+    yrs = (date.fromisoformat(last[0]) - date.fromisoformat(ago[0])).days / 365.25
+    if ago[1] > 0 and last[1] > 0 and 2.7 <= yrs <= 3.3:
+        return round(((last[1] / ago[1]) ** (1 / yrs) - 1) * 100, 1)
+    return None
+
+
 def _us_extras(rows: list, last_quarter_end: str) -> dict:
     """US 3-year average ROCE and latest dividend payout from the SEC 10-K years in us_annual (USD millions). ROCE is operating profit over
     (assets - current liabilities) and only where that capital is positive; payout is dividends paid over net profit and only where both
@@ -107,6 +119,21 @@ def _drop_us_duplicates(conn) -> None:
     conn.executemany("DELETE FROM stock_metrics WHERE symbol = ?", [(x,) for x in drop])
 
 
+def _amfi_window(as_of: str | None):
+    """(start, end) ISO dates of the six months AMFI averaged over, from its label like '30 June 2026'."""
+    from datetime import datetime
+    for fmt in ("%d %B %Y", "%d %b %Y"):
+        try:
+            end = datetime.strptime((as_of or "").strip(), fmt).date()
+            break
+        except ValueError:
+            end = None
+    if not end:
+        return None
+    y, mth = (end.year, end.month - 5) if end.month > 5 else (end.year - 1, end.month + 7)
+    return date(y, mth, 1).isoformat(), end.isoformat()
+
+
 def build_metrics(progress=None, only: str | None = None) -> int:
     from app.annual import annual_rows
     from app.ai.checklist import evaluate_framework, is_bank_or_financial
@@ -118,12 +145,14 @@ def build_metrics(progress=None, only: str | None = None) -> int:
     with get_market_conn() as conn:
         try:
             in_mcap = {r[0]: r[1] for r in conn.execute("SELECT symbol, mcap_cr FROM india_mcap")}
+            in_asof = (conn.execute("SELECT as_of FROM india_mcap LIMIT 1").fetchone() or [None])[0]
+            in_win = _amfi_window(in_asof)
             us_over = {r[0]: r[1] for r in conn.execute("SELECT symbol, mcap_m FROM us_mcap_override")}
             us_ann: dict[str, list] = {}
             for r in conn.execute("SELECT * FROM us_annual"):
                 us_ann.setdefault(r["symbol"], []).append(r)
         except Exception:  # noqa: BLE001 - tables not filled yet on this database
-            in_mcap, us_ann, us_over = {}, {}, {}
+            in_mcap, us_ann, us_over, in_win = {}, {}, {}, None
         stocks = conn.execute(
             """SELECT symbol, name, market, sector, cap_tier FROM stocks s
                WHERE EXISTS (SELECT 1 FROM quarterly_data q WHERE q.symbol = s.symbol AND q.quarter_label NOT LIKE '%annual%')"""
@@ -171,9 +200,15 @@ def build_metrics(progress=None, only: str | None = None) -> int:
             mcap = None
             if s["market"] == "IN":
                 mcap = in_mcap.get(sym)
+                if mcap and in_win and px and px["close"]:  # AMFI's figure is a 6-month AVERAGE: bring it to today with the price move since that window
+                    a = conn.execute("SELECT AVG(close), COUNT(*) FROM price_history WHERE symbol = ? AND date BETWEEN ? AND ?", (sym, in_win[0], in_win[1])).fetchone()
+                    if a and a[1] and a[1] >= 60 and a[0] and 0.2 <= px["close"] / a[0] <= 5:
+                        mcap = round(mcap * px["close"] / a[0], 1)
             else:
                 if sym in us_ann:
                     ex.update({k: v for k, v in _us_extras(us_ann[sym], quarterly[-1]["period_end_date"]).items() if v is not None})
+                    if ex["sales_cagr_3y"] is None:
+                        ex["sales_cagr_3y"] = _us_cagr_3y(us_ann[sym])
                 sh = conn.execute("SELECT shares_outstanding sh FROM quarterly_data WHERE symbol = ? AND shares_outstanding IS NOT NULL ORDER BY period_end_date DESC LIMIT 1", (sym,)).fetchone()
                 if sh and sh["sh"] and px and px["close"]:
                     mcap = round(sh["sh"] * px["close"] / 1e6, 1)
@@ -329,6 +364,12 @@ def _pos_in_range(r: dict):
     return None
 
 
+def _filled(r: dict) -> int:
+    """How many of the five figures shown beside a screen row exist (debt/equity does not apply to a lender, so it counts as present)."""
+    return sum(1 for ok in (r["mcap"] is not None, r["pe"] is not None, r["roce"] is not None, r["sales_cagr_3y"] is not None,
+                            r["de"] is not None or bool(r["bank"])) if ok)
+
+
 def run_screen(key: str, th: dict, market: str = "IN", limit: int = 60, cap: str | None = None, sector: str | None = None,
                custom: dict | None = None) -> dict:
     rows = [r for r in _load() if (market == "ALL" or r["market"] == market) and _visible(r)]
@@ -341,6 +382,8 @@ def run_screen(key: str, th: dict, market: str = "IN", limit: int = 60, cap: str
     for r in rows:
         roce, de, bank = r["roce"], r["de"], bool(r["bank"])
         if named and (r["mcap"] is None or r["mcap"] < MIN_MCAP.get(r["market"], 0)):
+            continue
+        if named and _filled(r) < 4:  # a list row must be mostly filled: at least 4 of the 5 figures shown beside it (market cap, P/E, ROCE, 3y growth, debt/equity)
             continue
         if key == "rules":
             j = judge(r["raws"], bank, th)
