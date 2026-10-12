@@ -794,8 +794,8 @@ def _delivery_block(conn, symbol: str):
     return out
 
 
-@router.get("/analytics/{symbol:path}", response_class=HTMLResponse)
-def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
+def _stock_context(symbol: str, span: str):
+    """Everything the stock page shows that does NOT depend on who is looking (the heavy part: about a dozen queries on the 6 GB database). None for an unknown stock."""
     with get_market_conn() as conn:
         stock = conn.execute("SELECT * FROM stocks WHERE symbol = ?", (symbol,)).fetchone()
         all_rows = conn.execute(
@@ -803,7 +803,7 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
         ).fetchall()
 
     if stock is None or not all_rows:
-        return HTMLResponse(f"<p>Unknown symbol {symbol}</p>", status_code=404)
+        return None
 
     # A stock with real deep history (e.g. moneycontrol's 20+ years) used to dump every
     # period as a column, forcing a very wide horizontal scroll just to read the last
@@ -1126,7 +1126,7 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
             raw["annual"] = {**raw["annual"], "rows": [r for r in raw["annual"]["rows"] if r["label"] not in cf_labels]}
     else:
         raw["cashflow"] = None
-    verdict = _verdict(request, stock, quarter_all, annual_all)
+    verdict = None  # the user's own rules are applied per request, on top of the cached page (see analytics_screen)
     pe_stats = [(k, v) for k, v in ratio_stats if k.startswith("P/E") and v not in ("—", "— – —")]
     has_lens = bool(matrix.get("has_layer2") or any(matrix.get("guidance") or []) or any(matrix.get("sector_momentum") or []) or matrix.get("has_layer5"))
     has_own = bool(raw.get("ownership") or matrix.get("institutional_holders") is not None)
@@ -1159,10 +1159,8 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
         }.items() if v},
     }
 
-    return templates.TemplateResponse(
-        "analytics.html",
+    return (
         {
-            "request": request,
             "active_nav": "analytics",
             "default_symbol": symbol,
             "stock": stock,
@@ -1194,8 +1192,81 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
             "n_annual": len(annual_all),
             "price_summary": price_summary,
             "price_series": price_series,
-        },
+            "_verdict_inputs": (stock, quarter_all, annual_all),
+        }
     )
+
+
+# ---- Stock page cache -------------------------------------------------------------------------------------------------------------------------
+# A page is reused only while NOTHING it was built from has changed. The key holds a fingerprint of this stock's data (quarterly rows and their
+# key figures, annual rows, newest price, results-calendar entry), the newest quarterly row anywhere (peer benchmarks), the IndianAPI file stamp,
+# and today's date (the "results in N days" countdown). Change any of them and the key no longer matches, so an old entry is simply never found.
+# No timers decide freshness; a 6 hour backstop only caps how long an unused entry sits in memory. The user's own part (rules verdict) is always
+# computed per request, never cached.
+import threading
+import time as _time
+from collections import OrderedDict
+
+_PAGE_CACHE: "OrderedDict[tuple, tuple]" = OrderedDict()
+_PAGE_CACHE_LOCK = threading.Lock()
+_PAGE_CACHE_MAX = 60          # entries: each holds one stock's page data (a few hundred KB), so this stays well inside the VM's memory
+_PAGE_CACHE_BACKSTOP = 6 * 3600
+
+
+def _page_fingerprint(symbol: str, span: str) -> tuple:
+    from app.indianapi_db import INDIANAPI_DB
+
+    with get_market_conn() as c:
+        q = c.execute("SELECT COUNT(*), MAX(id), TOTAL(COALESCE(revenue_cr,0) + COALESCE(net_profit_cr,0) + COALESCE(eps,0) + COALESCE(total_debt_cr,0) + "
+                      "COALESCE(roce_pct,0) + COALESCE(roe_pct,0) + COALESCE(debt_equity,0) + COALESCE(cash_cr,0) + COALESCE(promoter_pct,0)) "
+                      "FROM quarterly_data WHERE symbol = ?", (symbol,)).fetchone()
+        a = c.execute("SELECT COUNT(*), MAX(period_end_date), TOTAL(COALESCE(net_profit_cr,0) + COALESCE(roce_pct,0) + COALESCE(borrowings_cr,0)) "
+                      "FROM annual_data WHERE symbol = ?", (symbol,)).fetchone()
+        p = c.execute("SELECT date, close FROM price_history WHERE symbol = ? ORDER BY date DESC LIMIT 1", (symbol,)).fetchone()
+        gq = c.execute("SELECT MAX(id) FROM quarterly_data").fetchone()[0]
+        try:
+            cal = c.execute("SELECT GROUP_CONCAT(event_date || status) FROM results_calendar WHERE symbol = ?", (symbol,)).fetchone()[0]
+        except Exception:  # noqa: BLE001 - table absent on an old database
+            cal = None
+        try:
+            mc = c.execute("SELECT mcap FROM stock_metrics WHERE symbol = ?", (symbol,)).fetchone()
+        except Exception:  # noqa: BLE001
+            mc = None
+    try:
+        ia_stamp = INDIANAPI_DB.stat().st_mtime_ns
+    except OSError:
+        ia_stamp = 0
+    return (symbol, span, tuple(q), tuple(a), tuple(p) if p else None, gq, cal, mc[0] if mc else None, ia_stamp, date.today().isoformat())
+
+
+def _cached_stock_context(symbol: str, span: str):
+    key = _page_fingerprint(symbol, span)
+    now = _time.time()
+    with _PAGE_CACHE_LOCK:
+        hit = _PAGE_CACHE.get(key)
+        if hit and now - hit[0] < _PAGE_CACHE_BACKSTOP:
+            _PAGE_CACHE.move_to_end(key)
+            return hit[1]
+    ctx = _stock_context(symbol, span)
+    if ctx is not None:
+        with _PAGE_CACHE_LOCK:
+            for k in [k for k in _PAGE_CACHE if k[0] == symbol and k[1] == span]:  # an older version of the same page is dead weight
+                del _PAGE_CACHE[k]
+            _PAGE_CACHE[key] = (now, ctx)
+            while len(_PAGE_CACHE) > _PAGE_CACHE_MAX:
+                _PAGE_CACHE.popitem(last=False)
+    return ctx
+
+
+@router.get("/analytics/{symbol:path}", response_class=HTMLResponse)
+def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
+    ctx = _cached_stock_context(symbol, span)
+    if ctx is None:
+        return HTMLResponse(f"<p>Unknown symbol {symbol}</p>", status_code=404)
+    page = {k: v for k, v in ctx.items() if k != "_verdict_inputs"}
+    page["request"] = request
+    page["verdict"] = _verdict(request, *ctx["_verdict_inputs"])
+    return templates.TemplateResponse("analytics.html", page)
 
 
 @router.get("/export/stock/{symbol:path}.csv")
