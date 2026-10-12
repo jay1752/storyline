@@ -14,6 +14,8 @@ project, out of scope here."""
 import re
 from datetime import date
 
+from app.ratios import filings_roce, ia_year_ratios
+
 NOT_COMPUTABLE = ["interest_coverage", "current_ratio", "quick_ratio", "cfo_pat_ratio"]
 
 
@@ -175,10 +177,21 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
     thr = th[rk]["value"]
     v = _f(latest.get("roe_pct" if bank else "roce_pct"))
     roce_note = "banks/financials use ROE instead of ROCE" if bank else None
-    # A positive return over a year that lost money is a sign error (a loss divided by negative capital), not a return: leave it unknown.
-    ttm = [_f(r.get("net_profit_cr" if bank else "operating_profit_cr")) for r in rows[-4:]]
-    if v is not None and v > 0 and len(ttm) == 4 and all(x is not None for x in ttm) and sum(ttm) < 0:
-        v, roce_note = None, "not meaningful: the last four quarters made a loss, so the capital base is not a fair divisor"
+    # One source per stock. A stock with an IndianAPI financial year uses that year's ROCE / ROE / debt-to-equity (Screener's own numbers);
+    # one with filings only gets a Screener-style ROCE from its quarters (profit before tax + interest over net worth + borrowings).
+    ia_y = ia_year_ratios(annual, latest.get("period_end_date"))
+    ia_v = ia_y["roe" if bank else "roce"] if ia_y else None
+    if ia_v is not None:
+        v, roce_note = ia_v, ("banks/financials use ROE instead of ROCE" if bank else None)
+    else:
+        fr = filings_roce(rows) if (not bank and str(latest.get("symbol") or "").startswith("NSE:")) else None  # India only: US ROCE stays on the SEC calculation
+        if fr is not None:
+            v = fr
+        # A positive return over a year that lost money is a sign error (a loss divided by negative capital), not a return: leave it unknown.
+        # (The Screener-style figure is built on profit before tax, so its own sign is already right.)
+        ttm = [_f(r.get("net_profit_cr" if bank else "operating_profit_cr")) for r in rows[-4:]]
+        if fr is None and v is not None and v > 0 and len(ttm) == 4 and all(x is not None for x in ttm) and sum(ttm) < 0:
+            v, roce_note = None, "not meaningful: the last four quarters made a loss, so the capital base is not a fair divisor"
     if v is None and not bank:  # the quarters carry no ROCE: the latest fiscal year's (IndianAPI annual ratios) stands in, said so
         v, fy_end = _annual_fallback(annual, latest, lambda a: _f(a.get("roce_pct")) if (_f(a.get("operating_profit_cr")) or 0) >= 0 else None)
         if v is not None:
@@ -187,6 +200,8 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
         "unknown" if v is None else ("pass" if v > thr else "fail"), roce_note, raw=v)
     # Debt / equity
     de = _f(latest.get("debt_equity"))
+    if ia_y and ia_y["de"] is not None:
+        de = ia_y["de"]
     de_thr = th["de"]["value"]
     # Banks and lenders are exempt by default (their debt IS the business). An exchange or asset manager is also labelled
     # "Financial Services" yet has a perfectly good D/E, so a rule the user set for THIS stock is applied regardless.

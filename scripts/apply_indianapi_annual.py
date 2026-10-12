@@ -19,11 +19,11 @@ STD = {
     "Cash from Operating Activity": "cfo_cr", "Cash from Investing Activity": "cfi_cr", "Cash from Financing Activity": "cff_cr",
     "Net Cash Flow": "net_cash_flow_cr", "Free Cash Flow": "fcf_cr", "CFO/OP": "cfo_to_op",
     "Debtor Days": "debtor_days", "Inventory Days": "inventory_days", "Days Payable": "days_payable", "Cash Conversion Cycle": "cash_conversion_cycle",
-    "Working Capital Days": "working_capital_days", "ROCE %": "roce_pct",
+    "Working Capital Days": "working_capital_days", "ROCE %": "roce_pct", "ROE %": "roe_pct",
 }
 BANK_OK = {"Profit before tax", "Tax %", "Net Profit", "EPS in Rs", "Other Income", "Equity Capital", "Reserves", "Borrowing", "Total Liabilities", "Total Assets",
            "Fixed Assets", "Investments", "Other Assets", "Cash from Operating Activity", "Cash from Investing Activity", "Cash from Financing Activity",
-           "Net Cash Flow", "Free Cash Flow", "ROCE %"}
+           "Net Cash Flow", "Free Cash Flow", "ROCE %", "ROE %"}
 
 
 def main() -> None:

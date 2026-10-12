@@ -164,10 +164,10 @@ def build_metrics(progress=None, only: str | None = None) -> int:
                 pe = lo = hi = None
             px = conn.execute("SELECT close FROM price_history WHERE symbol = ? ORDER BY date DESC LIMIT 1", (sym,)).fetchone()
             ex = _annual_extras(annual)
-            if ex["sales_cagr_3y"] is None:
-                ex["sales_cagr_3y"] = _ttm_cagr_3y(quarterly)
-            if ex["sales_cagr_3y"] is None and sym in ia_g3:
+            if sym in ia_g3:  # IndianAPI's own 3-year compounded growth is the figure for a stock it covers
                 ex["sales_cagr_3y"] = ia_g3[sym]
+            elif ex["sales_cagr_3y"] is None:
+                ex["sales_cagr_3y"] = _ttm_cagr_3y(quarterly)
             mcap = None
             if s["market"] == "IN":
                 mcap = in_mcap.get(sym)

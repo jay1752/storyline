@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS annual_data (
     equity_capital_cr REAL, reserves_cr REAL, borrowings_cr REAL, other_liabilities_cr REAL, total_liabilities_cr REAL,
     fixed_assets_cr REAL, cwip_cr REAL, investments_cr REAL, other_assets_cr REAL, total_assets_cr REAL,
     cfo_cr REAL, cfi_cr REAL, cff_cr REAL, net_cash_flow_cr REAL, fcf_cr REAL, cfo_to_op REAL,
-    debtor_days REAL, inventory_days REAL, days_payable REAL, cash_conversion_cycle REAL, working_capital_days REAL, roce_pct REAL,
+    debtor_days REAL, inventory_days REAL, days_payable REAL, cash_conversion_cycle REAL, working_capital_days REAL, roce_pct REAL, roe_pct REAL,
     PRIMARY KEY (symbol, period_end_date)
 );
 
@@ -622,6 +622,9 @@ def init_db() -> None:
         m.execute("CREATE INDEX IF NOT EXISTS idx_stocks_isin ON stocks(isin) WHERE isin IS NOT NULL")
         if "cap_tier" not in stocks_cols:
             m.execute("ALTER TABLE stocks ADD COLUMN cap_tier TEXT")
+        an_cols = {row["name"] for row in m.execute("PRAGMA table_info(annual_data)").fetchall()}
+        if an_cols and "roe_pct" not in an_cols:
+            m.execute("ALTER TABLE annual_data ADD COLUMN roe_pct REAL")
         sm_cols = {row["name"] for row in m.execute("PRAGMA table_info(stock_metrics)").fetchall()}
         if sm_cols and "mcap" not in sm_cols:
             m.execute("ALTER TABLE stock_metrics ADD COLUMN mcap REAL")

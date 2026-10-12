@@ -1039,14 +1039,24 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
     latest = rows[-1]
     with get_market_conn() as conn:
         pe_current, pe_low, pe_high = _compute_pe(conn, symbol, rows)
+    from app.annual import annual_rows as _annual_rows_for_ratios
+    from app.ratios import filings_roce, ia_year_ratios
+    with get_market_conn() as _rc:
+        _ia_y = ia_year_ratios(_annual_rows_for_ratios(_rc, symbol), latest["period_end_date"]) if symbol.startswith("NSE:") else None
+    # One source per stock: IndianAPI's financial-year ROCE / ROE / debt-to-equity where it has the year, otherwise the filings (ROCE Screener-style, India)
+    _roe = _ia_y["roe"] if _ia_y and _ia_y["roe"] is not None else latest["roe_pct"]
+    _roce = _ia_y["roce"] if _ia_y and _ia_y["roce"] is not None else (filings_roce([dict(r) for r in rows]) if symbol.startswith("NSE:") else None)
+    _roce = _roce if _roce is not None else latest["roce_pct"]
+    from app.ai.checklist import is_bank_or_financial as _is_fin
+    _de = _ia_y["de"] if _ia_y and _ia_y["de"] is not None and not _is_fin(stock["sector"]) else latest["debt_equity"]  # a lender's borrowings are its business: no debt/equity for it
     ratio_stats = [
-        ("ROE", _num(latest["roe_pct"], suffix="%", places=1)),
-        ("ROCE", _num(latest["roce_pct"], suffix="%", places=1)),
-        ("Debt / Equity", _num(latest["debt_equity"], places=2)),
+        ("ROE", _num(_roe, suffix="%", places=1)),
+        ("ROCE", _num(_roce, suffix="%", places=1)),
+        ("Debt / Equity", _num(_de, places=2)),
         ("P/E (current)", _num(pe_current, suffix="x", places=1)),
         ("P/E 3-yr range", f"{_num(pe_low, suffix='x', places=1)} – {_num(pe_high, suffix='x', places=1)}"),
     ]
-    has_ratios = any(v is not None for v in (latest["roe_pct"], latest["roce_pct"], latest["debt_equity"], pe_current))
+    has_ratios = any(v is not None for v in (_roe, _roce, _de, pe_current))
 
     with get_market_conn() as pconn:
         price_summary, price_series = _price_block(pconn, symbol, stock["market"])
