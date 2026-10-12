@@ -125,7 +125,7 @@
 </section>
 
 <details class="expandable">
-  <summary><span class="summary-title">Risk &amp; diversification</span><span class="section-note">concentration · correlation · attribution</span></summary>
+  <summary><span class="summary-title">Risk &amp; diversification</span><span class="section-note">concentration · attribution</span></summary>
   <div class="details-body">
     <h3 class="section-title">Concentration <span class="section-note">% of book</span></h3>
     <div class="conc-wrap">
@@ -137,30 +137,6 @@
       </div>
       {% endfor %}
     </div>
-
-    {% if symbols|length > 1 %}
-    <h3 class="section-title">Correlation <span class="section-note">top {{ symbols|length }} by weight · trailing 180 days</span></h3>
-    <div class="corr-wrap">
-      <table class="corr">
-        <thead><tr><th></th>{% for lbl in short_labels %}<th>{{ lbl }}</th>{% endfor %}</tr></thead>
-        <tbody>
-          {% for row in corr_matrix %}
-          <tr>
-            <th>{{ short_labels[loop.index0] }}</th>
-            {% for v in row %}
-              {% if v is none %}<td class="diag" title="Not enough overlapping price history yet">—</td>
-              {% elif v == 1.0 %}<td class="diag">1.00</td>
-              {% elif v >= 0.5 %}<td class="high">{{ "%.2f"|format(v) }}</td>
-              {% elif v >= 0.25 %}<td class="mid">{{ "%.2f"|format(v) }}</td>
-              {% else %}<td class="low">{{ "%.2f"|format(v) }}</td>{% endif %}
-            {% endfor %}
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    <p class="prose">Cells above 0.50 are flagged — holdings that look diversified by sector but move together. "—" means too little overlapping price history, not zero correlation.</p>
-    {% endif %}
 
     {% if attribution %}
     {% set max_pp = (attribution|map(attribute='pp')|map('abs')|list|max) or 1 %}

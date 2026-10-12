@@ -542,7 +542,7 @@ button { font-family: inherit; }
 
 /* ---------- Tables ---------- */
 
-.table-wrap, .matrix-wrap, .corr-wrap {
+.table-wrap, .matrix-wrap {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
@@ -672,7 +672,7 @@ svg text { font-family: var(--font-mono); fill: currentColor; }
 .pos-fill { fill: var(--pos); }
 figcaption { font-size: 0.78rem; color: var(--muted); margin-top: 0.5rem; }
 
-/* ---------- Concentration / correlation / attribution ---------- */
+/* ---------- Concentration / attribution ---------- */
 
 .conc-wrap, .attr-wrap { background: var(--card); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-sm); padding: 0.9rem 1.2rem; }
 .conc-row { display: grid; grid-template-columns: 9rem 1fr 3.6rem; align-items: center; gap: 0.9rem; padding: 0.4rem 0; }
@@ -683,12 +683,6 @@ figcaption { font-size: 0.78rem; color: var(--muted); margin-top: 0.5rem; }
 .conc-row.flag .conc-fill { background: var(--accent); }
 .conc-pct { font-variant-numeric: tabular-nums; font-size: 0.85rem; text-align: right; font-weight: 500; }
 
-table.corr th, table.corr td { text-align: center; border: 1px solid var(--border); padding: 0.55rem 0.7rem; }
-table.corr thead th { position: static; }
-table.corr td.diag { color: var(--muted); background: var(--stripe); }
-table.corr td.low { color: var(--pos); background: color-mix(in srgb, var(--pos) 6%, transparent); }
-table.corr td.mid { color: var(--ink); background: color-mix(in srgb, var(--accent) 8%, transparent); }
-table.corr td.high { color: var(--accent); font-weight: 700; background: color-mix(in srgb, var(--accent) 22%, transparent); }
 
 .attr-row { display: grid; grid-template-columns: 7rem 1fr 5rem; align-items: center; gap: 0.9rem; padding: 0.55rem 0; border-bottom: 1px solid var(--border); }
 .attr-row:last-child { border-bottom: none; }
@@ -1745,3 +1739,14 @@ details.auth-pw[open] > summary { margin-bottom: 0.8rem; }
 .au-pb { height: 0.6rem; background: var(--paper-sunken, #E4E3DB); border-radius: 4px; overflow: hidden; }
 .au-pb div { height: 100%; background: var(--accent); }
 .au-priv { margin: 1.4rem 0 0; padding: 0.8rem 1rem; border: 1px dashed var(--border-strong); border-radius: var(--r-md); font-size: 0.82rem; color: var(--muted); }
+
+/* iPhone install help sheet (Profile page) */
+.ios-sheet { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--card); color: var(--ink); padding: 1.2rem 1.3rem; width: min(92vw, 24rem); box-shadow: var(--shadow-sm); }
+.ios-sheet::backdrop { background: rgba(0, 0, 0, 0.45); }
+.ios-sheet h2 { font-size: 1.1rem; margin: 0 0 0.8rem; }
+.ios-steps { list-style: none; margin: 0 0 1rem; padding: 0; display: grid; gap: 0.8rem; }
+.ios-steps li { display: grid; grid-template-columns: 1.7rem 1fr; gap: 0.7rem; align-items: start; font-size: 0.92rem; line-height: 1.4; }
+.ios-n { width: 1.7rem; height: 1.7rem; border-radius: 50%; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.85rem; }
+.ios-share { display: inline-flex; vertical-align: middle; margin-left: 0.2rem; color: var(--accent); }
+.ios-warn { background: var(--stripe); border-radius: var(--r-md); padding: 0.6rem 0.7rem; font-size: 0.85rem; margin: 0 0 0.9rem; }
+.ios-warn .btn { margin-top: 0.5rem; }

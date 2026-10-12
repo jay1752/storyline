@@ -1,5 +1,3 @@
-import numpy as np
-import pandas as pd
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
@@ -13,53 +11,6 @@ router = APIRouter()
 
 BENCHMARKS = {"nifty50": 4.2, "sp500": 5.8}  # still illustrative — no real index-level
 # price feed sourced yet, separate task from wiring this page to real positions
-
-# A full correlation matrix is O(n^2) to both compute and render — fine for a handful
-# of holdings, unusable (and slow) once a real imported portfolio has 100+ positions.
-# Cap to the largest holdings by weight, same principle as 13F's "top ~3000 by value"
-# scope decision elsewhere in this codebase: the biggest positions are the ones whose
-# correlation actually matters for concentration risk.
-TOP_N_FOR_CORRELATION = 12
-CORR_LOOKBACK_DAYS = 180
-MIN_OVERLAP_DAYS = 30  # below this, a correlation number is noise, not signal
-
-
-def _compute_correlation(conn, symbols: list[str]) -> dict:
-    """Real pairwise correlation of daily returns, trailing ~180 days. Returns
-    {(a, b): corr}. A pair is simply absent from the dict (never fabricated as 0 or
-    guessed) when there isn't enough overlapping price history to mean anything —
-    same honesty convention as Layer 2's "needs 3+ real peers" sector benchmark."""
-    if not symbols:
-        return {}
-    placeholders = ",".join("?" for _ in symbols)
-    rows = conn.execute(
-        f"""SELECT symbol, date, close FROM price_history
-            WHERE symbol IN ({placeholders}) AND date >= date('now', '-{CORR_LOOKBACK_DAYS} days')
-            ORDER BY date""",
-        symbols,
-    ).fetchall()
-    if not rows:
-        return {}
-
-    df = pd.DataFrame([dict(r) for r in rows])
-    pivot = df.pivot_table(index="date", columns="symbol", values="close")
-    returns = pivot.pct_change().dropna(how="all")
-
-    result = {}
-    for i, a in enumerate(symbols):
-        result[(a, a)] = 1.0
-        if a not in returns.columns:
-            continue
-        for b in symbols[i + 1:]:
-            if b not in returns.columns:
-                continue
-            paired = returns[[a, b]].dropna()
-            if len(paired) < MIN_OVERLAP_DAYS:
-                continue
-            corr = paired[a].corr(paired[b])
-            if corr is not None and not np.isnan(corr):
-                result[(a, b)] = result[(b, a)] = round(float(corr), 2)
-    return result
 
 
 def _group_inr(n: int) -> str:
@@ -215,12 +166,7 @@ def portfolio_screen(request: Request):
         "down": sorted(with_day, key=lambda h: h["day_pct"])[:3],
     }
 
-    # --- Risk & diversification (unchanged views, now driven by real prices) ---
-    top_symbols = [h["symbol"] for h in holdings[:TOP_N_FOR_CORRELATION]]
-    with get_market_conn() as m:
-        corr_lookup = _compute_correlation(m, top_symbols)
-    corr_matrix = [[corr_lookup.get((a, b)) for b in top_symbols] for a in top_symbols]
-    short_labels = [s.split(":")[1][:6] for s in top_symbols]
+    # --- Risk & diversification: concentration and attribution ---
     attribution_all = sorted(
         ({"symbol": h["symbol"], "pp": round(h["weight_pct"] * h["pnl_pct"] / 100, 2)} for h in holdings if h["pnl_pct"] is not None),
         key=lambda a: -a["pp"],
@@ -243,9 +189,6 @@ def portfolio_screen(request: Request):
             "has_us": bool(us),
             "has_in": bool(india),
             "max_weight": max_weight,
-            "symbols": top_symbols,
-            "short_labels": short_labels,
-            "corr_matrix": corr_matrix,
             "attribution": attribution,
             "attribution_total": len(attribution_all),
             "portfolio_return": portfolio_return,

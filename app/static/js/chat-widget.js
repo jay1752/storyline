@@ -12,6 +12,8 @@
 
 const STORE_KEY = "storyline.chat.v1";
 const IMPORT_MESSAGE = "Import my positions from this file.";
+const IMPORT_MESSAGE_MANY = "Import my positions from these files.";
+const MAX_ATTACH = 5;
 
 const chat = {
   messages: [], // {role, text, ctx, tools}
@@ -20,7 +22,7 @@ const chat = {
   expanded: false,
   streaming: false,
   abort: null,
-  pendingFile: null,
+  pendingFiles: [],   // up to MAX_ATTACH files / photos for the next message
   lastCtxKey: null,
 };
 
@@ -431,7 +433,7 @@ function newChat() {
   chat.messages = [];
   chat.history = null;
   chat.lastCtxKey = null;
-  chat.pendingFile = null;
+  chat.pendingFiles = [];
   _renderPendingFile();
   _setStreaming(false);
   _renderLog();
@@ -447,17 +449,79 @@ function pickChatFile(autoSend) {
   input.click();
 }
 
-function onChatFilePicked(input) {
-  const file = input.files && input.files[0];
+async function onChatFilePicked(input) {
+  const picked = Array.from(input.files || []);
+  const autosend = !!input.dataset.autosend;
   input.value = "";
-  if (!file) return;
-  chat.pendingFile = file;
-  _renderPendingFile();
-  if (input.dataset.autosend) $("chat-form").requestSubmit();
+  if (!picked.length) return;
+  await _addPending(picked);
+  if (autosend) $("chat-form").requestSubmit();
 }
 
+// Photos and screenshots: from the camera or the photo library (iPhone photos are HEIC; they are turned into a normal JPEG here). Several at once.
+function pickChatPhoto() { $("chat-photo").click(); }
+
+async function onChatPhotoPicked(input) {
+  const picked = Array.from(input.files || []);
+  input.value = "";
+  if (!picked.length) return;
+  await _addPending(picked);
+  $("chat-input").focus();
+}
+
+// Adds files to the message being written (images are shrunk first); a sixth file is not taken, and the box says so.
+async function _addPending(files) {
+  let skipped = 0;
+  for (const f of files) {
+    if (chat.pendingFiles.length >= MAX_ATTACH) { skipped++; continue; }
+    chat.pendingFiles.push(_isImage(f) ? await _prepareImage(f) : f);
+  }
+  chat.attachNote = skipped ? "Only " + MAX_ATTACH + " attachments fit in one message, so " + skipped + " " + (skipped === 1 ? "was" : "were") + " left out." : "";
+  _renderPendingFile();
+}
+
+function _isImage(file) {
+  return /^image\//.test(file.type) || /\.(png|jpe?g|webp|heic|heif)$/i.test(file.name || "");
+}
+
+// Re-draws an image as a JPEG no wider than 2000 px: HEIC becomes readable by the model, and a 10 MB phone photo becomes a few hundred KB.
+// If the browser cannot decode it (HEIC outside Safari), the original goes up and the server says what it can read.
+async function _prepareImage(file) {
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.85));
+    if (!blob) return file;
+    const base = (file.name || "photo").replace(/\.[^.]+$/, "") || "photo";
+    return new File([blob], base + ".jpg", { type: "image/jpeg" });
+  } catch (e) {
+    return file;
+  }
+}
+
+// Paste a screenshot straight into the message box.
+document.addEventListener("paste", async (e) => {
+  const input = $("chat-input");
+  if (!input || e.target !== input) return;
+  const item = Array.from((e.clipboardData && e.clipboardData.items) || []).find((i) => i.kind === "file" && /^image\//.test(i.type));
+  if (!item) return;
+  e.preventDefault();
+  await _addPending([item.getAsFile()]);
+});
+
 function clearChatFile() {
-  chat.pendingFile = null;
+  chat.pendingFiles = [];
+  chat.attachNote = "";
+  _renderPendingFile();
+}
+
+function removeChatFile(i) {
+  chat.pendingFiles.splice(i, 1);
+  chat.attachNote = "";
   _renderPendingFile();
 }
 
@@ -465,23 +529,28 @@ function _renderPendingFile() {
   const box = $("chat-attachment");
   if (!box) return;
   box.textContent = "";
-  box.classList.toggle("has", !!chat.pendingFile);
-  if (!chat.pendingFile) return;
-  const x = _el("button");
-  x.type = "button";
-  x.setAttribute("aria-label", "Remove attachment");
-  x.appendChild(_icon("i-x", "icon-sm"));
-  x.onclick = clearChatFile;
-  const row = _el("div", "chat-attachment-row");
-  row.append(_icon("i-paperclip", "icon-sm"), _el("span", "name", chat.pendingFile.name), x);
+  const files = chat.pendingFiles || [];
+  box.classList.toggle("has", files.length > 0);
+  if (!files.length) return;
+  files.forEach((f, i) => {
+    const x = _el("button");
+    x.type = "button";
+    x.setAttribute("aria-label", "Remove " + f.name);
+    x.appendChild(_icon("i-x", "icon-sm"));
+    x.onclick = () => removeChatFile(i);
+    const row = _el("div", "chat-attachment-row");
+    row.append(_icon(_isImage(f) ? "i-camera" : "i-paperclip", "icon-sm"), _el("span", "name", f.name), x);
+    box.appendChild(row);
+  });
+  if (chat.attachNote) box.appendChild(_el("div", "chat-attachment-note", chat.attachNote));
   const note = _el("div", "chat-attachment-note");
-  note.append("We read this file to find your holdings and don't keep it. Excel, CSV and text PDFs are read on our server. Scans, photos and unfamiliar layouts are sent to the AI provider you chose in AI settings. ");
+  note.append("We read these to find your holdings and don't keep them. Excel, CSV and text PDFs are read on our server. Scans, photos and unfamiliar layouts are sent to the AI provider you chose in AI settings. ");
   const link = _el("a", null, "Privacy policy");
   link.href = "/privacy";
   link.target = "_blank";
   link.rel = "noopener";
-  note.append(link, ". Sending the file means you agree.");
-  box.append(row, note);
+  note.append(link, ". Sending means you agree.");
+  box.appendChild(note);
 }
 
 // ---------- import proposal card ----------
@@ -706,11 +775,12 @@ async function sendChatMessage(event) {
 
   const input = $("chat-input");
   const message = input.value.trim();
-  const file = chat.pendingFile;
-  if (!message && !file) return;
+  const files = chat.pendingFiles.slice();
+  if (!message && !files.length) return;
   input.value = "";
   _autoGrow();
-  chat.pendingFile = null;
+  chat.pendingFiles = [];
+  chat.attachNote = "";
   _renderPendingFile();
 
   const ctx = _pageContext();
@@ -720,12 +790,12 @@ async function sendChatMessage(event) {
   }
   chat.lastCtxKey = key;
 
-  const shown = (file ? "📎 " + file.name + (message ? "\n" : "") : "") + (message || (file ? IMPORT_MESSAGE : ""));
+  const shown = (files.length ? "📎 " + files.map((f) => f.name).join(", ") + (message ? "\n" : "") : "") + (message || (files.length ? (files.length > 1 ? IMPORT_MESSAGE_MANY : IMPORT_MESSAGE) : ""));
   chat.messages.push({ role: "user", text: shown });
-  await runTurn(message, file, ctx);
+  await runTurn(message, files, ctx);
 }
 
-async function runTurn(message, file, ctx) {
+async function runTurn(message, files, ctx) {
   const log = $("chat-log");
   _renderLog();
 
@@ -735,7 +805,7 @@ async function runTurn(message, file, ctx) {
   body.appendChild(Object.assign(_el("span", "chat-typing"), {}));
   const typing = body.firstChild;
   typing.append(_el("i"), _el("i"), _el("i"));
-  if (file) body.appendChild(_el("span", "muted", " Reading your file…"));
+  if (files.length) body.appendChild(_el("span", "muted", files.length > 1 ? " Reading your files…" : " Reading your file…"));
   wrap.appendChild(body);
   log.appendChild(wrap);
   _scrollDown(true);
@@ -745,7 +815,7 @@ async function runTurn(message, file, ctx) {
   if (chat.history) form.append("history", chat.history);
   if (ctx.page) form.append("page", ctx.page);
   if (ctx.symbol) form.append("symbol", ctx.symbol);
-  if (file) form.append("file", file);
+  files.forEach((f) => form.append("files", f));
 
   chat.abort = new AbortController();
   _setStreaming(true);
@@ -764,7 +834,7 @@ async function runTurn(message, file, ctx) {
     err.appendChild(_el("span", null, msg));
     const retry = _el("button", null, "Try again");
     retry.type = "button";
-    retry.onclick = () => runTurn(message, file, ctx);
+    retry.onclick = () => runTurn(message, files, ctx);
     err.appendChild(retry);
     wrap.appendChild(err);
   };

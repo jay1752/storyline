@@ -28,6 +28,8 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 MAX_FILE_BYTES = 20 * 1024 * 1024
+MAX_ATTACHMENTS = 5                    # files / photos in one message
+MAX_TOTAL_BYTES = 40 * 1024 * 1024
 MAX_TEXT_CHARS = 400_000
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
 TEXT_TYPES = (".csv", ".tsv", ".txt")
@@ -63,6 +65,8 @@ def _file_to_prompt(message: str, filename: str, data: bytes):
         except Exception:  # noqa: BLE001 - corrupt / password-protected workbook
             raise FileRejected("I couldn't open that Excel file. Re-download it from your broker, or attach a CSV or PDF instead.")
         return f"{note}\n\n--- file contents ---\n{text}"
+    if name.endswith((".heic", ".heif")):
+        raise FileRejected("That iPhone photo format (HEIC) can't be read here. Use the camera button, which converts it, or take a screenshot instead.")
     raise FileRejected("Attach a PDF, CSV, or image (PNG/JPG) of your statement.")
 
 
@@ -112,7 +116,21 @@ async def _run_events(prompt, model, message_history, instructions):
         yield "done", run.result.all_messages()
 
 
-async def _stream(user_id: int, message: str, history_json: str | None, page: str | None, symbol: str | None, upload=None):
+def _files_to_prompt(message: str, uploads: list):
+    """One prompt for several attachments: the user's words first, then each file in order (text and spreadsheets inlined, PDFs and images as binary)."""
+    parts: list = [message]
+    for i, (filename, data) in enumerate(uploads, 1):
+        piece = _file_to_prompt(f"(attachment {i} of {len(uploads)})", filename, data)
+        if isinstance(piece, list):
+            parts.extend(piece)
+        else:
+            parts.append(piece)
+    return parts
+
+
+async def _stream(user_id: int, message: str, history_json: str | None, page: str | None, symbol: str | None, uploads=None):
+    uploads = list(uploads or [])
+    upload = uploads[0] if len(uploads) == 1 else None   # the single-file path below is unchanged
     if user_id is None:
         # AuthMiddleware deliberately lets an unauthenticated request through to this
         # path (an HTML redirect is useless mid-stream) rather than gating it — this is
@@ -135,8 +153,12 @@ async def _stream(user_id: int, message: str, history_json: str | None, page: st
     hint = f"[Now on the {page} page" + (f" for {symbol}" if symbol else "") + ".] " if page else ""
 
     prompt = hint + message
-    activity.log(user_id, "step", "import_attached" if upload is not None else "chat_message", detail=(upload[0].rsplit(".", 1)[-1].lower()[:6] if upload is not None and "." in upload[0] else None))
-    if upload is not None:
+    activity.log(user_id, "step", "import_attached" if uploads else "chat_message",
+                 detail=(",".join(sorted({u[0].rsplit(".", 1)[-1].lower()[:6] for u in uploads if "." in u[0]}))[:30] or None) if uploads else None)
+    if len(uploads) > MAX_ATTACHMENTS or sum(len(u[1]) for u in uploads) > MAX_TOTAL_BYTES:
+        yield _sse("error", f"Attach up to {MAX_ATTACHMENTS} files, {MAX_TOTAL_BYTES // (1024 * 1024)} MB in all.")
+        return
+    if uploads:
         try:  # the widget shows the processing notice before a file can be sent: keep the time of the first one
             from app.db import get_users_conn
             with get_users_conn() as u:
@@ -144,6 +166,39 @@ async def _stream(user_id: int, message: str, history_json: str | None, page: st
                 u.commit()
         except Exception:  # noqa: BLE001 - a logging failure must never block the import
             logger.warning("could not record import notice time")
+    if len(uploads) > 1 and all(u[0].lower().endswith(SHEET_TYPES) for u in uploads):
+        # Several statements: each is read column-by-column with no AI and the positions are proposed together (one review card).
+        parsed_all = []
+        try:
+            for u in uploads:
+                parsed_all.append(statement_parse.parse_statement(statement_parse.read_sheets(*u)))
+        except statement_parse.NotPositions as e:
+            yield _sse(None, {"type": "text", "delta": str(e)})
+            yield "data: [DONE]\n\n"
+            return
+        except Exception:  # noqa: BLE001 - one unreadable file: the AI path below reads them all
+            parsed_all = []
+        if parsed_all and all(p is not None for p in parsed_all) and len({p.kind for p in parsed_all}) == 1:
+            txns = [t for p in parsed_all for t in p.txns]
+            markets = {p.market for p in parsed_all if p.market}
+            market = next(iter(markets)) if len(markets) == 1 else None
+            try:
+                proposal = await asyncio.to_thread(positions_mod.propose, user_id, txns, None, market)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("multi-file import failed: %s: %s", type(e).__name__, str(e)[:200])
+                proposal = None
+            if proposal is not None:
+                intro = (f"Read your {len(parsed_all)} files directly ({len(txns)} rows in all). I found {len(proposal['rows'])} position"
+                         f"{'s' if len(proposal['rows']) != 1 else ''}"
+                         + (f" and {len(proposal['skipped'])} I couldn't place" if proposal["skipped"] else "") + ". "
+                         "Check each line below, fix anything that's off, then confirm. Nothing is saved until you do.")
+                if len(markets) > 1:
+                    intro += " The files mix India and US holdings; check the market on each line."
+                activity.log(user_id, "step", "import_proposed", detail=f"{len(proposal['rows'])} rows, {len(proposal['skipped'])} skipped")
+                yield _sse(None, {"type": "text", "delta": intro})
+                yield _sse(None, {"type": "proposal", "proposal": proposal})
+                yield "data: [DONE]\n\n"
+                return
     if upload is not None and upload[0].lower().endswith(SHEET_TYPES):
         # Spreadsheet exports map column-by-column with no AI: exact, free, and long files are no problem. Anything unrecognised
         # falls through to the AI reading the file's text.
@@ -187,6 +242,20 @@ async def _stream(user_id: int, message: str, history_json: str | None, page: st
             capable = [c for c in chain if c["files"]]
             if not capable:
                 yield _sse("error", f"{chain[0]['label']} can't read PDFs or images. Attach a CSV instead, or switch to "
+                                    "Gemini, Claude or OpenAI in AI settings (a fallback model that can read files also works).")
+                return
+            chain = capable
+
+    if len(uploads) > 1:
+        try:
+            prompt = _files_to_prompt(hint + (message or "Import my positions from these files."), uploads)
+        except FileRejected as e:
+            yield _sse("error", str(e))
+            return
+        if any(not isinstance(x, str) for x in prompt):  # a PDF/image goes to the model as binary: only some providers can read it
+            capable = [c for c in chain if c["files"]]
+            if not capable:
+                yield _sse("error", f"{chain[0]['label']} can't read PDFs or images. Attach CSV files instead, or switch to "
                                     "Gemini, Claude or OpenAI in AI settings (a fallback model that can read files also works).")
                 return
             chain = capable
@@ -249,7 +318,7 @@ async def _stream(user_id: int, message: str, history_json: str | None, page: st
 
 @router.post("/chat/stream")
 async def chat_stream(request: Request):
-    upload = None
+    uploads: list = []
     if request.headers.get("content-type", "").startswith("application/json"):
         body = await request.json()
         message = body.get("message", "")
@@ -263,12 +332,15 @@ async def chat_stream(request: Request):
         history_json = form.get("history") or None
         page = form.get("page") or None
         symbol = form.get("symbol") or None
-        file = form.get("file")
-        if file is not None and getattr(file, "filename", ""):
-            upload = (file.filename, await file.read())
+        files = [f for f in form.getlist("files") if getattr(f, "filename", "")]
+        legacy = form.get("file")
+        if legacy is not None and getattr(legacy, "filename", ""):
+            files.append(legacy)
+        for f in files[:MAX_ATTACHMENTS + 1]:   # one past the limit, so _stream can say it is too many
+            uploads.append((f.filename, await f.read()))
 
     return StreamingResponse(
-        _stream(request.state.user_id, message, history_json, page, symbol, upload),
+        _stream(request.state.user_id, message, history_json, page, symbol, uploads),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
