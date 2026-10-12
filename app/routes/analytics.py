@@ -426,7 +426,7 @@ def _half_year_ends(d_from: date, d_to: date, months: set) -> list:
     return sorted(out)
 
 
-def _balance_table_half(all_rows, annual_all, money_unit, eps_unit, bank=False, keep=6):
+def _balance_table_half(all_rows, annual_all, money_unit, eps_unit, bank=False, keep=6, filed_only=False):
     """Balance sheet and trailing ratios by HALF-YEAR end (fiscal year-end and the date six months earlier: March and September for most
     Indian companies). Indian companies file a balance sheet only twice a year, so June and December columns can never hold one.
     The "latest" balance figures are stamped on whichever quarter row was newest when they were stored; here each is moved onto the
@@ -466,7 +466,12 @@ def _balance_table_half(all_rows, annual_all, money_unit, eps_unit, bank=False, 
     for slot in data.values():
         if slot.get("net_debt_cr") is None and slot.get("total_debt_cr") is not None and slot.get("cash_cr") is not None:
             slot["net_debt_cr"] = slot["total_debt_cr"] - slot["cash_cr"]
-    dates = sorted(d for d, slot in data.items() if any(slot.get(k) is not None for k in keys))[-keep:]
+    if filed_only:  # the page table: only half-years with a really filed balance sheet (cash, current assets, book value...), not year-ends padded from the annual statements
+        filed = [k for k in keys if k not in ("total_debt_cr", "equity_share_capital_cr", "roce_pct")]
+        dates = sorted(d for d, slot in data.items() if any(slot.get(k) is not None for k in filed))[-keep:]
+        dates = [d for d in dates if dates and (dates[-1] - d).days <= 400]  # a snapshot years older than the latest is not "the latest balance sheet"
+    else:
+        dates = sorted(d for d, slot in data.items() if any(slot.get(k) is not None for k in keys))[-keep:]
     if not dates:
         return None
     unit = {"money": money_unit, "eps": eps_unit, "%": "%", "x": "x", "": ""}
@@ -1091,7 +1096,7 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
         "money_unit": money_unit,
         "quarterly": _pl_table(q_window, quarter_all, money_unit, eps_unit, with_qoq=True, bank=bank) if q_window else None,
         "annual": _pl_table(annual_all[-12:], annual_all, money_unit, eps_unit, with_qoq=False, bank=bank) if annual_all else None,
-        "balance": (_balance_table_half(all_rows, annual_all, money_unit, eps_unit, bank=bank) if stock["market"] == "IN"  # India files a balance sheet twice a year; US 10-Qs carry one every quarter
+        "balance": (_balance_table_half(all_rows, annual_all, money_unit, eps_unit, bank=bank, keep=1, filed_only=True) if stock["market"] == "IN"  # India files a balance sheet twice a year; US 10-Qs carry one every quarter
                     else _balance_table(all_rows[-14:], money_unit, eps_unit, bank=bank)),
         "annual_balance": _annual_balance_table(annual_all[-10:], money_unit) if stock["market"] == "IN" else None,
         "ownership": _ownership_table(q_window) if q_window else None,
