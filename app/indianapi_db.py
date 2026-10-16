@@ -62,6 +62,12 @@ CREATE TABLE IF NOT EXISTS ia_target_snapshot (
     PRIMARY KEY (symbol, age)
 );
 
+CREATE TABLE IF NOT EXISTS ia_rating (      -- how many analysts rate the stock Strong Buy..Strong Sell, now and 1 week / 1, 2, 3 months ago (from /stock, no extra call)
+    symbol TEXT NOT NULL, rating_value INTEGER NOT NULL, rating_name TEXT,
+    n_now INTEGER, n_1w INTEGER, n_1m INTEGER, n_2m INTEGER, n_3m INTEGER,
+    PRIMARY KEY (symbol, rating_value)
+);
+
 CREATE TABLE IF NOT EXISTS ia_estimate (    -- consensus estimates and reported actuals on the ANALYST basis (ex one-offs; not filed EPS)
     symbol      TEXT NOT NULL,
     measure     TEXT NOT NULL,              -- EPS | SAL | NET

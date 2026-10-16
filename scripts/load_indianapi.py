@@ -152,6 +152,12 @@ def load_stock_extras(c, sym: str, s: dict) -> int:
                   (sym, p.get("companyName"), p.get("tickerId"), num(p.get("priceToEarningsValueRatio")), num(p.get("priceToBookValueRatio")),
                    num(p.get("marketCap")), num(p.get("price")), num(p.get("percentChange")), p.get("overallRating")))
         n += 1
+    for r in s.get("analystView") or []:
+        if r.get("ratingValue") is not None:
+            c.execute("INSERT OR REPLACE INTO ia_rating VALUES (?,?,?,?,?,?,?,?)",
+                      (sym, int(r["ratingValue"]), r.get("ratingName"), *(int(num(r.get(k)) or 0) for k in
+                       ("numberOfAnalystsLatest", "numberOfAnalysts1WeekAgo", "numberOfAnalysts1MonthAgo", "numberOfAnalysts2MonthAgo", "numberOfAnalysts3MonthAgo"))))
+            n += 1
     cp = s.get("currentPrice") or {}
     c.execute("INSERT OR REPLACE INTO ia_quote VALUES (?,?,?,?,?,?,?)",
               (sym, num(cp.get("NSE")), num(cp.get("BSE")), num(s.get("percentChange")), num(s.get("yearHigh")), num(s.get("yearLow")),
@@ -196,7 +202,7 @@ def main() -> None:
             continue
         ident = fetcher.identity_ok(t, market)
         status = "held_out" if ident is False and sym not in recent_ok else ("loaded" if ident or sym in recent_ok else "unchecked")
-        for tbl in ("ia_fact", "ia_holding", "ia_growth", "ia_target", "ia_target_snapshot", "ia_estimate", "ia_profile", "ia_stmt", "ia_peer", "ia_quote", "ia_technical"):
+        for tbl in ("ia_fact", "ia_holding", "ia_growth", "ia_target", "ia_target_snapshot", "ia_estimate", "ia_profile", "ia_stmt", "ia_peer", "ia_quote", "ia_technical", "ia_rating"):
             c.execute(f"DELETE FROM {tbl} WHERE symbol = ?", (sym,))
         if status == "held_out":
             c.execute("INSERT OR REPLACE INTO ia_stock (symbol, status, identity_ok) VALUES (?,?,0)", (sym, "held_out"))
