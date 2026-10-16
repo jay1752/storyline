@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from app import seed as seed_module
 from app.auth.middleware import AuthMiddleware
 from app.db import ensure_platform_admin, get_market_conn, get_users_conn, init_db
+from app import memtrim
 from app.ingestion.runner import start_worker
 from app.scheduler import start_scheduler
 from app.routes import activity as activity_routes, admin, analytics, auth, chat, community, framework, google_auth, guide, home, legal, management, portfolio, profile, pwa, search, settings, welcome
@@ -57,6 +58,7 @@ def on_startup():
         seed_module.seed()
     ensure_platform_admin()  # a fresh install's first account (created by the seed) becomes the platform admin
 
+    memtrim.start()  # give freed memory back to the OS (the VM is small)
     start_worker()  # single ingestion worker — every triggered job queues through this, never runs concurrently with another
 
     start_scheduler()  # in-process: posts the daily Community briefing once per IST day (see app/scheduler.py)
