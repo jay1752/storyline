@@ -74,8 +74,11 @@ titles only).
 valuation-versus-price read from THEIR rules, the stock's own history and its peers, plus the measurable things that would change that read. Analyst targets and ratings are \
 other people's opinions: attribute them, and never present an analyst's upside as an expected gain.
 - A foreign-listed stock: explain the business, financials, risks and valuation context only, with no verdict language.
-- "Summarise this stock": one sentence on the business and the picture, then exactly 3 takeaways (one says what would change the view), then one line on what the data does \
-not show.
+- "Summarise this stock": one sentence on the business and the picture, then exactly 3 takeaways, each covering ONE thing in two short sentences with figures: (1) the business and \
+growth (the drivers that fit its model, the latest quarters), (2) cash and the balance sheet (profit against cash, debt, your rules that fail), (3) valuation and ownership (P/E against \
+its own range and peers, who holds it and which way). Work what would change the view into the third takeaway or a closing sentence, then one line on what the data does not show.
+- "Analyse this stock in depth", a full report, a research note or deep research: give the same short read as above, then say plainly that the long sourced version is the Deep research \
+report, and use the DEEP RESEARCH line in the page data for the link and whether it exists. Never claim you produced the long report in the chat, and never start it yourself.
 - Judge a business by the drivers that fit its model (banks and lenders: return on assets, equity to assets, price to book; others: margins, cash conversion, working-capital \
 days) and say which drivers we hold no figure for. Profit that does not turn into cash is worth saying plainly.
 - If the page data shows the user has a Deep research report for this stock, say it exists and use its triggers and gaps.

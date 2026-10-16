@@ -191,10 +191,16 @@ def _snapshot_lines(user_id, symbol, stock, annual, rows) -> list[str]:
         if user_id:
             import json as _json
             with get_users_conn() as u:
+                pos = u.execute("SELECT id FROM tracked_positions WHERE user_id = ? AND symbol = ? AND status = 'active' ORDER BY id DESC LIMIT 1", (user_id, symbol)).fetchone()
                 r = u.execute("SELECT created_at, report_json FROM research_reports WHERE user_id = ? AND symbol = ? AND status = 'success' ORDER BY id DESC LIMIT 1", (user_id, symbol)).fetchone()
+            link = f"/management/{pos['id']}/research" if pos else None
+            if not (r and r["report_json"]):
+                out.append("DEEP RESEARCH (the long sourced report: 13 sections, call transcripts, presentations and the results filing, with a guidance log): " + (
+                    f"not generated yet. The stock is tracked, so the user can open {link} and press Generate (about a minute)." if link else
+                    "available for tracked stocks only. The user can press Track on this page, then open Deep research from the stock's story page."))
             if r and r["report_json"]:
                 rep = _json.loads(r["report_json"])
-                out.append(f"DEEP RESEARCH REPORT the user has for this stock (written {r['created_at'][:10]}; mention that it exists): {rep.get('dek', '')[:260]}")
+                out.append(f"DEEP RESEARCH REPORT the user has for this stock (written {r['created_at'][:10]}; open it at {link}; they can press Generate there for a fresh one): {rep.get('dek', '')[:260]}")
                 if rep.get("upgrade_if"):
                     out.append("  The read improves if: " + "; ".join(rep["upgrade_if"][:4]))
                 if rep.get("downgrade_if"):
@@ -364,6 +370,7 @@ def suggestions(user_id: int | None, page: str | None, symbol: str | None) -> di
             else:
                 items.append("How have margins and growth trended?")
             items.append("Is it cheap or expensive against its own history?")
+            items.append("Analyse this stock in depth")
             return {"title": symbol.split(":")[-1], "sub": "I can read this stock's numbers, your rules and the analyst view.", "items": [{"label": x} for x in items]}
         if page == "management" and user_id:
             with get_users_conn() as u:
