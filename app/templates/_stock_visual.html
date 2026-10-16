@@ -1,0 +1,131 @@
+{# Snapshot view: pictures built in app/viz.py. Every panel is optional; a panel with no data is simply not drawn. #}
+{% set cur = price_summary.currency if price_summary else '' %}
+<section class="section vz">
+<p class="vz-intro">A one-minute read of {{ stock.name }}. Each picture answers one question; the detailed tables are under the other tabs.</p>
+<div class="vz-g">
+
+{% if viz.rel %}
+<div class="vz-panel s8">
+  <h3>Is it beating the market?</h3><p class="why">The stock and {{ viz.rel.bench }} over the past year, both set to 100 at the start.</p>
+  {{ viz.rel.svg|safe }}
+  <p class="read">{{ viz.rel.read|safe }}</p>
+</div>
+{% endif %}
+
+{% if rules_viz %}
+<div class="vz-panel s4 tall">
+  <h3>Your rules</h3><p class="why">The bar is this stock's figure; the black tick is your limit.</p>
+  {% for r in rules_viz %}
+  <div class="vz-rule">
+    <div class="rn">{{ r.label }}</div>
+    <div class="vz-track"><i class="{{ 'ok' if r.ok else 'no' }}" style="width: {{ '%.1f'|format(r.pos) }}%"></i><u style="left: {{ '%.1f'|format(r.tick) }}%"></u></div>
+    <div class="rv"><b class="{{ 'ok' if r.ok else 'no' }}">{{ r.value }}</b><span>{{ r.limit }}</span></div>
+  </div>
+  {% endfor %}
+  <a class="vz-link" href="/rules">Edit rules</a>
+</div>
+{% endif %}
+
+{% if viz.value %}
+<div class="vz-panel {{ 's8' if rules_viz else 's12' }}">
+  <h3>What are you paying, and what do analysts think?</h3>
+  {% set v = viz.value %}
+  {% if v.pe %}
+  <p class="why">Today's P/E against its own three-year range.</p>
+  <div class="vz-gauge"><div class="pin" style="left: {{ '%.1f'|format(v.pe.pos) }}%"></div><div class="pv" style="left: {{ '%.1f'|format(v.pe.pos) }}%">{{ v.pe.now }}×</div></div>
+  <div class="vz-gscale"><span>{{ v.pe.lo }}× cheapest</span><span>{{ v.pe.hi }}× dearest</span></div>
+  {% endif %}
+  {% if v.analysts and v.analysts.target %}{% set t = v.analysts.target %}
+  <p class="why" style="margin-top:1.2rem">Analysts' 12-month price targets{% if t.n %} ({{ t.n }} analysts){% endif %}. Their opinion, not ours.</p>
+  <div class="vz-range"><div class="span" style="left: {{ '%.1f'|format(t.p_lo) }}%; right: {{ '%.1f'|format(100 - t.p_hi) }}%"></div>
+    <div class="m" style="left: {{ '%.1f'|format(t.p_mean) }}%"><small>mean {{ cur }}{{ '{:,.0f}'.format(t.mean) }}</small></div>
+    {% if t.p_price is not none %}<div class="p" style="left: {{ '%.1f'|format(t.p_price) }}%"><small class="below{{ ' l' if t.p_price < 12 else (' r' if t.p_price > 88 else '') }}">price {{ cur }}{{ '{:,.0f}'.format(price_summary.last) }}</small></div>{% endif %}
+    <span class="lo">{{ cur }}{{ '{:,.0f}'.format(t.low) }} low</span><span class="hi">{{ cur }}{{ '{:,.0f}'.format(t.high) }} high</span></div>
+  {% if t.drift is not none %}<p class="read">Mean target is <b>{{ '%+.1f'|format(t.drift) }}%</b> against 90 days ago.</p>{% endif %}
+  {% endif %}
+  {% if v.analysts and v.analysts.ratings %}{% set rt = v.analysts.ratings %}
+  <p class="why" style="margin-top:1.2rem">How the {{ rt.total }} analysts rate it now.</p>
+  <div class="vz-ratings" role="img" aria-label="Analyst ratings">{% for sgm in rt.segments %}<i class="r{{ sgm.v }}" style="width: {{ '%.1f'|format(sgm.pct) }}%" title="{{ sgm.name }}: {{ sgm.n }}">{{ sgm.n }}</i>{% endfor %}</div>
+  <div class="vz-legend"><span><i class="r1"></i>Strong Buy</span><span><i class="r2"></i>Buy</span><span><i class="r3"></i>Hold</span><span><i class="r4"></i>Sell</span><span><i class="r5"></i>Strong Sell</span></div>
+  <p class="read"><b>{{ rt.buy_now }}%</b> say Buy or Strong Buy{% if rt.buy_3m is not none %}, against <b>{{ rt.buy_3m }}%</b> three months ago{% endif %}.</p>
+  {% endif %}
+  {% if v.read %}<p class="read">{{ v.read|safe }} A good business and a good price are separate questions.</p>{% endif %}
+</div>
+{% endif %}
+
+{% if viz.growth %}
+<div class="vz-panel s6">
+  <h3>Is growth steady?</h3><p class="why">Sales by quarter, year-on-year growth beneath, operating margin as the line.</p>
+  {{ viz.growth.svg|safe }}
+  {% if viz.growth.read %}<p class="read">{{ viz.growth.read|safe }}</p>{% endif %}
+</div>
+{% endif %}
+
+{% if viz.cash %}
+<div class="vz-panel s6">
+  <h3>Is the profit real cash?</h3><p class="why">Net profit next to operating cash flow, by year. Amber means cash fell short of profit.</p>
+  {{ viz.cash.svg|safe }}
+  <div class="vz-legend"><span><i class="np"></i>Net profit</span><span><i class="cf"></i>Cash flow ≥ profit</span><span><i class="short"></i>Cash flow &lt; profit</span></div>
+  <p class="read">{{ viz.cash.read|safe }}</p>
+</div>
+{% endif %}
+
+{% if viz.own and viz.own.area %}
+<div class="vz-panel s6">
+  <h3>Who owns it?</h3><p class="why">Shareholding at each quarter end.</p>
+  {{ viz.own.area.svg|safe }}
+  <p class="read">{{ viz.own.area.read|safe }}</p>
+</div>
+{% endif %}
+
+{% if viz.capital %}
+<div class="vz-panel s6">
+  <h3>Is it earning its keep?</h3><p class="why">Return on the capital the business uses, by year, and how much debt sits beside the owners' money.</p>
+  {{ viz.capital.svg|safe }}
+  {% if viz.capital.debt %}{% set d = viz.capital.debt %}
+  <div class="vz-dr"><div><span>Borrowings FY{{ d.fy }}</span><i style="width: {{ '%.1f'|format(d.pct) }}%"></i><b>₹{{ '{:,.0f}'.format(d.b) }} Cr</b></div>
+    <div><span>Reserves FY{{ d.fy }}</span><i class="res" style="width:100%"></i><b>₹{{ '{:,.0f}'.format(d.s) }} Cr</b></div></div>{% endif %}
+  <p class="read">{{ viz.capital.read|safe }}</p>
+</div>
+{% endif %}
+
+{% if viz.cycle %}
+<div class="vz-panel s6">
+  <h3>How fast does cash come back?</h3><p class="why">Days of stock held, days customers take to pay, days suppliers are paid in.</p>
+  {{ viz.cycle.svg|safe }}
+  {% if viz.cycle.read %}<p class="read">{{ viz.cycle.read|safe }}</p>{% endif %}
+</div>
+{% endif %}
+
+{% if viz.peers %}
+<div class="vz-panel s6">
+  <h3>How does it compare?</h3><p class="why">Listed peers by P/E (across) and P/B (up); bubble size is market cap.</p>
+  {{ viz.peers.svg|safe }}
+  <p class="read">{% if viz.peers.has_me %}This stock's P/B is price ÷ latest book value per share. {% endif %}{% if viz.peers.hidden %}{{ viz.peers.hidden }} peer{{ 's' if viz.peers.hidden > 1 }} with far-off ratios left out so the rest stay readable.{% endif %}</p>
+</div>
+{% endif %}
+
+{% if viz.own and viz.own.holders %}{% set h = viz.own.holders %}
+<div class="vz-panel s6">
+  <h3>Largest named holders</h3><p class="why">From the exchange shareholding filing for {{ h.period }}: promoters, and every other holder above 1%.</p>
+  <div class="vz-tw"><table class="vz-tbl"><thead><tr><th>Holder</th><th class="n">Holds</th>{% if h.has_prev %}<th class="n">Change</th>{% endif %}</tr></thead><tbody>
+  {% if h.promoters %}<tr><td><b>Promoter group</b><span>{{ h.promoters.n }} holders</span></td><td class="n">{{ '%.2f'|format(h.promoters.pct) }}%</td>{% if h.has_prev %}<td class="n">·</td>{% endif %}</tr>{% endif %}
+  {% for x in h.list %}<tr><td>{{ x.name }}<span>{{ x.category }}</span></td><td class="n">{{ '%.2f'|format(x.pct) }}%</td>
+    {% if h.has_prev %}<td class="n {{ 'pos' if x.chg and x.chg > 0 else ('neg' if x.chg and x.chg < 0 else '') }}">{% if x.new %}new{% elif x.chg %}{{ '%+.2f'|format(x.chg) }} pp{% else %}·{% endif %}</td>{% endif %}</tr>{% endfor %}
+  </tbody></table></div>
+</div>
+{% endif %}
+
+{% if viz.deals %}{% set dl = viz.deals %}
+<div class="vz-panel s6">
+  <h3>Big-money trades</h3><p class="why">Bulk and block deals reported by NSE. The exchange gives one day at a time, so this list starts {{ dl.since }} and grows.</p>
+  <div class="vz-tw"><table class="vz-tbl"><thead><tr><th>Date</th><th>Who</th><th class="n">Shares</th><th class="n">Price</th><th class="n">Value</th></tr></thead><tbody>
+  {% for r in dl.rows %}<tr><td>{{ r.date }}<span>{{ r.kind }}</span></td><td>{{ r.client }}<span class="{{ 'pos' if r.side == 'BUY' else 'neg' }}">{{ r.side|lower }}</span></td>
+    <td class="n">{{ '{:,.0f}'.format(r.qty) }}</td><td class="n">₹{{ '{:,.2f}'.format(r.price) }}</td><td class="n">₹{{ '{:,.1f}'.format(r.value_cr) }} Cr</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+{% endif %}
+
+</div>
+<p class="vz-foot">Descriptive research from filings and exchange data, not investment advice. Every picture is drawn only from data we hold; a missing panel means the data is not there yet.</p>
+</section>

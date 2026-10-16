@@ -1141,6 +1141,11 @@ def _stock_context(symbol: str, span: str):
         ("co", "Company", "building", bool(ia_company) or stock["market"] == "IN"),
         ("lens", "Quality lens", "microscope", has_lens),
     ) if g[3]]
+    from app import viz as _viz
+
+    viz = _viz.build(symbol, stock, _lab, last_price=price_summary["last"] if price_summary else None)
+    if viz["has"]:
+        view_groups = [("snap", "Snapshot", "layout", True)] + view_groups
     perf_panes = [k for k, ok in (("quarterly", raw["quarterly"]), ("annual", raw["annual"])) if ok]
     full_q = _pl_table(quarter_all, quarter_all, money_unit, eps_unit, with_qoq=True, bank=bank) if quarter_all else None
     full_a = _pl_table(annual_all, annual_all, money_unit, eps_unit, with_qoq=False, bank=bank) if annual_all else None
@@ -1187,6 +1192,7 @@ def _stock_context(symbol: str, span: str):
             "raw": raw,
             "ia_analyst": ia_analyst,
             "verdict": verdict, "pe_stats": pe_stats, "has_lens": has_lens, "has_own": has_own,
+            "viz": viz,
             "view_groups": [{"key": k, "label": l, "icon": i} for k, l, i, _ in view_groups],
             "perf_panes": perf_panes,
             "ia_company": ia_company, "next_result": next_result, "delivery": delivery,
@@ -1235,11 +1241,17 @@ def _page_fingerprint(symbol: str, span: str) -> tuple:
             mc = c.execute("SELECT mcap FROM stock_metrics WHERE symbol = ?", (symbol,)).fetchone()
         except Exception:  # noqa: BLE001
             mc = None
+        try:  # the Snapshot panels: named holders, big deals, and the index lines
+            vz = (c.execute("SELECT COUNT(*), MAX(period_end) FROM holders WHERE symbol = ?", (symbol,)).fetchone()[:],
+                  c.execute("SELECT COUNT(*), MAX(deal_date) FROM deals WHERE symbol = ?", (symbol,)).fetchone()[:],
+                  c.execute("SELECT MAX(date) FROM index_prices WHERE symbol IN ('^NSEI','^GSPC')").fetchone()[:])
+        except Exception:  # noqa: BLE001 - tables absent on an old database
+            vz = None
     try:
         ia_stamp = INDIANAPI_DB.stat().st_mtime_ns
     except OSError:
         ia_stamp = 0
-    return (symbol, span, tuple(q), tuple(a), tuple(p) if p else None, gq, cal, mc[0] if mc else None, ia_stamp, date.today().isoformat())
+    return (symbol, span, tuple(q), tuple(a), tuple(p) if p else None, gq, cal, mc[0] if mc else None, ia_stamp, date.today().isoformat(), repr(vz))
 
 
 def _cached_stock_context(symbol: str, span: str):
@@ -1269,6 +1281,12 @@ def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
     page = {k: v for k, v in ctx.items() if k != "_verdict_inputs"}
     page["request"] = request
     page["verdict"] = _verdict(request, *ctx["_verdict_inputs"])
+    try:
+        from app import viz as _viz
+
+        page["rules_viz"] = _viz.rules_bars(request.state.user_id, symbol) if ctx.get("viz", {}).get("has") else None
+    except Exception:  # noqa: BLE001 - the picture is optional; the page must still load
+        page["rules_viz"] = None
     return templates.TemplateResponse("analytics.html", page)
 
 
