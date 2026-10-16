@@ -22,7 +22,8 @@ from datetime import date, datetime, timedelta, timezone
 
 from pydantic import BaseModel, Field
 
-from app.ai import errors
+from app.ai import errors, textcheck
+from app.ai.textcheck import BANNED, DRIVER_TABLE, banned_in
 from app.ai.insights_engine import AnalysisError, _gather
 from app.ai.providers import build_chain
 from app.auth.middleware import current_user_id
@@ -34,10 +35,6 @@ logger = logging.getLogger(__name__)
 DISCLAIMER = ("Independent research built by software from public filings, exchange data and headlines, for information only. It is not investment advice, "
               "not an offer or solicitation, and it can be wrong. Check the figures against the filings before you act.")
 _ONE_AT_A_TIME = threading.Semaphore(1)   # the 1 GB server has room for one long prompt at a time; the rest wait as "queued"
-
-BANNED = ("it's important to note", "in today's", "in the current environment", "deep dive", "delve", "landscape", "robust", "compelling", "navigate",
-          "poised to", "well-positioned", "exciting", "remarkable journey", "multifaceted", "tapestry", "in conclusion", "overall", "it remains to be seen",
-          "game-changer", "unlock value", "easy to miss", "the real story", "you are betting", "here's the catch", "let that sink in")
 
 # (key, title, what the section must answer). Sections whose evidence we do not hold must say so, not fill the space.
 SECTIONS = [
@@ -55,16 +52,6 @@ SECTIONS = [
     ("catalysts", "Dated catalysts", "Upcoming results, board meetings, AGM and ex-dividend dates from the sources, each with its date."),
     ("rules", "How it measures against your rules", "Each of the user's own rules: value, threshold, pass or fail. Then one sentence on what that mix means."),
 ]
-
-DRIVER_TABLE = """Value drivers by business model (choose the row that fits; track only the ones we hold figures for, put the rest under unknowns):
-- Banks: net interest margin, CASA ratio, credit growth, gross and net NPA, provision cover, ROE
-- NBFC / housing finance: AUM, disbursement growth, gross NPA, cost of funds, spread, ROA
-- Jewellery / B2B manufacturing: volume, realisation, mix, working-capital days
-- Industrials / commodities: volume, realisation, cost per unit, capacity utilisation, commodity spread
-- Retail: same-store sales, store count, gross margin, post-rent EBITDA
-- IT services: constant-currency growth, EBIT margin, attrition, deal wins
-- Asset-light fees / AMC / platforms: AUM, net flows, fee yield, recurring share, cost-to-income
-- Consumer goods and pharma: volume growth, price/mix, gross margin, advertising or R&D share, receivable and inventory days"""
 
 SYSTEM_PROMPT = """You are the research writer inside Tenetfolio, an app used mostly by Indian retail investors. You write one decision-grade research
 report on ONE listed company, for a user who tracks it and asked for the long version. A numbered dossier (S1, S2 ...) holds everything you may use.
@@ -395,30 +382,6 @@ def _generate(chain: list[dict], prompt: str) -> tuple[Report, dict]:
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ checks
-_NUM = re.compile(r"(?<![\w.])\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.])\d+(?:\.\d+)?")
-
-
-def _numbers(text: str) -> list[tuple[float, int]]:
-    """Every figure in the text as (value, decimals shown). Citations, FY/Q labels and source ids are not figures."""
-    text = re.sub(r"\[S[\d, S]+\]", " ", text)
-    text = re.sub(r"\b(?:FY|Q)\s?\d{1,4}\b|\bS\d+\b", " ", text)
-    out = []
-    for m in _NUM.finditer(text):
-        tok = m.group().replace(",", "")
-        try:
-            out.append((float(tok), len(tok.split(".")[1]) if "." in tok else 0))
-        except ValueError:
-            pass
-    return out
-
-
-def _clean_dashes(s: str) -> tuple[str, int]:
-    n = len(re.findall(r"[—–]", s))
-    s = re.sub(r"(?<=\d)\s?[–—]\s?(?=\d)", "-", s)   # ranges: 20-31
-    s = re.sub(r"\s?[—–]\s?", ", ", s)
-    return s, n
-
-
 def finalise(rep: Report, d: Dossier, meta: dict) -> dict:
     """Turn the model's answer into the stored report, with the automatic checks. Nothing here changes a figure."""
     ids = {s["id"] for s in d.sources}
@@ -426,7 +389,7 @@ def finalise(rep: Report, d: Dossier, meta: dict) -> dict:
 
     def cl(x: str) -> str:
         nonlocal dashes
-        y, n = _clean_dashes(x or "")
+        y, n = textcheck.clean_dashes(x or "")
         dashes += n
         return y.strip()
 
@@ -440,18 +403,9 @@ def finalise(rep: Report, d: Dossier, meta: dict) -> dict:
            "upgrade_if": [cl(t) for t in rep.upgrade_if], "downgrade_if": [cl(t) for t in rep.downgrade_if], "unknowns": [cl(t) for t in rep.unknowns]}
 
     full = " ".join([out["dek"], *out["takeaways"], *(s["body"] for s in sections), out["valuation_read"], *out["upgrade_if"], *out["downgrade_if"]])
-    have = [v for v, _ in _numbers(d.text)]
-    unmatched, counted = [], 0
-    for x, dec in _numbers(full):
-        if (1900 <= x <= 2100 and x == int(x)) or (dec == 0 and x <= 12):   # years; small counts like "three quarters"
-            continue
-        counted += 1
-        half = 0.5 * 10 ** (-dec) + 1e-9      # a figure matches only if it is a source figure, rounded to the digits the writer shows
-        if any(abs(x - y) <= half for y in have):
-            continue
-        unmatched.append(x)
-    total = counted or 1
-    banned = [b for b in BANNED if b in full.lower()]
+    unmatched, total = textcheck.figures_not_in_sources(full, d.text)
+    total = total or 1
+    banned = banned_in(full)
     expected = [k for k, _, _ in SECTIONS]
     missing = [k for k in expected if k not in {s["key"] for s in sections}]
     out["sources"] = d.sources

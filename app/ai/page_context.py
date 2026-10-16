@@ -125,7 +125,7 @@ def stock_digest(user_id: int | None, symbol: str) -> str | None:
             if a:
                 t, rc = a.get("target"), a.get("recos")
                 if t:
-                    out.append(f"ANALYSTS: mean target {cur}{_n(t['mean'], 0)} ({_n(t['upside'], 1, '%')} vs price; range {_n(t['low'], 0)}–{_n(t['high'], 0)}; {t['n']} analysts)" + (f"; target moved {_n(t['drift'], 1, '%')} in 90 days" if t.get("drift") is not None else ""))
+                    out.append(f"ANALYSTS (other people's opinion, not a forecast of ours): mean 12-month target {cur}{_n(t['mean'], 0)} (the mean sits {_n(t['upside'], 1, '%')} from the last price; range {_n(t['low'], 0)}–{_n(t['high'], 0)}; {t['n']} analysts)" + (f"; target moved {_n(t['drift'], 1, '%')} in 90 days" if t.get("drift") is not None else ""))
                 if rc:
                     out.append(f"  Consensus: {rc['label']} ({rc['n']} analysts)")
                 if a.get("estimates"):
@@ -138,10 +138,72 @@ def stock_digest(user_id: int | None, symbol: str) -> str | None:
             if c and c.get("description"):
                 out.append("ABOUT: " + c["description"][:350])
             if c and c.get("peers"):
-                out.append("PEERS (P/E, P/B): " + "; ".join(f"{p['name']} {_n(p['pe'])}/{_n(p['pb'])}" for p in c["peers"][:5]))
+                out.append(f"PEERS (P/E, P/B; IndianAPI list as of {_ia_date()}, may include poor matches): " + "; ".join(f"{p['name']} {_n(p['pe'])}/{_n(p['pb'])}" for p in c["peers"][:5]))
         except Exception as e:  # noqa: BLE001
             logger.info("stock_digest extras skipped: %s", e)
+    out.extend(_snapshot_lines(user_id, symbol, stock, annual, rows))
     return "\n".join(out)
+
+
+def _ia_date() -> str:
+    from datetime import datetime, timezone
+    try:
+        from app.indianapi_db import INDIANAPI_DB
+        return datetime.fromtimestamp(INDIANAPI_DB.stat().st_mtime, timezone.utc).strftime("%Y-%m-%d")
+    except OSError:
+        return "unknown date"
+
+
+def _snapshot_lines(user_id, symbol, stock, annual, rows) -> list[str]:
+    """What the Snapshot tab shows, as text: named holders, the stock against its market index, profit against cash, and the user's latest deep-research
+    report for this stock (its triggers and gaps), so the chat answers from the same evidence as the pictures."""
+    import re as _re
+    out: list[str] = []
+    market = stock["market"]
+    try:
+        with get_market_conn() as m:
+            if market == "IN":
+                per = m.execute("SELECT DISTINCT period_end FROM holders WHERE symbol = ? ORDER BY period_end DESC LIMIT 2", (symbol,)).fetchall()
+                if per and not m.execute("SELECT 1 FROM holders WHERE symbol=? AND period_end=? AND category='Needs check' LIMIT 1", (symbol, per[0][0])).fetchone():
+                    cur_h = {r["holder_name"].casefold(): r for r in m.execute("SELECT holder_name, category, pct FROM holders WHERE symbol=? AND period_end=? AND category!='Promoter group'", (symbol, per[0][0]))}
+                    prev = {r["holder_name"].casefold(): r["pct"] for r in m.execute("SELECT holder_name, pct FROM holders WHERE symbol=? AND period_end=?", (symbol, per[1][0]))} if len(per) > 1 else {}
+                    prom = m.execute("SELECT COUNT(*), SUM(pct) FROM holders WHERE symbol=? AND period_end=? AND category='Promoter group'", (symbol, per[0][0])).fetchone()
+                    bits = []
+                    for k, r in sorted(cur_h.items(), key=lambda kv: -(kv[1]["pct"] or 0))[:6]:
+                        nm = r["holder_name"].title() if r["holder_name"].isupper() else r["holder_name"]
+                        bits.append(f"{nm} {_n(r['pct'], 2)}%" + (f" ({r['pct'] - prev[k]:+.2f} pts vs previous filing)" if k in prev else ""))
+                    if bits or (prom and prom[0]):
+                        out.append(f"NAMED HOLDERS (exchange shareholding filing, {per[0][0]}): " + (f"promoter group {_n(prom[1], 2)}% across {prom[0]} holders; " if prom and prom[0] else "") + "; ".join(bits))
+            from app import viz as _viz
+            px = _last_price(m, symbol)[0]
+            rel = _viz._relative(m, symbol, market, stock["sector"])
+            if rel:
+                out.append("VS THE MARKET: " + _re.sub(r"<[^>]+>", "", rel["read"]) + f" (benchmark: {rel['bench']})")
+    except Exception as e:  # noqa: BLE001
+        logger.info("stock_digest snapshot skipped: %s", e)
+    try:
+        conv = [f"FY{r['period_end_date'][:4]} {r['cfo_cr'] / r['net_profit_cr']:.2f}x" for r in annual[-4:] if r.get("cfo_cr") is not None and r.get("net_profit_cr")]
+        if conv:
+            out.append("OPERATING CASH FLOW / NET PROFIT: " + ", ".join(conv))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        if user_id:
+            import json as _json
+            with get_users_conn() as u:
+                r = u.execute("SELECT created_at, report_json FROM research_reports WHERE user_id = ? AND symbol = ? AND status = 'success' ORDER BY id DESC LIMIT 1", (user_id, symbol)).fetchone()
+            if r and r["report_json"]:
+                rep = _json.loads(r["report_json"])
+                out.append(f"DEEP RESEARCH REPORT the user has for this stock (written {r['created_at'][:10]}; mention that it exists): {rep.get('dek', '')[:260]}")
+                if rep.get("upgrade_if"):
+                    out.append("  The read improves if: " + "; ".join(rep["upgrade_if"][:4]))
+                if rep.get("downgrade_if"):
+                    out.append("  The read weakens if: " + "; ".join(rep["downgrade_if"][:4]))
+                if rep.get("unknowns"):
+                    out.append("  Not established: " + "; ".join(rep["unknowns"][:4]))
+    except Exception as e:  # noqa: BLE001
+        logger.info("stock_digest research skipped: %s", e)
+    return out
 
 
 # ---------------------------------------------------------------------------------------------- user's rules

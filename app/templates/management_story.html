@@ -82,6 +82,9 @@
       <div><dt>Next check</dt><dd>{{ a.next_check }}</dd></div>
       <div><dt>Metrics to watch</dt><dd>{{ a.metrics_to_watch|join(' · ') }}</dd></div>
       <div><dt>What would re-rate it</dt><dd>{{ a.rerate_trigger }}</dd></div>
+      {% if a.upgrade_if %}<div><dt>The read improves if</dt><dd>{{ a.upgrade_if|join(' · ') }}</dd></div>{% endif %}
+      {% if a.downgrade_if %}<div><dt>The read weakens if</dt><dd>{{ a.downgrade_if|join(' · ') }}</dd></div>{% endif %}
+      {% if a.trigger_check %}<div><dt>Triggers since the last entry</dt><dd>{% for c in a.trigger_check %}{{ c.trigger }}: <b>{{ c.status|replace('_', ' ') }}</b>{% if c.note %} ({{ c.note }}){% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</dd></div>{% endif %}
     </dl>
   </div>
 
@@ -92,6 +95,7 @@
       <ol class="news">{% for n in a.news %}<li value="{{ n.n }}"><a href="{{ n.url }}" target="_blank" rel="noopener noreferrer nofollow">{{ n.title }}</a> <span class="muted">— {{ n.source }}</span></li>{% endfor %}</ol></details>{% endif %}
     {% if a.valuation %}<p class="section-note">Price {{ a.valuation.price }}{% if a.valuation.pe_current %} · P/E {{ a.valuation.pe_current }}x (3-yr {{ a.valuation.pe_3y_low }}–{{ a.valuation.pe_3y_high }}x){% endif %}{% if a.valuation.return_1y_pct is not none %} · 1-yr {{ "%+.0f"|format(a.valuation.return_1y_pct) }}%{% endif %} as of {{ a.valuation.price_date }}</p>{% endif %}
     {% if a.data_gaps %}<p class="section-note">Not in our data: {{ a.data_gaps|join(', ') }}</p>{% endif %}
+    {% if a.checks and a.checks.figures_not_in_sources %}<p class="section-note">Figures in this entry that are not a source figure (usually the writer's own arithmetic), worth a look: {{ a.checks.figures_not_in_sources|join(', ') }}</p>{% endif %}
   </div>
   <p class="section-note an-disc">⚠ {{ a.disclaimer }} · {{ a.model }}</p>
   {% endif %}
@@ -207,6 +211,9 @@
         <div><dt>Next check</dt><dd>{{ a.next_check }}</dd></div>
         <div><dt>Metrics to watch</dt><dd>{{ a.metrics_to_watch|join(' · ') }}</dd></div>
         <div><dt>What would re-rate it</dt><dd>{{ a.rerate_trigger }}</dd></div>
+      {% if a.upgrade_if %}<div><dt>The read improves if</dt><dd>{{ a.upgrade_if|join(' · ') }}</dd></div>{% endif %}
+      {% if a.downgrade_if %}<div><dt>The read weakens if</dt><dd>{{ a.downgrade_if|join(' · ') }}</dd></div>{% endif %}
+      {% if a.trigger_check %}<div><dt>Triggers since the last entry</dt><dd>{% for c in a.trigger_check %}{{ c.trigger }}: <b>{{ c.status|replace('_', ' ') }}</b>{% if c.note %} ({{ c.note }}){% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</dd></div>{% endif %}
       </dl></div></details>
   <details class="det"><summary>Why this verdict{% if a.news %} · {{ a.news|length }} headlines{% endif %}</summary>
     <div class="det-body"><p>{{ a.verdict_reasoning }}</p>
@@ -214,7 +221,8 @@
       {% if a.news_takeaways %}<h4>From the news</h4><ul class="plain">{% for t in a.news_takeaways %}<li>{{ t }}</li>{% endfor %}</ul>{% endif %}
       {% if a.news %}<ol class="news">{% for n in a.news %}<li value="{{ n.n }}"><a href="{{ n.url }}" target="_blank" rel="noopener noreferrer nofollow">{{ n.title }}</a> <span class="muted">— {{ n.source }}</span></li>{% endfor %}</ol>{% endif %}
       {% if a.valuation %}<p class="section-note">Price {{ a.valuation.price }}{% if a.valuation.pe_current %} · P/E {{ a.valuation.pe_current }}x (3-yr {{ a.valuation.pe_3y_low }}–{{ a.valuation.pe_3y_high }}x){% endif %}</p>{% endif %}
-      {% if a.data_gaps %}<p class="section-note">Not in our data: {{ a.data_gaps|join(', ') }}</p>{% endif %}</div></details>
+      {% if a.data_gaps %}<p class="section-note">Not in our data: {{ a.data_gaps|join(', ') }}</p>{% endif %}
+    {% if a.checks and a.checks.figures_not_in_sources %}<p class="section-note">Figures in this entry that are not a source figure (usually the writer's own arithmetic), worth a look: {{ a.checks.figures_not_in_sources|join(', ') }}</p>{% endif %}</div></details>
 </div>
 <p class="section-note an-disc">⚠ {{ a.disclaimer }} · {{ a.model }}</p>
 {%- endmacro %}

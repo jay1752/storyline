@@ -86,6 +86,35 @@ user's own actions or stated thesis measured against the data (e.g. "your note s
 another BUY (say HOLD); if they trimmed, comment on whether the remaining size still fits the bucket. With no journal, set
 user_story to an empty string and story_flags to an empty list — never invent user actions.
 
+EVIDENCE, FRAMING AND STYLE
+- State every figure with its period and unit on first use (Rs 1,813 Cr for FY2026; 20.7% in Q1 FY27). Say which price date a valuation statement rests on.
+- Keep fact and inference apart: a view of yours reads "this suggests". Never present a paraphrase as a quote.
+- The verdict is this framework's read of the user's OWN rules applied to the data. It is not an instruction to buy, sell or trim. Write "the framework reads
+  this as HOLD because ..." rather than "you should ...". Analyst targets are other people's opinions: attribute them, never adopt them.
+- If the market is not IN (a foreign-listed stock) this Indian-equity framework does not apply: give a descriptive read only, set verdict WATCH and bucket
+  Reserve, and say in what_changed that it is descriptive.
+- Never use em dashes or en dashes. Do not use: it's important to note, in today's, deep dive, delve, landscape, robust, compelling, navigate, poised to,
+  well-positioned, exciting, multifaceted, tapestry, in conclusion, overall, it remains to be seen, game-changer, unlock value.
+
+VALUE DRIVERS, CASH AND PEERS
+- Name the 3 to 4 value drivers that move THIS business's earnings (pick the row of the table below that fits its business model), follow them through what_changed and
+  metrics_to_watch, and put the ones we hold no figure for into data_gaps. Do not copy generic ratios.
+- Profit versus cash: the data block carries CASH VS PROFIT. When operating cash flow stays under <<cfo_pat>> times profit, or profit grows while cash does not, say so
+  plainly in what_changed or verdict_reasoning.
+- Peers: the data block carries dated peer multiples. In verdict_reasoning give ONE sentence on where this stock sits against them and why a premium or discount might
+  be justified (cash quality, scale, growth). Peer lists can include poor matches: ignore an obviously unrelated peer and say so. Method by business model: price to book
+  for banks and lenders, earnings multiple for asset-light businesses, operating-profit multiple for capital-heavy ones.
+- DATA NOTES carries things found by code (missing quarters, other income share of profit). Never read a missing quarter as a result.
+<<driver_table>>
+
+TRIGGERS
+- upgrade_if and downgrade_if: BOTH lists must be filled, 2 to 4 measurable conditions each, tied to figures in the data block (for example "operating cash flow above
+  profit for two more years"). upgrade_if is what would improve THIS framework read, downgrade_if what would make it worse (even when the read is already weak: say what
+  would worsen it further). They are not price targets.
+- The data block lists the triggers from the PREVIOUS entry. For each one give a trigger_check item: status fired, not_fired or unclear, with a one-line note from the
+  data. With no previous triggers, leave trigger_check empty.
+- data_gaps: the specific things we could not establish for this company, not generic caveats.
+
 HOW TO WRITE THE ENTRY
 - what_changed: 2-4 sentences, a CONTINUATION of the prior entries (what is new since the last check, or "no material change").
   Only when ENTRY NUMBER is 1 say it is the first entry and summarise the starting picture; otherwise never call it the first.
@@ -100,7 +129,9 @@ def build_system_prompt(th: dict, sz: dict) -> str:
     from app import framework as fr
     vals = {**{k: v["value"] for k, v in th.items()}, **{**fr.sizing_defaults(), **(sz or {})}}
     off = [v["label"] for v in th.values() if not v.get("enabled", True)]
-    text = SYSTEM_PROMPT.replace("<<off_rules>>", ("- Rules the user has switched OFF are not applied and must not be reported as failing: " + ", ".join(off) + ".") if off else "")
+    from app.ai.textcheck import DRIVER_TABLE
+
+    text = SYSTEM_PROMPT.replace("<<driver_table>>", DRIVER_TABLE).replace("<<off_rules>>", ("- Rules the user has switched OFF are not applied and must not be reported as failing: " + ", ".join(off) + ".") if off else "")
     for k, v in vals.items():
         text = text.replace(f"<<{k}>>", f"{v:g}" if isinstance(v, (int, float)) else str(v))
     return text
@@ -133,6 +164,12 @@ class Triangulation(BaseModel):
     moat_durability: Literal["Wide", "Narrow", "None", "Unknown"]
 
 
+class TriggerCheck(BaseModel):
+    trigger: str
+    status: Literal["fired", "not_fired", "unclear"]
+    note: str = ""
+
+
 class StoryFlag(BaseModel):
     level: Literal["ok", "watch", "warning", "alert"]
     text: str
@@ -162,7 +199,7 @@ def _coerce_analysis(data):
     if isinstance(t, str):
         d["triangulation"] = {"lynch_category": "Unknown", "mayer_probability": "UNKNOWN", "mayer_reason": t, "coffee_can": "UNKNOWN",
                               "coffee_can_note": "", "moat_type": "Unknown", "moat_durability": "Unknown"}
-    for k, n in (("metrics_to_watch", 4), ("news_takeaways", 4), ("data_gaps", 6), ("story_flags", 3)):
+    for k, n in (("metrics_to_watch", 4), ("news_takeaways", 4), ("data_gaps", 6), ("story_flags", 3), ("upgrade_if", 4), ("downgrade_if", 4), ("trigger_check", 8)):
         if isinstance(d.get(k), list):
             d[k] = d[k][:n]
     if isinstance(d.get("verdict"), str):
@@ -195,6 +232,9 @@ class Analysis(BaseModel):
     data_gaps: list[str] = Field(max_length=6)
     user_story: str = Field("", description="2-4 sentences on the user's own journal actions vs the framework; empty when there is no journal")
     story_flags: list[StoryFlag] = Field(default_factory=list, max_length=3)
+    upgrade_if: list[str] = Field(default_factory=list, max_length=4, description="2-4 measurable conditions that would improve this framework read")
+    downgrade_if: list[str] = Field(default_factory=list, max_length=4, description="2-4 measurable conditions that would weaken it")
+    trigger_check: list[TriggerCheck] = Field(default_factory=list, max_length=8, description="status of each trigger from the previous entry")
 
 
 class AnalysisError(Exception):
@@ -314,16 +354,73 @@ def _gather(u, pos) -> dict:
 
     entry_no = 1 + u.execute("SELECT COUNT(*) FROM position_snapshots WHERE position_id = ? AND analysis_json IS NOT NULL", (pos["id"],)).fetchone()[0]
     news = company_news(sym, stock["name"])
+    extras = _extras(sym, stock["market"], quarterly, annual, prior_analyses)
     return {
+        **extras,
         "entry_no": entry_no,
         "journal": events, "rule_flags": flags, "system": build_system_prompt(th, sz),
         "symbol": sym, "name": stock["name"], "sector": stock["sector"], "market": stock["market"],
         "position": position, "valuation": valuation, "framework": framework,
         "quarters": _quarter_table(q_dicts[-6:]),
         "annual": [{"fy": r["period_end_date"][:4], "revenue": _r(r["revenue_cr"]), "net_profit": _r(r["net_profit_cr"]), "opm_pct": _r(r["opm_pct"]),
-                    "roce_pct": _r(r["roce_pct"]), "roe_pct": _r(r["roe_pct"])} for r in annual[-10:]],
+                    "roce_pct": _r(r["roce_pct"]), "roe_pct": _r(r["roe_pct"]), "operating_cash_flow": _r(r.get("cfo_cr")), "free_cash_flow": _r(r.get("fcf_cr")),
+                    "borrowings": _r(r.get("borrowings_cr")), "reserves": _r(r.get("reserves_cr")), "debtor_days": _r(r.get("debtor_days"), 0),
+                    "inventory_days": _r(r.get("inventory_days"), 0), "payable_days": _r(r.get("days_payable"), 0)} for r in annual[-10:]],
         "news": news, "prior": list(reversed(prior)),
     }
+
+
+def _extras(sym: str, market: str, quarterly: list, annual: list, prior_analyses: list) -> dict:
+    """What the writer needs beyond the filters, all computed here: profit against cash, dated peers, notes found by code, and the triggers
+    from the previous entry (so this entry can say which fired)."""
+    from datetime import date as _date
+
+    cash = []
+    try:
+        if market == "IN":
+            for r in annual[-4:]:
+                if r["cfo_cr"] is not None and r["net_profit_cr"]:
+                    cash.append(f"FY{r['period_end_date'][:4]}: operating cash flow Rs {r['cfo_cr']:,.0f} Cr against net profit Rs {r['net_profit_cr']:,.0f} Cr = {r['cfo_cr'] / r['net_profit_cr']:.2f} times")
+        else:
+            with get_market_conn() as m:
+                for r in m.execute("SELECT period_end_date, cfo_m, net_profit_m FROM us_annual WHERE symbol = ? ORDER BY period_end_date DESC LIMIT 4", (sym,)).fetchall()[::-1]:
+                    if r["cfo_m"] is not None and r["net_profit_m"]:
+                        cash.append(f"{r['period_end_date']}: operating cash flow USD {r['cfo_m']:,.0f} M against net profit USD {r['net_profit_m']:,.0f} M = {r['cfo_m'] / r['net_profit_m']:.2f} times")
+    except Exception:  # noqa: BLE001 - optional context must never stop a run
+        cash = []
+
+    notes = []
+    try:
+        shown = quarterly[-8:]
+        for a_, b_ in zip(shown, shown[1:]):
+            gap = (_date.fromisoformat(b_["period_end_date"]) - _date.fromisoformat(a_["period_end_date"])).days
+            if gap > 110:
+                notes.append(f"{round(gap / 91) - 1} quarter(s) missing between {a_['period_end_date']} and {b_['period_end_date']}: growth for those periods may be absent, do not read the gap as a result")
+        last4 = quarterly[-4:]
+        if len(last4) == 4 and all(r["other_income_cr"] is not None and r["pbt_cr"] for r in last4):
+            oi, pbt = sum(r["other_income_cr"] for r in last4), sum(r["pbt_cr"] for r in last4)
+            if pbt > 0:
+                notes.append(f"Other income over the last four quarters is {oi / pbt * 100:.0f}% of profit before tax ({oi:,.0f} of {pbt:,.0f})")
+    except Exception:  # noqa: BLE001
+        pass
+
+    peers, peers_as_of = [], None
+    try:
+        from app.indianapi_db import INDIANAPI_DB, get_indianapi_conn
+        ia = get_indianapi_conn()
+        peers = [f"{p['peer_name']}: P/E {p['pe']:.1f}, P/B {p['pb']:.1f}, market cap Rs {p['market_cap']:,.0f} Cr" for p in ia.execute(
+            "SELECT peer_name, pe, pb, market_cap FROM ia_peer WHERE symbol = ? AND pe > 0 AND pb > 0 ORDER BY market_cap DESC LIMIT 6", (sym,)).fetchall()]
+        ia.close()
+        peers_as_of = datetime.fromtimestamp(INDIANAPI_DB.stat().st_mtime, timezone.utc).strftime("%Y-%m-%d")
+    except Exception:  # noqa: BLE001
+        peers = []
+
+    prior_triggers = None
+    for a in prior_analyses:   # newest first
+        if a.get("upgrade_if") or a.get("downgrade_if"):
+            prior_triggers = {"upgrade_if": a.get("upgrade_if") or [], "downgrade_if": a.get("downgrade_if") or []}
+            break
+    return {"cash_check": cash, "data_notes": notes, "peers": peers, "peers_as_of": peers_as_of, "prior_triggers": prior_triggers}
 
 
 def _prompt(ctx: dict, today: str) -> str:
@@ -340,6 +437,11 @@ def _prompt(ctx: dict, today: str) -> str:
         for e in ctx["journal"]
     ) or "none — the user has not logged any adds, trims, exits or notes for this stock"
     rules = "\n".join(f"- [{f['level']}] {f['text']}" for f in ctx["rule_flags"]) or "none triggered"
+    cash = "\n".join(f"- {x}" for x in ctx.get("cash_check") or []) or "not available"
+    peers = "\n".join(f"- {x}" for x in ctx.get("peers") or []) or "no peer data"
+    notes = "\n".join(f"- {x}" for x in ctx.get("data_notes") or []) or "none"
+    pt = ctx.get("prior_triggers")
+    triggers = ("upgrade_if: " + "; ".join(pt["upgrade_if"]) + "\ndowngrade_if: " + "; ".join(pt["downgrade_if"])) if pt else "none (this is the first entry with triggers)"
     filters = "\n".join(
         f"- {f['label']}: {f['value'] if f['value'] is not None else 'UNKNOWN'} (needs {f['threshold']}) -> {f['status'].upper()}" + (f" [{f['note']}]" if f["note"] else "")
         for f in fw["filters"]
@@ -358,7 +460,7 @@ EXIT-SPEED FACTS (computed): {json.dumps(fw['facts'])}
 LAST QUARTERS (oldest first; revenue and profit in {'Rs crore' if ctx['market'] == 'IN' else 'USD million'}):
 {json.dumps(ctx['quarters'])}
 
-ANNUAL HISTORY (FY, oldest first; for the 10-year ROCE consistency check — may be empty):
+ANNUAL HISTORY (FY, oldest first, Rs crore; the 10-year ROCE consistency check, cash flow, borrowings and working-capital days; may be empty):
 {json.dumps(ctx['annual'])}
 
 VALUATION / PRICE: {json.dumps(ctx['valuation'])}
@@ -373,6 +475,19 @@ USER'S OWN JOURNAL (optional; what the user says they did):
 {journal}
 RULE CHECKS ALREADY COMPUTED FROM THE JOURNAL AND POSITION (do not repeat):
 {rules}
+
+CASH VS PROFIT (computed by code):
+{cash}
+
+PEERS (IndianAPI peer list, as of {ctx.get('peers_as_of') or 'unknown date'}; may include poor matches):
+{peers}
+This stock's own P/E: {ctx['valuation'].get('pe_current')}
+
+DATA NOTES (found by code):
+{notes}
+
+TRIGGERS FROM THE PREVIOUS ENTRY (give a trigger_check item for each):
+{triggers}
 
 Write today's entry."""
 
@@ -497,9 +612,18 @@ def _analyse(user_id: int, position_id: int, trigger: str) -> None:
             raise AnalysisError("That tracked stock no longer exists.")
         ctx = _gather(u, pos)
         today = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%A %d %B %Y")
-        analysis, link = _generate(chain, _prompt(ctx, today), ctx.get("system"))
+        prompt_text = _prompt(ctx, today)
+        analysis, link = _generate(chain, prompt_text, ctx.get("system"))
 
-        a = analysis.model_dump()
+        from app.ai import textcheck
+
+        dashes = [0]
+        a = textcheck.clean_strings(analysis.model_dump(), dashes)
+        sources_text = prompt_text
+        written = " ".join(textcheck.strings_of({k: a.get(k) for k in ("what_changed", "growth_hook", "verdict_reasoning", "sizing_note", "next_check", "rerate_trigger", "user_story",
+                                                                         "metrics_to_watch", "news_takeaways", "data_gaps", "upgrade_if", "downgrade_if", "trigger_check", "story_flags")}))
+        not_in, counted = textcheck.figures_not_in_sources(written, sources_text)
+        a["checks"] = {"figures_counted": counted, "figures_not_in_sources": [round(x, 2) for x in dict.fromkeys(not_in)][:12], "banned_phrases": textcheck.banned_in(written), "dashes_removed": dashes[0]}
         a.update({
             "version": 2,
             "generated_at": datetime.now(timezone.utc).isoformat(),
