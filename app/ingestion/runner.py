@@ -199,6 +199,17 @@ def _execute_position_analysis(run_id: int) -> None:
     execute_run(run_id)
 
 
+def enqueue_research(report_id: int) -> None:
+    """Write one queued deep-research report (app/ai/research.py) on the worker pool. The research_reports row carries the status the page polls."""
+    _executor.submit(_execute_research, report_id)
+
+
+def _execute_research(report_id: int) -> None:
+    from app.ai.research import execute_research
+
+    execute_research(report_id)
+
+
 def enqueue_insights(user_id: int, trigger: str = "daily", skip_fresh_hours: int = 18) -> int:
     """The daily Insights job's entry point — same enqueue/tracking shape as
     enqueue_ingestion above (an ingestion_runs row, submitted to the same thread pool),

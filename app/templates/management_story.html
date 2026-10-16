@@ -241,6 +241,7 @@
         <option value="0" {{ 'selected' if story_over == 0 else '' }}>Never run</option>
       </select>
     </label>
+    <a class="btn" href="/management/{{ pos.id }}/research" title="A long sourced report on this company, written when you ask for it"><svg class="icon icon-sm"><use href="#i-guide"/></svg>Deep research</a>
     <button class="btn btn-primary" type="button" id="run-btn" data-id="{{ pos.id }}" data-running="{{ 1 if running else 0 }}"><svg class="icon icon-sm"><use href="#i-refresh"/></svg><span>{{ 'Run analysis again' if latest else 'Run analysis now' }}</span></button>
     {% endif %}
   </div>

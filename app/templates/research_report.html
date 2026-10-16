@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Deep research · {{ pos.company_name }} · Tenetfolio{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="page-head-main">
+    <div class="eyebrow"><a href="/management">Management</a><span>/</span><a href="/management/{{ pos.id }}">{{ pos.company_name }}</a><span>/</span><span>Deep research</span></div>
+    <h1 class="page-title">{{ pos.company_name }}</h1>
+    <div class="chip-row"><span class="badge neutral mono">{{ pos.symbol }}</span>
+      {% if report %}<span class="badge neutral rs-badge">Written {{ report.generated_at[:10] }} · {{ report.model }}</span>{% endif %}</div>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="/management/{{ pos.id }}">Back to the story</a>
+    {% if pos.status == 'active' %}<button class="btn btn-primary" type="button" id="rs-go" data-id="{{ pos.id }}" {{ 'disabled' if busy or left_today == 0 else '' }}>{{ 'Writing…' if busy else ('Generate a new report' if report else 'Generate the report') }}</button>{% endif %}
+  </div>
+</div>
+
+<p class="rs-note" id="rs-msg" role="status" {% if not (row and row.status == 'failed') %}hidden{% endif %}>{% if row and row.status == 'failed' %}The last report did not finish: {{ row.error }}{% endif %}</p>
+
+{% if busy %}
+<div class="card rs-wait" id="rs-wait"><div class="card-body"><b>Writing the report.</b> It reads everything we hold on this company, then drafts and checks it. This usually takes a few minutes. You can leave this page; the report will be here when it is done.</div></div>
+{% elif not report %}
+<div class="card"><div class="card-body rs-intro">
+  <h2 class="card-title">A long, sourced report on this company</h2>
+  <p>You ask for it, the AI model in your settings writes it. It reads our figures for this company, the Company section (profile, leadership, corporate actions, peers, analyst view), the shareholding filing, the exchange filings list and recent headlines. Every claim cites its source, and the report ends with what would change the view and what we could not establish.</p>
+  <p class="rs-fine">This version does not read the filing documents themselves (annual report, call transcripts, presentations). The report says so. You have {{ left_today }} of {{ per_day }} reports left today.</p>
+</div></div>
+{% endif %}
+
+{% if report %}
+<article class="rs">
+  <aside class="rs-banner"><b>What this report did not read.</b> {{ report.checks.note }} It uses our data, the filings list and headlines. Reference price {{ report.meta.currency }} {{ '{:,.2f}'.format(report.meta.ref_price) if report.meta.ref_price else 'n/a' }} on {{ report.meta.ref_date }}.</aside>
+  <p class="rs-dek">{{ report.dek }}</p>
+  <ol class="rs-take">{% for t in report.takeaways %}<li>{{ t }}</li>{% endfor %}</ol>
+
+  {% for s in report.sections %}
+  <section class="rs-sec" id="sec-{{ s.key }}">
+    <h2>{{ s.title }}</h2>
+    {% for para in s.body.split('\n') if para.strip() %}<p>{{ para.strip() }}</p>{% endfor %}
+    {% if s.cites %}<p class="rs-cites">Sources {% for c in s.cites %}<a href="#src-{{ c }}">{{ c }}</a>{% endfor %}</p>{% endif %}
+  </section>
+  {% endfor %}
+
+  <section class="rs-sec rs-val"><h2>The price against the evidence</h2><p>{{ report.valuation_read }}</p></section>
+
+  {% if report.upgrade_if or report.downgrade_if %}
+  <section class="rs-trig">
+    <div><h3>The view improves if</h3><ul>{% for t in report.upgrade_if %}<li>{{ t }}</li>{% endfor %}</ul></div>
+    <div><h3>The view weakens if</h3><ul>{% for t in report.downgrade_if %}<li>{{ t }}</li>{% endfor %}</ul></div>
+  </section>
+  {% endif %}
+
+  {% if report.unknowns %}<section class="rs-sec"><h2>What we still do not know</h2><ul class="rs-list">{% for t in report.unknowns %}<li>{{ t }}</li>{% endfor %}</ul></section>{% endif %}
+
+  <section class="rs-sec"><h2>Sources</h2>
+    <ol class="rs-srcl">{% for s in report.sources %}<li id="src-{{ s.id }}"><b>{{ s.id }}</b> {{ s.title }}<span>{{ s.publisher }}{% if s.as_of %} · as of {{ s.as_of }}{% endif %}</span></li>{% endfor %}</ol>
+  </section>
+
+  <details class="rs-checks"><summary>Automatic checks on this report</summary>
+    <ul>
+      <li>{{ report.checks.numbers_total }} figures in the text; <b>{{ report.checks.numbers_not_in_sources|length }}</b> could not be matched to a source{% if report.checks.numbers_not_in_sources %} ({{ report.checks.numbers_not_in_sources|join(', ') }}){% endif %}. A figure listed here is not a source figure rounded to the digits shown: usually something the writer worked out itself, such as a percentage difference. Verify it before relying on it.</li>
+      <li>Banned phrases found: {{ report.checks.banned_phrases|join(', ') or 'none' }}. Dashes removed: {{ report.checks.dashes_removed }}.</li>
+      <li>Sections missing: {{ report.checks.missing_sections|join(', ') or 'none' }}.</li>
+      <li>Data gaps flagged by code: {{ report.meta.gaps|join('; ') or 'none' }}.</li>
+    </ul>
+  </details>
+  <p class="rs-fine">{{ report.disclaimer }}</p>
+</article>
+{% endif %}
+
+{% if history|length > 1 %}
+<section class="section"><h2 class="section-title">Earlier reports</h2>
+  <ul class="rs-hist">{% for h in history %}<li><a href="/management/{{ pos.id }}/research/{{ h.id }}">{{ h.created_at[:16] }}</a> · {{ h.status }}{% if h.model %} · {{ h.model }}{% endif %}</li>{% endfor %}</ul></section>
+{% endif %}
+
+<script>
+(function () {
+  const go = document.getElementById("rs-go"), msg = document.getElementById("rs-msg");
+  const id = {{ pos.id }}, busy = {{ 1 if busy else 0 }};
+  function say(t, bad) { if (!msg) return; msg.hidden = !t; msg.textContent = t || ""; msg.classList.toggle("bad", !!bad); }
+  async function poll() {
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 4000));
+      let out; try { out = await (await fetch("/management/" + id + "/research/status")).json(); } catch (e) { continue; }
+      const r = out.report;
+      if (!r || r.status === "queued" || r.status === "running") continue;
+      location.href = "/management/" + id + "/research"; return;
+    }
+  }
+  if (busy) poll();
+  if (go) go.addEventListener("click", async () => {
+    go.disabled = true; go.textContent = "Starting…"; say("");
+    let out; try { const res = await fetch("/management/" + id + "/research", { method: "POST" }); out = await res.json(); if (!res.ok) throw new Error(out.error || "Could not start"); }
+    catch (e) { go.disabled = false; go.textContent = "Generate the report"; say(e.message, true); return; }
+    location.reload();
+  });
+})();
+</script>
+{% endblock %}

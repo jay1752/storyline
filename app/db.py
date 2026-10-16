@@ -314,6 +314,22 @@ CREATE TABLE IF NOT EXISTS insight_runs (
 );
 CREATE INDEX IF NOT EXISTS idx_insight_runs_pos ON insight_runs(position_id, id);
 
+-- Deep research: one long, sourced report per request for a tracked stock (app/ai/research.py). Separate from the daily story (position_snapshots);
+-- the row carries the status the page polls, and the finished report as JSON (sections, sources, triggers, the automatic checks).
+CREATE TABLE IF NOT EXISTS research_reports (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL,
+    position_id  INTEGER NOT NULL,
+    symbol       TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'queued',          -- queued | running | success | failed
+    error        TEXT,
+    model        TEXT,
+    report_json  TEXT,
+    created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_research_pos ON research_reports(position_id, id);
+
 -- Admin overrides for the in-app scheduler's jobs (time/days/on-off). A row exists only where an admin changed
 -- something; deleting it restores the defaults in app/scheduler.py JOBS.
 CREATE TABLE IF NOT EXISTS job_settings (

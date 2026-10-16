@@ -8,7 +8,7 @@ from app import journal as journal_mod
 from app import framework as fw
 from app.ai.insights_engine import live_scan, queue_run
 from app.db import get_market_conn, get_users_conn
-from app.ingestion.runner import enqueue_insights, enqueue_position_analysis
+from app.ingestion.runner import enqueue_insights, enqueue_position_analysis, enqueue_research
 from app.templates_config import templates
 from app.tracking import already_tracked, create_tracked_position, nearest_price_on_or_before
 
@@ -230,6 +230,60 @@ def management_status(request: Request, position_id: int):
         run = u.execute("SELECT r.id, r.status, r.error FROM insight_runs r JOIN tracked_positions tp ON tp.id = r.position_id "
                         "WHERE r.position_id = ? AND tp.user_id = ? ORDER BY r.id DESC LIMIT 1", (position_id, user_id)).fetchone()
     return {"run": dict(run) if run else None}
+
+
+# ---- Deep research (app/ai/research.py): a long sourced report, started by hand --------------------------------------------------------------
+def _owned_position(u, user_id, position_id):
+    return u.execute("SELECT * FROM tracked_positions WHERE id = ? AND user_id = ? AND status IN ('active','exited')", (position_id, user_id)).fetchone()
+
+
+@router.post("/management/{position_id:int}/research")
+def research_start(request: Request, position_id: int):
+    from app.ai import research
+    from app.ai.providers import build_chain
+
+    user_id = request.state.user_id
+    with get_users_conn() as u:
+        if not u.execute("SELECT 1 FROM tracked_positions WHERE id = ? AND user_id = ? AND status = 'active'", (position_id, user_id)).fetchone():
+            return JSONResponse({"error": "That stock isn't in your tracked list."}, status_code=404)
+    if not build_chain(user_id):
+        return JSONResponse({"error": "Add an AI key in AI settings first: the report is written by an AI model."}, status_code=400)
+    if research.used_today(user_id) >= research.MANUAL_PER_DAY:
+        return JSONResponse({"error": f"You've started today's {research.MANUAL_PER_DAY} reports. Try again tomorrow."}, status_code=429)
+    report_id, created = research.queue_research(user_id, position_id)
+    if created:
+        enqueue_research(report_id)
+    return {"report_id": report_id, "started": created}
+
+
+@router.get("/management/{position_id:int}/research/status")
+def research_status(request: Request, position_id: int):
+    with get_users_conn() as u:
+        r = u.execute("SELECT id, status, error FROM research_reports WHERE position_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1", (position_id, request.state.user_id)).fetchone()
+    return {"report": dict(r) if r else None}
+
+
+@router.get("/management/{position_id:int}/research", response_class=HTMLResponse)
+@router.get("/management/{position_id:int}/research/{report_id:int}", response_class=HTMLResponse)
+def research_page(request: Request, position_id: int, report_id: int | None = None):
+    from app.ai import research
+
+    user_id = request.state.user_id
+    with get_users_conn() as u:
+        pos = _owned_position(u, user_id, position_id)
+        if not pos:
+            return RedirectResponse("/management", status_code=303)
+        if report_id:
+            row = u.execute("SELECT * FROM research_reports WHERE id = ? AND position_id = ? AND user_id = ?", (report_id, position_id, user_id)).fetchone()
+        else:  # the newest report that is finished, else whatever is newest (running or failed)
+            row = (u.execute("SELECT * FROM research_reports WHERE position_id = ? AND user_id = ? AND status = 'success' ORDER BY id DESC LIMIT 1", (position_id, user_id)).fetchone()
+                   or u.execute("SELECT * FROM research_reports WHERE position_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1", (position_id, user_id)).fetchone())
+        busy = u.execute("SELECT id, status FROM research_reports WHERE position_id = ? AND user_id = ? AND status IN ('queued','running') ORDER BY id DESC LIMIT 1", (position_id, user_id)).fetchone()
+        history = u.execute("SELECT id, status, created_at, model FROM research_reports WHERE position_id = ? AND user_id = ? ORDER BY id DESC LIMIT 12", (position_id, user_id)).fetchall()
+    report = json.loads(row["report_json"]) if row and row["report_json"] else None
+    return templates.TemplateResponse("research_report.html", {
+        "request": request, "active_nav": "management", "pos": pos, "row": row, "report": report, "busy": busy, "history": history,
+        "left_today": max(0, research.MANUAL_PER_DAY - research.used_today(user_id)), "per_day": research.MANUAL_PER_DAY})
 
 
 @router.post("/management/{position_id:int}/journal")
