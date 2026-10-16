@@ -170,13 +170,28 @@ def _covered_text() -> str:
     return f"{n // 1000 * 1000:,}+" if n >= 2000 else "Thousands of"
 
 
+def _coverage() -> dict:
+    """Stock counts for the coverage tiles, rounded down to the nearest hundred so they are never an overstatement. Cached with the rest of the page data."""
+    def r(n: int) -> str:
+        return f"{n // 100 * 100:,}+" if n >= 200 else f"{n:,}"
+    try:
+        with get_market_conn() as c:
+            by = dict(c.execute("SELECT market, COUNT(*) FROM stock_metrics GROUP BY market").fetchall())
+            holders = c.execute("SELECT COUNT(DISTINCT symbol) FROM holders").fetchone()[0]
+        return {"IN": r(by.get("IN", 0)), "US": r(by.get("US", 0)), "holders": r(holders)}
+    except Exception:  # noqa: BLE001 - the page renders without exact counts
+        return {"IN": "Thousands of", "US": "Thousands of", "holders": "Thousands of"}
+
+
 @router.get("/", response_class=HTMLResponse)
 def home(request: Request, v: str | None = None):
-    """The public home page. `?v=classic` (or HOME_VARIANT=classic in the environment) serves the previous home page, kept as a backup."""
+    """The public home page. `?v=prev` serves the page before the Deep research repositioning and `?v=classic` the one before that (HOME_VARIANT in the environment does the same)."""
     d = _data()
     variant = (v or os.environ.get("HOME_VARIANT", "")).lower()
     if variant == "classic":
         return templates.TemplateResponse("home_classic.html", {"request": request, "active_nav": "", **d})
     from app.routes.google_auth import google_enabled
-    return templates.TemplateResponse("home.html", {"request": request, "cta_href": "/auth/google" if google_enabled() else "/login",
-                                                    "covered_text": _covered_text(), "active_nav": ""})
+    ctx = {"request": request, "cta_href": "/auth/google" if google_enabled() else "/login", "covered_text": _covered_text(), "active_nav": ""}
+    if variant == "prev":
+        return templates.TemplateResponse("home_prev.html", ctx)
+    return templates.TemplateResponse("home.html", {**ctx, "cov": _coverage()})

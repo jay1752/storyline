@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tenetfolio · Research any stock. Check your portfolio against your own rules</title>
-  <meta name="description" content="Research any stock to the quarter, write the rules you invest by, and have your portfolio checked against them every day. India and US stocks. Descriptive research, not investment advice.">
+  <title>Tenetfolio · Research any stock in depth, in minutes</title>
+  <meta name="description" content="Tenetfolio reads the filings, the call transcripts and the numbers, cites every source and checks every quote against the document. Then it keeps your portfolio to your own rules. India and US stocks. Descriptive research, not investment advice.">
   <link rel="canonical" href="https://tenetfolio.com/">
   <meta name="theme-color" content="#12261F">
   <link rel="manifest" href="/manifest.webmanifest">
@@ -15,120 +15,182 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Tenetfolio">
-  <meta property="og:title" content="Tenetfolio: write your investing rules while you're calm">
-  <meta property="og:description" content="Research any stock to the quarter, write your own investing rules, and have your portfolio checked against them every day.">
+  <meta property="og:title" content="Tenetfolio: research any stock in depth, in minutes">
+  <meta property="og:description" content="Sourced research on any India or US stock, with every quote checked against the document, and your own rules applied to your portfolio.">
   <meta property="og:url" content="https://tenetfolio.com/">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400&display=swap">
-  <link rel="stylesheet" href="/static/css/home2.css?v={{ asset_version('css/home2.css') }}">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232B4A45'/%3E%3Cpath d='M8 21l5-6 4 3 7-9' fill='none' stroke='%23E0A34C' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/css/home3.css?v={{ asset_version('css/home3.css') }}">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232B4A45'/%3E%3Cpath d='M8 21l5-6 4 3 7-9' fill='none' stroke='%23E0A34C' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 </head>
 <body>
 {% set user = request.state.user %}
-<div class="dark">
- <div class="wrap">
-  <div class="nav"><span class="logo"><span class="mk">↗</span>Tenetfolio</span><span class="sp"></span><a class="lk" href="#research">Research</a><a class="lk" href="#rules">Your rules</a><a class="lk" href="#portfolio">Portfolio</a>{% if user %}<a class="btn btn-s" href="/analytics">Open Tenetfolio</a>{% else %}<a class="lk" href="/login">Log in</a><a class="btn btn-s" href="{{ cta_href }}">Continue with Google</a>{% endif %}</div>
-  <div class="hero">
-   <div>
-    <span class="eyebrow">Research · Rules · Portfolio</span>
-    <h1>Decide when you're calm. <em>Check every day.</em></h1>
-    <p class="lead">Research any stock to the quarter. Write the rules you invest by. Tenetfolio checks your portfolio against them, every day.</p>
-    <div class="cta"><a class="btn btn-a" href="{{ "/analytics" if user else cta_href }}">{{ "Open Tenetfolio" if user else "Continue with Google" }}</a><a class="btn btn-o" href="#research">See the research</a></div>
-    <p class="fine" style="margin:14px 0 0">Free to start. Descriptive research, not investment advice.</p>
-   </div>
-   <div class="panic">
-    <div class="top"><span>Tuesday · 11:42</span><span>Example</span></div>
-    <div class="idx">Nifty −3.2%</div>
-    <div style="opacity:.72;font-size:14px">A hard day for the market.</div>
-    <hr>
-    <div class="r"><span>Holdings that pass your rules</span><span style="color:var(--calm)">11 of 14</span></div>
-    <div class="r"><span>Broke a rule before today</span><span>3</span></div>
-    <div class="r"><span>New rule breaks today</span><span style="color:var(--calm)">0</span></div>
-    <div class="big">Your rules, checked: no new breaks today.</div>
-   </div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+<symbol id="no" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.7 5.7 12.6 12.6"/></symbol>
+<symbol id="goog" viewBox="0 0 24 24"><path fill="#4285F4" d="M23 12.3c0-.8-.1-1.5-.2-2.2H12v4.2h6.2a5.3 5.3 0 0 1-2.3 3.5v2.9h3.7c2.2-2 3.4-4.9 3.4-8.4z"/><path fill="#34A853" d="M12 24c3.1 0 5.7-1 7.6-2.8l-3.7-2.9c-1 .7-2.3 1.1-3.9 1.1-3 0-5.5-2-6.4-4.7H1.8v3A12 12 0 0 0 12 24z"/><path fill="#FBBC05" d="M5.6 14.7a7.2 7.2 0 0 1 0-4.6v-3H1.8a12 12 0 0 0 0 10.7l3.8-3.1z"/><path fill="#EA4335" d="M12 4.8c1.7 0 3.2.6 4.4 1.7l3.3-3.3A12 12 0 0 0 1.8 7.1l3.8 3C6.5 6.8 9 4.8 12 4.8z"/></symbol>
+</defs></svg>
+
+<header class="nav"><div class="wrap">
+  <a class="logo" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--structure)"/><path d="M8 21l5-6 4 3 7-9" fill="none" stroke="#e0a34c" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Tenetfolio</a>
+  <span class="sp"></span>
+  <a class="lk" href="#how">How it works</a><a class="lk" href="#report">Deep research</a><a class="lk" href="#rules">Your rules</a><a class="lk" href="#trust">Trust</a>
+  <a class="btn btn-a btn-sm" href="{{ "/analytics" if user else cta_href }}">{% if user %}Open Tenetfolio{% else %}<svg class="g"><use href="#goog"/></svg>Continue with Google{% endif %}</a>
+</div></header>
+
+<main id="top">
+<div class="wrap">
+
+<section class="hero">
+  <div>
+    <span class="eyebrow">India and US stocks</span>
+    <h1 style="margin-top:16px">Research any stock in depth, <em>in minutes.</em></h1>
+    <p class="sub">Then keep your portfolio to your own rules.</p>
+    <p class="lede">Tenetfolio reads the filings, the call transcripts and the numbers, cites every source, and checks every quote word for word. You decide. It does the reading.</p>
+    <div class="cta">
+      <a class="btn btn-a" href="{{ "/analytics" if user else cta_href }}">{% if user %}Open Tenetfolio{% else %}<svg class="g"><use href="#goog"/></svg>Continue with Google{% endif %}</a>
+      <a class="btn btn-o" href="#report">See a real report</a>
+    </div>
+    <p class="micro">Sign in with Google. Research tool, not investment advice.</p>
   </div>
-  <div class="heroshot"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/static/img/home/analytics.jpg" alt="A stock page: key figures, how it scores against your rules, and the price chart" width="1823" height="1170" decoding="async"></div></div>
- </div>
+  <div class="heroshot">
+    <div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/static/img/home/report_top.jpg" alt="A deep research report on Titan: documents read, a one-sentence summary and three takeaways with source citations" width="900" height="660"></div>
+    <div class="chip c1"><b>4</b> documents read</div>
+    <div class="chip c2"><b>17</b> sources cited</div>
+    <div class="chip c3"><b>5 of 6</b> quotes found in the filings</div>
+  </div>
+</section>
+
+<section class="read" aria-label="What one report read">
+  <h3>One real report, on Titan Company</h3>
+  <div class="tiles">
+    <div class="tile"><b>2</b><span>earnings calls, about 18,000 words</span></div>
+    <div class="tile"><b>1</b><span>investor presentation</span></div>
+    <div class="tile"><b>1</b><span>results filing</span></div>
+    <div class="tile"><b>12 yrs</b><span>of annual financials, plus the quarters</span></div>
+    <div class="tile"><b>34 s</b><span>to a first draft you can check</span></div>
+  </div>
+  <p class="cap">Written 16 October 2026 from public filings and exchange data. An illustration of what the report reads, not a recommendation.</p>
+</section>
+
+<section class="blk" id="how">
+  <div class="head"><span class="eyebrow">How it works</span><h2 style="margin-top:12px">Write your rules once. <em>Let the reading happen.</em></h2></div>
+  <div class="steps">
+    <div class="step"><h3>Write your rules</h3><p>Returns, debt, cash conversion, growth: the tests a good business must pass for you.</p></div>
+    <div class="step"><h3>Screen India and US</h3><p>See only the stocks that clear your rules, ranked by how many they pass.</p></div>
+    <div class="step"><h3>Go deep on one</h3><p>Press Deep research. It reads the documents and writes a sourced report in about a minute.</p></div>
+    <div class="step"><h3>Know when it changes</h3><p>A daily read on each stock you follow, and the exact triggers that would change the view.</p></div>
+  </div>
+</section>
+
+<div class="feat" id="report">
+  <div class="txt"><span class="eyebrow">Deep research</span><h2>A report that <em>shows its work.</em></h2>
+    <p>Management made promises on the earnings call. Did the numbers follow? The report quotes the call word for word, then sets the figures beside it.</p>
+    <ul class="ticks">
+      <li><svg><use href="#tick"/></svg><span>Every claim cites a numbered source, from filings to headlines.</span></li>
+      <li><svg><use href="#tick"/></svg><span>Every quote is checked against the document text. Not found means it is marked.</span></li>
+      <li><svg><use href="#tick"/></svg><span>It says what it could not read, and what we still do not know.</span></li>
+    </ul></div>
+  <div class="frame crop"><div class="bar"><i></i><i></i><i></i></div><img src="/static/img/home/guidance.jpg" alt="Guidance log: management statements with date, speaker, a short quote, what the figures show since, and a verified mark" width="760" height="1190"></div>
 </div>
 
-<section id="research">
- <div class="wrap">
-  <div class="head"><span class="eyebrow">Research</span><h2>Every stock, <em>down to the quarter.</em></h2><p class="sub">The filed numbers first, in one place, for India and the US. Then your rules on top of them.</p></div>
-  <div class="stats">
-   <div class="stat"><b>{{ covered_text }}</b><span>stocks with reported data, India and US</span></div>
-   <div class="stat"><b>12 quarters</b><span>of results, plus up to 20 years annual</span></div>
-   <div class="stat"><b>5 views</b><span>performance, health, valuation, ownership, company</span></div>
-   <div class="stat"><b>Daily</b><span>prices, filings and result dates</span></div>
-  </div>
-  <div class="two flip" style="margin-top:72px">
-   <div class="shot"><img src="/static/img/home/quarters.jpg" alt="Quarterly results table and charts for twelve quarters" width="1823" height="1170" loading="lazy" decoding="async"></div>
-   <div class="txt"><span class="eyebrow">Quarter by quarter</span><h2>Twelve quarters, <em>side by side.</em></h2>
-    <p class="sub">Revenue, margins, profit, EPS and growth for every reported quarter.</p>
-    <ul class="pts"><li>Quarterly and annual statements</li><li>Charts you can expand and export</li><li>Recent exchange filings, with links to the originals</li></ul></div>
-  </div>
-  <div class="two" style="margin-top:72px">
-   <div class="txt"><span class="eyebrow">Behind the numbers</span><h2>Who owns it, and <em>the cash behind it.</em></h2>
-    <p class="sub">Cash flow, balance sheet and ownership, by year and by half-year.</p>
-    <ul class="pts"><li>Operating cash flow against profit</li><li>Promoter, FII and DII holding, and pledge</li><li>Next result date, from the exchanges</li></ul></div>
-   <div class="shot"><img src="/static/img/home/health.jpg" alt="Cash flow and balance sheet for a stock" width="1823" height="1170" loading="lazy" decoding="async"></div>
-  </div>
- </div>
-</section>
-
-<section class="alt" id="rules">
- <div class="wrap two flip">
-  <div class="shot"><img src="/static/img/home/rules.jpg" alt="The investment rules page: the thresholds you set" width="1823" height="1170" loading="lazy" decoding="async"></div>
-  <div class="txt"><span class="eyebrow">Your tenets</span><h2>Write your rules <em>once.</em></h2>
-   <p class="sub">Set the numbers you believe in. They drive two things, so you never set them twice.</p>
-   <ul class="pts"><li><b>The screener.</b> Which stocks pass, in Analytics and on every stock page.</li><li><b>Your positions.</b> Limits you set, such as the largest a holding may be and the most you will hold in one sector.</li><li>Defaults are ready. Change only what you disagree with.</li></ul></div>
- </div>
-</section>
-
-<section id="portfolio">
- <div class="wrap">
-  <div class="head"><span class="eyebrow">Portfolio</span><h2>Bring in what you own. <em>Keep it to your rules.</em></h2><p class="sub">Drop any broker statement. See everything in one view, with a calm daily read on each holding.</p></div>
-  <div class="two">
-   <div class="txt"><span class="eyebrow">Import in a minute</span><h2>Drop in a statement. <em>Fix what's off.</em></h2>
-    <p class="sub">Excel, CSV or PDF from your broker. Every line is shown for you to check and correct before anything is saved.</p>
-    <ul class="pts"><li>Matches each stock, even by ISIN</li><li>Splits and bonuses counted for you</li><li>Combine more than one broker account</li></ul></div>
-   <div class="shot"><img src="/static/img/home/import.jpg" alt="The import review card in the assistant" width="1320" height="1260" loading="lazy" decoding="async"></div>
-  </div>
-  <div class="two flip" style="margin-top:72px">
-   <div class="shot"><img src="/static/img/home/portfolio.jpg" alt="Portfolio: value, returns, allocation and movers" width="1823" height="1080" loading="lazy" decoding="async"></div>
-   <div class="txt"><span class="eyebrow">One view</span><h2>All of it, <em>at a glance.</em></h2>
-    <p class="sub">Value, returns, allocation by sector and movers, in rupees, with US holdings converted at a live rate.</p>
-    <ul class="pts"><li>A daily summary of what changed and which of your rules a stock breaks</li><li>A flag when a position goes above a limit you set</li><li>Journal your reasons and review them later</li></ul></div>
-  </div>
- </div>
-</section>
-
-<section class="alt">
- <div class="wrap">
-  <div class="two">
-   <div class="txt"><span class="eyebrow">Ask about any screen</span><h2>An assistant that has <em>read the page.</em></h2>
-    <p class="sub">It knows the stock you're viewing, your rules and your portfolio. Ask about numbers or ask in general.</p>
-    <ul class="pts"><li>Knows the page you are on</li><li>Cites which data it used</li><li>You choose the AI model</li></ul></div>
-   <div class="shot"><img src="/static/img/home/chat.jpg" alt="The assistant answering about Infosys against the user rules" width="1200" height="1170" loading="lazy" decoding="async"></div>
-  </div>
-  <div class="two flip" style="margin-top:72px">
-   <div class="shot"><img src="/static/img/home/community.jpg" alt="Community: the shared morning market briefing" width="1823" height="1170" loading="lazy" decoding="async"></div>
-   <div class="txt"><span class="eyebrow">Every morning</span><h2>A shared <em>market briefing.</em></h2>
-    <p class="sub">Oil, rates, the rupee and the themes moving Indian markets, with the headlines behind each point.</p></div>
-  </div>
- </div>
-</section>
-
-<section style="padding:56px 0">
- <div class="wrap"><div class="byok"><div><h3>Use the AI you already pay for.</h3><p>Bring your own key. It stays encrypted and is never shown again.</p></div>
-  <div class="chips"><span class="chip">Gemini</span><span class="chip">Claude</span><span class="chip">OpenAI</span><span class="chip">Groq</span><span class="chip">OpenRouter</span></div></div></div>
-</section>
-
-<div class="dark">
- <div class="wrap close"><h2>Rules written in calm <em>are easier to keep.</em></h2><a class="btn btn-a" href="{{ "/analytics" if user else cta_href }}">{{ "Open Tenetfolio" if user else "Continue with Google" }}</a><p class="fine" style="margin:14px 0 0">Free to start. Your data stays yours, with one-click delete.</p></div>
+<div class="feat rev">
+  <div class="txt"><span class="eyebrow">Snapshot</span><h2>One screen to read <em>a stock in a minute.</em></h2>
+    <p>Before you read a page of text, see the picture: against the market, against your rules, who owns it and whether profit turns into cash.</p>
+    <ul class="ticks">
+      <li><svg><use href="#tick"/></svg><span>Your rules as bars, with your limit marked.</span></li>
+      <li><svg><use href="#tick"/></svg><span>Named holders from the exchange filing, with the change since last quarter.</span></li>
+      <li><svg><use href="#tick"/></svg><span>A panel appears only when we hold the data. No padding.</span></li>
+    </ul></div>
+  <div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/static/img/home/snapshot.jpg" alt="Snapshot of Marico: against the market, your rules as bars, P/E range, growth, profit versus cash, ownership" width="1100" height="1250"></div>
 </div>
-<footer><div class="wrap"><span>Tenetfolio · A tenet is a rule you hold to. · <a href="mailto:tenetfolio@gmail.com">tenetfolio@gmail.com</a></span><span>A descriptive research tool. It does not give investment advice. Figures come from filings and public sources and can contain errors. · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span></div></footer>
+
+<div class="feat" id="rules">
+  <div class="txt"><span class="eyebrow">Your rules</span><h2>Your tests, <em>applied everywhere.</em></h2>
+    <p>Edit a number once. The screener, every stock page, the deep report and the daily read all follow it.</p>
+    <ul class="ticks">
+      <li><svg><use href="#tick"/></svg><span>Start from a sensible set, change only what you disagree with.</span></li>
+      <li><svg><use href="#tick"/></svg><span>Override one rule for one stock, and write down why.</span></li>
+    </ul></div>
+  <div class="card" aria-label="Example rules">
+    <h4>Your rules, against Marico</h4><p class="why">Example. Bar is the stock's figure. The black tick is your limit.</p>
+    <div class="rule"><span>ROCE</span><div class="track"><i style="width:94%"></i><u style="left:36%"></u></div><span class="v ok">47%</span></div>
+    <div class="rule"><span>Debt / equity</span><div class="track"><i style="width:13%"></i><u style="left:50%"></u></div><span class="v ok">0.13×</span></div>
+    <div class="rule"><span>Interest coverage</span><div class="track"><i style="width:100%"></i><u style="left:40%"></u></div><span class="v ok">38.7×</span></div>
+    <div class="rule"><span>Cash flow ÷ profit</span><div class="track"><i style="width:77%"></i><u style="left:40%"></u></div><span class="v ok">1.15×</span></div>
+    <div class="rule"><span>Sales growth, weakest of 4 quarters</span><div class="track"><i style="width:70%"></i><u style="left:40%"></u></div><span class="v ok">20.9%</span></div>
+    <div class="rule"><span>Operating margin</span><div class="track"><i style="width:55%"></i><u style="left:40%"></u></div><span class="v ok">20.7%</span></div>
+  </div>
+</div>
+
+<div class="feat rev">
+  <div class="txt"><span class="eyebrow">Daily read</span><h2>Look when something changed, <em>not before.</em></h2>
+    <p>Each entry ends with the conditions that would improve or weaken the read. The next entry says which ones fired.</p>
+    <ul class="ticks">
+      <li><svg><use href="#tick"/></svg><span>Measurable triggers, tied to figures, never price targets.</span></li>
+      <li><svg><use href="#tick"/></svg><span>Your own journal is part of the story, judged against your rules.</span></li>
+    </ul></div>
+  <div class="card" aria-label="Example triggers">
+    <h4>Titan: the read, and what would change it</h4><p class="why">Example, from the daily entry of 16 October 2026.</p>
+    <div class="trig">
+      <div><h5>The read improves if</h5><ul><li>Quick ratio above 0.4× for two consecutive quarters.</li><li>Operating cash flow above 0.8× net profit for two more years.</li></ul></div>
+      <div><h5>The read weakens if</h5><ul><li>ROCE falls below 20% for two consecutive quarters.</li><li>Sales growth turns negative for two consecutive quarters.</li></ul></div>
+    </div>
+    <div class="status"><span>Since the last entry:</span><span class="pill">quick ratio trigger: not fired</span><span class="pill warn">cash trigger: unclear</span></div>
+  </div>
+</div>
+
+</div>
+
+<div class="wrap">
+<section class="blk" id="trust">
+  <div class="head"><span class="eyebrow">Trust</span><h2 style="margin-top:12px">What it <em>will not</em> do, and how it checks itself.</h2></div>
+  <div class="trust">
+    <ul class="nots">
+      <li><svg><use href="#no"/></svg><span><b>No price targets and no buy or sell calls.</b> You get a read against your own rules and the triggers that would change it.</span></li>
+      <li><svg><use href="#no"/></svg><span><b>No hidden gaps.</b> Every report lists what it did not read and what we still do not know.</span></li>
+      <li><svg><use href="#no"/></svg><span><b>No invented quotes.</b> A quote that is not in the document is marked, not passed off.</span></li>
+    </ul>
+    <div class="card"><h4>Automatic checks on the Titan report</h4><p class="why">Run by code after the AI writes. Shown at the foot of every report. The sixth quote was not found, so the report marks it.</p>
+      <div class="checks">
+        <div><span>Figures that are not a source figure</span><b>1 of 230</b></div>
+        <div><span>Guidance quotes found in the document</span><b>5 of 6</b></div>
+        <div><span>Sections missing</span><b>none</b></div>
+        <div><span>Documents read</span><b>4</b></div>
+        <div><span>Annual report</span><span class="pill warn">not read, said so</span></div>
+      </div></div>
+  </div>
+</section>
+
+<section class="blk" style="padding-top:20px">
+  <div class="head"><span class="eyebrow">Coverage</span><h2 style="margin-top:12px">Wide enough <em>to use every day.</em></h2></div>
+  <div class="cover">
+    <div class="tile"><b>{{ cov.IN }}</b><span>India stocks</span></div>
+    <div class="tile"><b>{{ cov.US }}</b><span>US stocks</span></div>
+    <div class="tile"><b>{{ cov.holders }}</b><span>India stocks with named holders</span></div>
+  </div>
+</section>
+
+<section class="blk" style="padding-top:20px">
+  <div class="head"><h2>Questions</h2></div>
+  <div class="faq">
+    <details><summary>Is this investment advice?</summary><p>No. Tenetfolio applies your own rules to public data and writes a sourced reading. It gives no price targets and no instruction to buy or sell. Check the figures against the filings before you act.</p></details>
+    <details><summary>Where does the data come from?</summary><p>Company filings and exchange data (NSE and SEC), shareholding filings and market data providers. Every report lists its sources with dates. Figures can contain errors, so check them against the filings before you act.</p></details>
+    <details><summary>What does a report not read?</summary><p>The annual report is not read yet, and a scanned document with no text cannot be read. The report says exactly which documents it used.</p></details>
+    <details><summary>Does it replace my own thinking?</summary><p>It replaces the reading, not the judgement. You still decide what the numbers mean for you.</p></details>
+  </div>
+</section>
+
+<section class="close">
+  <h2>Rules written in calm <em>are easier to keep.</em></h2>
+  <a class="btn btn-a" href="{{ "/analytics" if user else cta_href }}">{% if user %}Open Tenetfolio{% else %}<svg class="g"><use href="#goog"/></svg>Continue with Google{% endif %}</a>
+</section>
+</div>
+</main>
+
+<footer><div class="wrap"><div>Tenetfolio is a research tool. It is not a registered investment adviser or research analyst, and nothing here is investment advice. Examples on this page use data as of 16 October 2026 and are illustrations. Figures come from filings and public sources and can contain errors.</div><div><a href="mailto:tenetfolio@gmail.com">tenetfolio@gmail.com</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></div></div></footer>
 <script src="/static/js/pwa.js?v={{ asset_version('js/pwa.js') }}" defer></script>
 </body>
 </html>
