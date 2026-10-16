@@ -17,7 +17,7 @@
       b.setAttribute("aria-pressed", on ? "true" : "false");
       b.classList.toggle("on", on);
     });
-    try { localStorage.setItem("stocktale.view", ordered.join(",")); } catch (e) { /* private mode */ }
+    try { localStorage.setItem("tenetfolio.view", ordered.join(",")); } catch (e) { /* private mode */ }
     const u = new URL(location.href);
     u.searchParams.set("show", ordered.join(","));
     history.replaceState(null, "", u);
@@ -59,7 +59,7 @@
       const b = e.target.closest("button");
       if (!b) return;
       de.dataset.perf = b.dataset.pane;
-      try { localStorage.setItem("stocktale.perf", b.dataset.pane); } catch (err) { /* private mode */ }
+      try { localStorage.setItem("tenetfolio.perf", b.dataset.pane); } catch (err) { /* private mode */ }
       paint();
     });
   }

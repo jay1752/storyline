@@ -71,13 +71,13 @@
 (function () {
   var avail = {{ view_groups | map(attribute='key') | list | tojson }};
   var q = new URLSearchParams(location.search).get("show"), saved = null;
-  try { saved = localStorage.getItem("stocktale.view"); } catch (e) {}
+  try { saved = (localStorage.getItem("tenetfolio.view") || localStorage.getItem("stocktale.view")); } catch (e) {}
   var want = (q || (avail.indexOf("snap") > -1 ? "snap" : (saved || "perf,health"))).split(",").filter(function (k) { return avail.indexOf(k) > -1; });
   if (!want.length) want = avail.slice(0, 1);
   var de = document.documentElement;
   de.dataset.view = want.join(" ");
   var pane = null;
-  try { pane = localStorage.getItem("stocktale.perf"); } catch (e) {}
+  try { pane = (localStorage.getItem("tenetfolio.perf") || localStorage.getItem("stocktale.perf")); } catch (e) {}
   var panes = {{ perf_panes | tojson }};
   de.dataset.perf = panes.indexOf(pane) > -1 ? pane : (panes[0] || "quarterly");
 })();

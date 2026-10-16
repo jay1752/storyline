@@ -1,6 +1,6 @@
 """Apply a file written by export_ratio_inputs.py: UPDATE the five ratio-input columns on rows that already exist here.
 Never inserts and never touches any other column.  Run where the target database lives:
-    docker exec -e PYTHONPATH=/app stocktale python /tmp/apply_ratio_inputs.py"""
+    docker exec -e PYTHONPATH=/app tenetfolio python /tmp/apply_ratio_inputs.py"""
 import gzip
 import json
 
