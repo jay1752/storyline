@@ -72,7 +72,7 @@
   var avail = {{ view_groups | map(attribute='key') | list | tojson }};
   var q = new URLSearchParams(location.search).get("show"), saved = null;
   try { saved = localStorage.getItem("stocktale.view"); } catch (e) {}
-  var want = (q || saved || (avail.indexOf("snap") > -1 ? "snap" : "perf,health")).split(",").filter(function (k) { return avail.indexOf(k) > -1; });
+  var want = (q || (avail.indexOf("snap") > -1 ? "snap" : (saved || "perf,health"))).split(",").filter(function (k) { return avail.indexOf(k) > -1; });
   if (!want.length) want = avail.slice(0, 1);
   var de = document.documentElement;
   de.dataset.view = want.join(" ");
