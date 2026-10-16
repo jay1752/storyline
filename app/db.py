@@ -136,6 +136,21 @@ CREATE TABLE IF NOT EXISTS us_mcap_override (   -- US market cap from Yahoo wher
     symbol TEXT PRIMARY KEY, mcap_m REAL, as_of TEXT
 );
 
+CREATE TABLE IF NOT EXISTS index_prices (    -- benchmark and sector index closes (Yahoo), for "stock vs its market / sector"; filled by scripts/fill_index_prices.py
+    symbol TEXT NOT NULL, date TEXT NOT NULL, close REAL,
+    PRIMARY KEY (symbol, date)
+);
+
+CREATE TABLE IF NOT EXISTS holders (         -- named holders from the exchange shareholding-pattern filing (NSE XBRL): promoters, plus public holders above 1%; scripts/fill_holders_nse.py
+    symbol TEXT NOT NULL, period_end TEXT NOT NULL, holder_name TEXT NOT NULL, category TEXT NOT NULL,
+    shares REAL, pct REAL, filed_on TEXT, PRIMARY KEY (symbol, period_end, holder_name, category)
+);
+
+CREATE TABLE IF NOT EXISTS deals (           -- NSE bulk and block deals, one row per client per trade; scripts/fill_deals_nse.py (the exchange publishes one day at a time, so history builds up from the first run)
+    deal_date TEXT NOT NULL, symbol TEXT NOT NULL, kind TEXT NOT NULL, client TEXT NOT NULL, side TEXT NOT NULL,
+    qty REAL, price REAL, remarks TEXT, PRIMARY KEY (deal_date, symbol, kind, client, side, qty, price)
+);
+
 CREATE TABLE IF NOT EXISTS us_annual (       -- US fiscal years from SEC 10-K facts (USD millions); filled by scripts/fill_us_annual.py
     symbol TEXT NOT NULL, period_end_date TEXT NOT NULL,
     revenue_m REAL, operating_profit_m REAL, net_profit_m REAL, assets_m REAL, current_liabilities_m REAL, equity_m REAL,
