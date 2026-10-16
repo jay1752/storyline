@@ -75,8 +75,13 @@ HOW TO WRITE
 - Never use these phrases: it's important to note, in today's, in the current environment, deep dive, delve, landscape, robust, compelling, navigate, poised to,
   well-positioned, exciting, remarkable journey, multifaceted, tapestry, in conclusion, overall, it remains to be seen, game-changer, unlock value, easy to miss,
   the real story, you are betting, here's the catch, let that sink in.
-- Each section body: 90 to 220 words of plain paragraphs (no bullet characters, no headings inside). Write the sections in the order and with the keys you are given.
-- Open with one dek sentence (the business, the picture, what would change it) and exactly 3 takeaways, at least one saying what would change the view.
+- Do not write paragraphs. Each section has: lead (ONE sentence, at most 35 words, that answers the section's question), points (3 to 5 short points, each one fact or one inference,
+  at most 32 words, with figures, units, periods and [S#] cites) and figures (2 to 4 key numbers for a side panel, each a label and a value copied exactly from the dossier, for example
+  label "Operating cash flow, FY2026" and value "-Rs 4,142 Cr"). Leave body empty. Write the sections in the order and with the keys you are given.
+- The report may be saved as a PDF and shared. Outside the "rules" section never mention the user's own rules, their position, their journal, their buy price or what they hold. Write
+  neutrally instead ("the quick ratio is 0.2x", not "fails your filter")
+- Open with one dek sentence (the business, the picture, what would change it) and exactly 3 takeaways, at least one saying what would change the view. The dek, takeaways and valuation_read
+  must never mention the user's rules, thresholds or position: they are the shareable front page.
 - upgrade_if and downgrade_if: each item is a measurable condition tied to a figure in the dossier ("operating cash flow above profit for two more years"), 2 to 4 items each.
 - unknowns: the specific things we could not establish (not generic caveats).
 - If the security is foreign-listed, write an explainer only: business, financials, risks, valuation context, and leave upgrade_if and downgrade_if empty.
@@ -84,10 +89,18 @@ HOW TO WRITE
 """ + DRIVER_TABLE
 
 
+class Fig(BaseModel):
+    label: str
+    value: str
+
+
 class Sec(BaseModel):
     key: str
-    title: str
-    body: str
+    title: str = ""
+    lead: str = ""
+    points: list[str] = Field(default_factory=list)
+    figures: list[Fig] = Field(default_factory=list)
+    body: str = ""            # older reports and models that ignore the structure: plain paragraphs
     cites: list[str] = Field(default_factory=list)
 
 
@@ -390,7 +403,112 @@ def build_dossier(user_id: int, pos) -> tuple[Dossier, dict]:
     except Exception:  # noqa: BLE001
         pass
     d.add("Checks computed by code", "Tenetfolio", meta["ref_date"], cc)
+    meta["glance"] = _glance(ctx, met, arows, qrows, us_ann, meta, v)
+    meta["catalysts"] = _catalysts(company)
     return d, meta
+
+
+def _money_big(x, market: str) -> str:
+    if x is None:
+        return "n/a"
+    if market == "IN":
+        return f"Rs {x / 1e5:.2f} lakh Cr" if x >= 1e5 else f"Rs {x:,.0f} Cr"
+    return f"USD {x / 1e3:,.1f} B" if x >= 1e3 else f"USD {x:,.0f} M"
+
+
+def _glance(ctx, met, arows, qrows, us_ann, meta, v) -> list[dict]:
+    """The at-a-glance tiles, all computed here (never by the model): price, P/E in its own range, return on capital, margin, cash conversion, promoters, size and, for the screen only, the user's rules."""
+    cur, market = meta["currency"], ctx["market"]
+    bank = bool(met and met["bank"])
+    t: list[dict] = []
+    ret = v.get("return_1y_pct")
+    if v.get("price"):
+        t.append({"label": "Price", "value": f"{cur} {v['price']:,.2f}", "sub": (f"{ret:+.1f}% over 1 year, " if ret is not None else "") + f"as of {v.get('price_date')}",
+                  "tone": "pos" if ret and ret > 0 else ("neg" if ret and ret < 0 else "")})
+    pe, lo, hi = v.get("pe_current"), v.get("pe_3y_low"), v.get("pe_3y_high")
+    if pe:
+        sub = f"3-year range {lo:g} to {hi:g}" if lo and hi else ""
+        if lo and hi and hi > lo:
+            sub += f", {max(0, min(100, (pe - lo) / (hi - lo) * 100)):.0f}% of the way up"
+        t.append({"label": "P/E", "value": f"{pe:g}x", "sub": sub, "tone": ""})
+    if arows:
+        r = arows[-1]
+        key, lab = ("roe_pct", "ROE") if bank else ("roce_pct", "ROCE")
+        if r[key] is not None:
+            t.append({"label": lab, "value": f"{r[key]:.1f}%", "sub": f"FY{r['period_end_date'][:4]}", "tone": "pos" if r[key] >= 15 else ""})
+    if qrows and qrows[-1]["opm_pct"] is not None:
+        t.append({"label": "Operating margin", "value": f"{qrows[-1]['opm_pct']:.1f}%", "sub": f"quarter ended {qrows[-1]['period_end_date']}", "tone": ""})
+    if arows and not bank:
+        r = next((x for x in reversed(arows) if x["cfo_cr"] is not None and x["net_profit_cr"]), None)
+        if r:
+            ratio = r["cfo_cr"] / r["net_profit_cr"]
+            t.append({"label": "Cash vs profit", "value": f"{ratio:.2f}x", "sub": f"operating cash flow over net profit, FY{r['period_end_date'][:4]}", "tone": "pos" if ratio >= 0.8 else "neg"})
+    if qrows and qrows[-1]["promoter_pct"] is not None:
+        t.append({"label": "Promoters", "value": f"{qrows[-1]['promoter_pct']:.1f}%", "sub": f"holding at {qrows[-1]['period_end_date']}", "tone": ""})
+    if met and met["mcap"]:
+        t.append({"label": "Market cap", "value": _money_big(met["mcap"], market), "sub": ((met["cap_tier"] or "").capitalize() + " cap") if met["cap_tier"] else "", "tone": ""})
+    fl = [f for f in ctx["framework"]["filters"] if f["status"] in ("pass", "fail")]
+    if fl:
+        ok = sum(1 for f in fl if f["status"] == "pass")
+        t.append({"label": "Your rules", "value": f"{ok} of {len(fl)} pass", "sub": "against your own thresholds", "tone": "pos" if ok == len(fl) else "", "personal": True})
+    return t
+
+
+def _catalysts(company) -> list[dict]:
+    """Dated items from the corporate-action data: board meetings, dividends and their dates, other actions. Newest first."""
+    out: list[dict] = []
+    if not company:
+        return out
+    acts = company.get("actions") or {}
+    for m in acts.get("meetings", []):
+        if m.get("date"):
+            out.append({"date": m["date"][:10], "text": (m.get("text") or "Board meeting")[:160], "kind": "Board meeting"})
+    for x in acts.get("dividends", [])[:3]:
+        if x.get("date"):
+            out.append({"date": x["date"][:10], "text": (x.get("text") or "Dividend")[:160], "kind": "Dividend"})
+    for x in acts.get("other", [])[:3]:
+        if x.get("date"):
+            out.append({"date": x["date"][:10], "text": f"{x.get('kind') or ''} {x.get('text') or ''}".strip()[:160], "kind": x.get("kind") or "Corporate action"})
+    out.sort(key=lambda c: c["date"], reverse=True)
+    return out[:8]
+
+
+def visuals_for(meta: dict) -> dict:
+    """The charts and data blocks for each section, built from our own tables at the moment the report is written, so the report is a fixed document."""
+    from app import viz
+    from app.routes.analytics import _lab
+
+    v = viz.build(meta["symbol"], {"market": meta["market"], "sector": meta.get("sector")}, _lab, last_price=meta.get("ref_price"))
+    out: dict[str, list] = {}
+
+    def add(key, block):
+        out.setdefault(key, []).append(block)
+
+    if v.get("growth"):
+        add("financials", {"type": "svg", "title": "Sales, growth and operating margin by quarter", "svg": v["growth"]["svg"], "read": v["growth"].get("read")})
+    if v.get("cash"):
+        add("cash", {"type": "svg", "title": "Net profit against operating cash flow, by year", "svg": v["cash"]["svg"], "read": v["cash"].get("read"), "legend": "cash"})
+    if v.get("cycle"):
+        add("cash", {"type": "svg", "title": "Days of stock, debtors and payables", "svg": v["cycle"]["svg"], "read": v["cycle"].get("read")})
+    if v.get("capital"):
+        add("balance", {"type": "svg", "title": "Return on capital employed, by year", "svg": v["capital"]["svg"], "read": v["capital"].get("read")})
+        if v["capital"].get("debt"):
+            add("balance", {"type": "debt", **v["capital"]["debt"]})
+    own = v.get("own") or {}
+    if own.get("area"):
+        add("people", {"type": "svg", "title": "Shareholding by quarter", "svg": own["area"]["svg"], "read": own["area"].get("read")})
+    if own.get("holders"):
+        add("people", {"type": "holders", **own["holders"]})
+    if v.get("rel"):
+        add("valuation", {"type": "svg", "title": f"The stock against {v['rel'].get('bench')}, both set to 100", "svg": v["rel"]["svg"], "read": v["rel"].get("read")})
+    val = v.get("value") or {}
+    if val.get("pe"):
+        add("valuation", {"type": "gauge", **val["pe"]})
+    if val.get("analysts"):
+        add("valuation", {"type": "analysts", **val["analysts"], "currency": meta.get("currency")})
+    if v.get("peers"):
+        add("valuation", {"type": "svg", "title": "Peers by P/E and P/B, bubble size is market cap", "svg": v["peers"]["svg"], "read": None})
+    return out
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ prompt, model
@@ -458,14 +576,22 @@ def finalise(rep: Report, d: Dossier, meta: dict) -> dict:
 
     sections = []
     for sec in rep.sections:
-        cites = [c for c in dict.fromkeys(re.findall(r"S\d+", " ".join(sec.cites))) if c in ids]
+        lead = cl(sec.lead)
+        points = [cl(p) for p in sec.points if (p or "").strip()][:6]
         body = cl(sec.body)
-        inline = [c for c in re.findall(r"\[(S[\d, S]+)\]", body)]
-        sections.append({"key": sec.key, "title": cl(sec.title), "body": body, "cites": cites or [c for grp in inline for c in re.findall(r"S\d+", grp) if c in ids]})
+        figs = [{"label": cl(f.label), "value": cl(f.value)} for f in sec.figures if (f.label or "").strip() and (f.value or "").strip()][:5]
+        text = " ".join([lead, *points, body])
+        if not body:
+            body = " ".join([lead, *points]).strip()          # a plain-text form for the checks and for readers of old exports
+        inline = re.findall(r"\[(S[\d, S]+)\]", text)
+        cites = [c for c in dict.fromkeys(re.findall(r"S\d+", " ".join(sec.cites))) if c in ids] or [c for grp in inline for c in re.findall(r"S\d+", grp) if c in ids]
+        cites = list(dict.fromkeys(cites + [c for grp in inline for c in re.findall(r"S\d+", grp) if c in ids]))
+        sections.append({"key": sec.key, "title": cl(sec.title), "lead": lead, "points": points, "figures": figs, "body": body, "cites": cites})
     out = {"dek": cl(rep.dek), "takeaways": [cl(t) for t in rep.takeaways][:3], "sections": sections, "valuation_read": cl(rep.valuation_read),
            "upgrade_if": [cl(t) for t in rep.upgrade_if], "downgrade_if": [cl(t) for t in rep.downgrade_if], "unknowns": [cl(t) for t in rep.unknowns]}
 
-    full = " ".join([out["dek"], *out["takeaways"], *(s["body"] for s in sections), out["valuation_read"], *out["upgrade_if"], *out["downgrade_if"]])
+    full = " ".join([out["dek"], *out["takeaways"], *(" ".join([s["lead"], *s["points"], s["body"], *(f["value"] for f in s["figures"])]) for s in sections), out["valuation_read"],
+                     *out["upgrade_if"], *out["downgrade_if"]])
     unmatched, total = textcheck.figures_not_in_sources(full, d.text)
     total = total or 1
     banned = banned_in(full)
@@ -488,9 +614,13 @@ def finalise(rep: Report, d: Dossier, meta: dict) -> dict:
               "source": g.source if g.source in ids else None}
         gd["quote_verified"] = verified(gd["quote"])
         guidance.append(gd)
-    inline_quotes = [q for sec in sections for q in re.findall(r"[\"\u201c]([^\"\u201d]{30,400})[\"\u201d]", sec["body"]) if len(q.split()) >= 6]
+    inline_quotes = [q for sec in sections for q in re.findall(r"[\"\u201c]([^\"\u201d]{30,400})[\"\u201d]", " ".join([sec["lead"], *sec["points"], sec["body"]])) if len(q.split()) >= 6]
     quotes_not_found = [q[:120] for q in inline_quotes if not verified(q)]
     out["guidance"] = guidance
+    own = re.compile(r"\b(the user|your (own )?(rules?|thresholds?|position|filters?)|user'?s)\b", re.I)
+    out["takeaway_personal"] = [bool(own.search(t)) for t in out["takeaways"]]
+    out["glance"] = meta.get("glance") or []
+    out["catalysts"] = meta.get("catalysts") or []
     out["sources"] = d.sources
     out["meta"] = {k: meta.get(k) for k in ("symbol", "name", "market", "sector", "ref_price", "ref_date", "currency", "gaps")}
     out["checks"] = {"numbers_total": total, "numbers_not_in_sources": [round(x, 2) for x in dict.fromkeys(unmatched)][:15], "numbers_not_in_sources_pct": round(100 * len(unmatched) / total),
@@ -547,6 +677,11 @@ def execute_research(report_id: int) -> None:
             rep, link = _generate(chain, build_prompt(d, meta, today), system_prompt(meta))
             model = link["label"]
             payload = finalise(rep, d, meta)
+            try:
+                payload["visuals"] = visuals_for(meta)
+            except Exception:  # noqa: BLE001 - charts are a bonus; the written report stands without them
+                logger.exception("research visuals skipped")
+                payload["visuals"] = {}
             payload["generated_at"] = datetime.now(timezone.utc).isoformat()
             payload["model"] = model
         except AnalysisError as e:

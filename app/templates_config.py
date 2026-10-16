@@ -3,8 +3,10 @@ are registered once and every router sees them — instead of each route file cr
 its own Jinja2Templates() and needing the same setup repeated everywhere."""
 
 import os
+import re
 
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup, escape
 
 templates = Jinja2Templates(directory="app/templates")
 
@@ -32,3 +34,25 @@ def _mcap(v, market):
 
 
 templates.env.filters["mcap"] = _mcap
+
+
+_CITE = re.compile(r"\s*\[(S\d+(?:\s*,\s*S\d+)*)\]")
+
+
+def _nocite(t):
+    """Report text without its [S#] source tags (used where a tag would only clutter: dek, takeaways, leads, figure values)."""
+    return _CITE.sub("", t or "").strip()
+
+
+def _cites(t):
+    """Report text with each [S#] tag shown as a small superscript linking to the source list."""
+    out = str(escape(t or ""))
+    return Markup(_CITE.sub(lambda m: "".join(f'<sup class="rs2-c"><a href="#src-{s}">{s}</a></sup>' for s in re.findall(r"S\d+", m.group(1))), out))
+
+
+templates.env.filters["nocite"] = _nocite
+templates.env.filters["cites"] = _cites
+
+
+_OWN = re.compile(r"\b(the user|your (own )?(rules?|thresholds?|position|filters?)|user'?s)\b", re.I)
+templates.env.tests["personalish"] = lambda t: bool(_OWN.search(t or ""))

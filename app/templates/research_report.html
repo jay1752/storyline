@@ -1,7 +1,43 @@
 {% extends "base.html" %}
 {% block title %}Deep research · {{ pos.company_name }} · Tenetfolio{% endblock %}
+
+{% macro block(b, cur) %}
+  {% if b.type == 'svg' %}
+  <figure class="rs2-fig"><figcaption>{{ b.title }}</figcaption>{{ b.svg|safe }}
+    {% if b.legend == 'cash' %}<div class="vz-legend"><span><i class="np"></i>Net profit</span><span><i class="cf"></i>Cash flow at or above profit</span><span><i class="short"></i>Cash flow below profit</span></div>{% endif %}
+    {% if b.read %}<p class="rs2-read">{{ b.read|safe }}</p>{% endif %}</figure>
+  {% elif b.type == 'debt' %}
+  <figure class="rs2-fig"><figcaption>Borrowings against reserves, FY{{ b.fy }}</figcaption>
+    <div class="vz-dr"><div><span>Borrowings</span><i style="width: {{ '%.1f'|format(b.pct) }}%"></i><b>Rs {{ '{:,.0f}'.format(b.b) }} Cr</b></div>
+      <div><span>Reserves</span><i class="res" style="width:100%"></i><b>Rs {{ '{:,.0f}'.format(b.s) }} Cr</b></div></div></figure>
+  {% elif b.type == 'holders' %}
+  <figure class="rs2-fig"><figcaption>Largest named holders, exchange filing for {{ b.period }}</figcaption>
+    <div class="vz-tw"><table class="vz-tbl"><thead><tr><th>Holder</th><th class="n">Holds</th>{% if b.has_prev %}<th class="n">Change</th>{% endif %}</tr></thead><tbody>
+      {% if b.promoters %}<tr><td><b>Promoter group</b><span>{{ b.promoters.n }} holders</span></td><td class="n">{{ '%.2f'|format(b.promoters.pct) }}%</td>{% if b.has_prev %}<td class="n">·</td>{% endif %}</tr>{% endif %}
+      {% for x in b.list %}<tr><td>{{ x.name }}<span>{{ x.category }}</span></td><td class="n">{{ '%.2f'|format(x.pct) }}%</td>
+        {% if b.has_prev %}<td class="n {{ 'pos' if x.chg and x.chg > 0 else ('neg' if x.chg and x.chg < 0 else '') }}">{% if x.new %}new{% elif x.chg %}{{ '%+.2f'|format(x.chg) }} pp{% else %}·{% endif %}</td>{% endif %}</tr>{% endfor %}
+    </tbody></table></div></figure>
+  {% elif b.type == 'gauge' %}
+  <figure class="rs2-fig"><figcaption>Today's P/E against its own three-year range</figcaption>
+    <div class="vz-gauge"><div class="pin" style="left: {{ '%.1f'|format(b.pos) }}%"></div><div class="pv" style="left: {{ '%.1f'|format(b.pos) }}%">{{ b.now }}x</div></div>
+    <div class="vz-gscale"><span>{{ b.lo }}x cheapest</span><span>{{ b.hi }}x dearest</span></div></figure>
+  {% elif b.type == 'analysts' %}
+  <figure class="rs2-fig"><figcaption>What analysts expect (their opinion, not ours)</figcaption>
+    {% if b.target %}{% set t = b.target %}
+    <div class="vz-range"><div class="span" style="left: {{ '%.1f'|format(t.p_lo) }}%; right: {{ '%.1f'|format(100 - t.p_hi) }}%"></div>
+      <div class="m" style="left: {{ '%.1f'|format(t.p_mean) }}%"><small>mean {{ cur }}{{ '{:,.0f}'.format(t.mean) }}</small></div>
+      {% if t.p_price is not none %}<div class="p" style="left: {{ '%.1f'|format(t.p_price) }}%"><small class="below{{ ' l' if t.p_price < 12 else (' r' if t.p_price > 88 else '') }}">price</small></div>{% endif %}
+      <span class="lo">{{ cur }}{{ '{:,.0f}'.format(t.low) }} low</span><span class="hi">{{ cur }}{{ '{:,.0f}'.format(t.high) }} high</span></div>
+    <p class="rs2-read">{{ t.n }} analysts{% if t.drift is not none %}; the mean target is {{ '%+.1f'|format(t.drift) }}% against 90 days ago{% endif %}.</p>{% endif %}
+    {% if b.ratings %}{% set rt = b.ratings %}
+    <div class="vz-ratings" role="img" aria-label="Analyst ratings">{% for sgm in rt.segments %}<i class="r{{ sgm.v }}" style="width: {{ '%.1f'|format(sgm.pct) }}%">{{ sgm.n }}</i>{% endfor %}</div>
+    <div class="vz-legend"><span><i class="r1"></i>Strong Buy</span><span><i class="r2"></i>Buy</span><span><i class="r3"></i>Hold</span><span><i class="r4"></i>Sell</span><span><i class="r5"></i>Strong Sell</span></div>
+    <p class="rs2-read">{{ rt.buy_now }}% rate it Buy or Strong Buy{% if rt.buy_3m is not none %}, against {{ rt.buy_3m }}% three months ago{% endif %}.</p>{% endif %}</figure>
+  {% endif %}
+{% endmacro %}
+
 {% block content %}
-<div class="page-head">
+<div class="page-head no-print">
   <div class="page-head-main">
     <div class="eyebrow"><a href="/management">Management</a><span>/</span><a href="/management/{{ pos.id }}">{{ pos.company_name }}</a><span>/</span><span>Deep research</span></div>
     <h1 class="page-title">{{ pos.company_name }}</h1>
@@ -10,78 +46,134 @@
   </div>
   <div class="page-actions">
     <a class="btn" href="/management/{{ pos.id }}">Back to the story</a>
+    {% if report %}<button class="btn" type="button" id="rs-pdf-open"><svg class="icon icon-sm"><use href="#i-copy"/></svg>Save as PDF</button>{% endif %}
     {% if pos.status == 'active' %}<button class="btn btn-primary" type="button" id="rs-go" data-id="{{ pos.id }}" {{ 'disabled' if busy or left_today == 0 else '' }}>{{ 'Writing…' if busy else ('Generate a new report' if report else 'Generate the report') }}</button>{% endif %}
   </div>
 </div>
 
-<p class="rs-note" id="rs-msg" role="status" {% if not (row and row.status == 'failed') %}hidden{% endif %}>{% if row and row.status == 'failed' %}The last report did not finish: {{ row.error }}{% endif %}</p>
+{% if report %}
+<div class="rs2-pdfbox no-print" id="rs-pdfbox" hidden>
+  <b>Save this report as a PDF</b>
+  <label class="rs2-chk"><input type="checkbox" id="rs-personal"> Include my rules, my position and journal (leave off if you will share the file)</label>
+  <button class="btn btn-primary btn-sm" type="button" id="rs-pdf-go">Open the print window</button>
+  <p class="rs2-fine">In the print window choose <b>Save as PDF</b> as the destination. On a phone: Share, then Print, then Save to Files. For a cleaner file turn off "Headers and footers" and keep "Background graphics" on.</p>
+</div>
+{% endif %}
+
+<p class="rs-note no-print" id="rs-msg" role="status" {% if not (row and row.status == 'failed') %}hidden{% endif %}>{% if row and row.status == 'failed' %}The last report did not finish: {{ row.error }}{% endif %}</p>
 
 {% if busy %}
-<div class="card rs-wait" id="rs-wait"><div class="card-body"><b>Writing the report.</b> It reads everything we hold on this company, then drafts and checks it. This usually takes a few minutes. You can leave this page; the report will be here when it is done.</div></div>
+<div class="card rs-wait no-print" id="rs-wait"><div class="card-body"><b>Writing the report.</b> It reads everything we hold on this company and its filings, then drafts and checks it. This usually takes a minute or two. You can leave this page; the report will be here when it is done.</div></div>
 {% elif not report %}
-<div class="card"><div class="card-body rs-intro">
+<div class="card no-print"><div class="card-body rs-intro">
   <h2 class="card-title">A long, sourced report on this company</h2>
-  <p>You ask for it, the AI model in your settings writes it. It reads our figures for this company, the Company section (profile, leadership, corporate actions, peers, analyst view), the shareholding filing, the exchange filings list and recent headlines. Every claim cites its source, and the report ends with what would change the view and what we could not establish.</p>
-  <p class="rs-fine">This version does not read the filing documents themselves (annual report, call transcripts, presentations). The report says so. You have {{ left_today }} of {{ per_day }} reports left today.</p>
+  <p>You ask for it, the AI model in your settings writes it. It reads our figures, the Company section, the shareholding filing, the latest call transcripts, investor presentation and results filing, and recent headlines. Every claim cites its source, and the report ends with what would change the view and what we could not establish.</p>
+  <p class="rs-fine">You have {{ left_today }} of {{ per_day }} reports left today.</p>
 </div></div>
 {% endif %}
 
 {% if report %}
-<article class="rs">
-  <aside class="rs-banner"><b>{{ "What this report read." if report.checks.documents_read else "What this report did not read." }}</b> {{ report.checks.note }} Reference price {{ report.meta.currency }} {{ '{:,.2f}'.format(report.meta.ref_price) if report.meta.ref_price else 'n/a' }} on {{ report.meta.ref_date }}.</aside>
-  <p class="rs-dek">{{ report.dek }}</p>
-  <ol class="rs-take">{% for t in report.takeaways %}<li>{{ t }}</li>{% endfor %}</ol>
+{% set cur = report.meta.currency or '' %}
+<article class="rs2" id="rs-doc" data-title="{{ pos.symbol.split(':')[-1] }} Deep research {{ report.generated_at[:10] }}">
 
-  {% for s in report.sections %}
-  <section class="rs-sec" id="sec-{{ s.key }}">
-    <h2>{{ s.title }}</h2>
-    {% for para in s.body.split('\n') if para.strip() %}<p>{{ para.strip() }}</p>{% endfor %}
-    {% if s.cites %}<p class="rs-cites">Sources {% for c in s.cites %}<a href="#src-{{ c }}">{{ c }}</a>{% endfor %}</p>{% endif %}
-  </section>
-  {% endfor %}
+  <header class="rs2-cover">
+    <div class="rs2-cover-main">
+      <div class="rs2-kicker">Deep research · {{ 'India' if report.meta.market == 'IN' else 'US' }}{% if report.meta.sector and report.meta.sector != 'Unclassified' %} · {{ report.meta.sector }}{% endif %}</div>
+      <h1>{{ report.meta.name or pos.company_name }}</h1>
+      <div class="rs2-sub"><span class="mono">{{ report.meta.symbol }}</span><span>Written {{ report.generated_at[:10] }}</span><span>Reference price {{ cur }} {{ '{:,.2f}'.format(report.meta.ref_price) if report.meta.ref_price else 'n/a' }} on {{ report.meta.ref_date }}</span></div>
+    </div>
+  </header>
 
-  {% if report.guidance %}
-  <section class="rs-sec" id="sec-guidance"><h2>What management said and what happened</h2>
-    <p class="rs-fine">Statements are quoted word for word from the documents we read. A mark shows whether the quote was found in the document text.</p>
-    <ul class="rs-guid">{% for g in report.guidance %}
-      <li><div class="g-head"><span class="mono">{{ g.said_on }}</span> {{ g.speaker }}{% if g.source %} <a href="#src-{{ g.source }}">{{ g.source }}</a>{% endif %}
-        <span class="badge {{ {'met': 'pos', 'beat': 'pos', 'missed': 'neg', 'partial': 'accent', 'pending': 'neutral', 'unclear': 'neutral'}[g.status] }}">{{ g.status }}</span></div>
-        <blockquote>{{ g.quote }}</blockquote>
-        <p class="g-topic"><b>{{ g.topic }}.</b> {{ g.outcome }} <span class="g-ver {{ 'ok' if g.quote_verified else 'bad' }}">{{ 'quote found in the document' if g.quote_verified else 'quote not found in the document text: treat as a paraphrase' }}</span></p></li>
-    {% endfor %}</ul>
+  {% if report.glance %}
+  <section class="rs2-glance" aria-label="At a glance">
+    {% set pids = [] %}{% for x in report.sources %}{% if 'own investment rules' in x.title or 'position, journal' in x.title %}{% set _ = pids.append(x.id) %}{% endif %}{% endfor %}
+    {% for t in report.glance %}<div class="rs2-tile {{ t.tone }}{{ ' personal' if t.personal else '' }}"><span class="l">{{ t.label }}</span><b>{{ t.value }}</b><span class="s">{{ t.sub }}</span></div>{% endfor %}
   </section>
   {% endif %}
 
-  <section class="rs-sec rs-val"><h2>The price against the evidence</h2><p>{{ report.valuation_read }}</p></section>
+  <p class="rs2-dek">{{ report.dek|nocite }}</p>
+  <ol class="rs2-take">{% for t in report.takeaways %}<li{% if t is personalish %} class="personal"{% endif %}><span class="n"></span><p>{{ t|nocite }}</p></li>{% endfor %}</ol>
 
-  {% if report.upgrade_if or report.downgrade_if %}
-  <section class="rs-trig">
-    <div><h3>The view improves if</h3><ul>{% for t in report.upgrade_if %}<li>{{ t }}</li>{% endfor %}</ul></div>
-    <div><h3>The view weakens if</h3><ul>{% for t in report.downgrade_if %}<li>{{ t }}</li>{% endfor %}</ul></div>
-  </section>
-  {% endif %}
+  <aside class="rs2-evidence">
+    <span class="h">{{ 'What this report read' if report.checks.documents_read else 'What this report did not read' }}</span>
+    {% if report.checks.documents_read %}
+      {% for d in report.checks.documents_read %}<span class="doc"><b>{{ {'transcript': 'Call transcript', 'presentation': 'Investor deck', 'results': 'Results filing'}.get(d.kind, d.kind) }}</b> {{ d.filed_at }}</span>{% endfor %}
+      <span class="doc no">Annual report: not read</span>
+    {% else %}<span class="doc no">No filing documents were read. It uses our data, the filings list and headlines.</span>{% endif %}
+  </aside>
 
-  {% if report.unknowns %}<section class="rs-sec"><h2>What we still do not know</h2><ul class="rs-list">{% for t in report.unknowns %}<li>{{ t }}</li>{% endfor %}</ul></section>{% endif %}
+  <div class="rs2-layout">
+    <nav class="rs2-toc no-print" aria-label="Sections"><b>In this report</b>
+      <ol>{% for s in report.sections %}<li class="{{ 'personal' if s.key == 'rules' else '' }}"><a href="#sec-{{ s.key }}"><span>{{ '%02d'|format(loop.index) }}</span>{{ s.title }}</a></li>{% endfor %}
+        {% if report.guidance %}<li><a href="#sec-guidance"><span>·</span>What management said</a></li>{% endif %}
+        <li><a href="#sec-triggers"><span>·</span>What would change the view</a></li><li><a href="#sec-sources"><span>·</span>Sources</a></li></ol></nav>
 
-  <section class="rs-sec"><h2>Sources</h2>
-    <ol class="rs-srcl">{% for s in report.sources %}<li id="src-{{ s.id }}"><b>{{ s.id }}</b> {{ s.title }}<span>{{ s.publisher }}{% if s.as_of %} · as of {{ s.as_of }}{% endif %}</span></li>{% endfor %}</ol>
-  </section>
+    <div class="rs2-main">
+      {% for s in report.sections %}
+      <section class="rs2-sec{{ ' personal' if s.key == 'rules' else '' }}" id="sec-{{ s.key }}">
+        <div class="rs2-h"><span class="num">{{ '%02d'|format(loop.index) }}</span><h2>{{ s.title }}</h2></div>
+        {% if s.lead or s.points %}
+          {% if s.lead %}<p class="lead">{{ s.lead|nocite }}</p>{% endif %}
+          <div class="rs2-cols">
+            {% if s.points %}<ul class="rs2-points">{% for p in s.points %}<li>{{ p|cites }}</li>{% endfor %}</ul>{% endif %}
+            {% if s.figures %}<dl class="rs2-figs">{% for f in s.figures %}<div><dt>{{ f.label }}</dt><dd>{{ f.value|nocite }}</dd></div>{% endfor %}</dl>{% endif %}
+          </div>
+        {% else %}
+          {% for para in s.body.split('\n') if para.strip() %}<p class="rs2-legacy">{{ para.strip() }}</p>{% endfor %}
+        {% endif %}
+        {% if report.visuals and report.visuals.get(s.key) %}<div class="rs2-visuals">{% for b in report.visuals[s.key] %}{{ block(b, cur) }}{% endfor %}</div>{% endif %}
+        {% if s.key == 'catalysts' and report.catalysts %}
+        <figure class="rs2-fig"><figcaption>From the exchange's corporate-action data</figcaption>
+          <ol class="rs2-time">{% for c in report.catalysts %}<li><time>{{ c.date }}</time><span class="k">{{ c.kind }}</span><span>{{ c.text }}</span></li>{% endfor %}</ol></figure>
+        {% endif %}
+        {% if s.cites %}<p class="rs2-cites">Sources {% for c in s.cites|unique %}<a href="#src-{{ c }}"{% if c in pids %} class="personal"{% endif %}>{{ c }}</a>{% endfor %}</p>{% endif %}
+      </section>
 
-  <details class="rs-checks"><summary>Automatic checks on this report</summary>
-    <ul>
-      <li>{{ report.checks.numbers_total }} figures in the text; <b>{{ report.checks.numbers_not_in_sources|length }}</b> could not be matched to a source{% if report.checks.numbers_not_in_sources %} ({{ report.checks.numbers_not_in_sources|join(', ') }}){% endif %}. A figure listed here is not a source figure rounded to the digits shown: usually something the writer worked out itself, such as a percentage difference. Verify it before relying on it.</li>
-      <li>Banned phrases found: {{ report.checks.banned_phrases|join(', ') or 'none' }}. Dashes removed: {{ report.checks.dashes_removed }}.</li>
-      {% if report.checks.documents_read %}<li>Quotes: {{ report.checks.guidance_quotes_unverified }} guidance quote(s) not found word for word in the documents{% if report.checks.quotes_not_found %}; quoted passages in the text not found: {{ report.checks.quotes_not_found|length }}{% endif %}.</li>{% endif %}
-      <li>Sections missing: {{ report.checks.missing_sections|join(', ') or 'none' }}.</li>
-      <li>Data gaps flagged by code: {{ report.meta.gaps|join('; ') or 'none' }}.</li>
-    </ul>
-  </details>
-  <p class="rs-fine">{{ report.disclaimer }}</p>
+      {% if s.key == 'promises' and report.guidance %}
+      <section class="rs2-sec" id="sec-guidance">
+        <div class="rs2-h"><span class="num">·</span><h2>What management said, and what happened</h2></div>
+        <p class="rs2-fine">Quoted word for word from the documents we read. Each mark says whether the quote was found in the document text.</p>
+        <ul class="rs-guid">{% for g in report.guidance %}
+          <li><div class="g-head"><span class="mono">{{ g.said_on }}</span> {{ g.speaker }}{% if g.source %} <a href="#src-{{ g.source }}">{{ g.source }}</a>{% endif %}
+            <span class="badge {{ {'met': 'pos', 'beat': 'pos', 'missed': 'neg', 'partial': 'accent', 'pending': 'neutral', 'unclear': 'neutral'}[g.status] }}">{{ g.status }}</span></div>
+            <blockquote>{{ g.quote }}</blockquote>
+            <p class="g-topic"><b>{{ g.topic }}.</b> {{ g.outcome|nocite }} <span class="g-ver {{ 'ok' if g.quote_verified else 'bad' }}">{{ 'quote found in the document' if g.quote_verified else 'quote not found in the document text: read it as a paraphrase' }}</span></p></li>
+        {% endfor %}</ul>
+      </section>
+      {% endif %}
+      {% endfor %}
+
+      <section class="rs2-sec rs2-val" id="sec-triggers">
+        <div class="rs2-h"><span class="num">·</span><h2>The price against the evidence, and what would change the view</h2></div>
+        <p class="lead">{{ report.valuation_read }}</p>
+        {% if report.upgrade_if or report.downgrade_if %}
+        <div class="rs2-trig">
+          <div class="up"><h3>The view improves if</h3><ul>{% for t in report.upgrade_if %}<li>{{ t }}</li>{% endfor %}</ul></div>
+          <div class="down"><h3>The view weakens if</h3><ul>{% for t in report.downgrade_if %}<li>{{ t }}</li>{% endfor %}</ul></div>
+        </div>{% endif %}
+        {% if report.unknowns %}<h3 class="rs2-h3">What we still do not know</h3><ul class="rs-list">{% for t in report.unknowns %}<li>{{ t }}</li>{% endfor %}</ul>{% endif %}
+      </section>
+
+      <section class="rs2-sec" id="sec-sources">
+        <div class="rs2-h"><span class="num">·</span><h2>Sources</h2></div>
+        <ol class="rs-srcl">{% for s in report.sources %}<li id="src-{{ s.id }}" class="{{ 'personal' if ('own investment rules' in s.title or 'position, journal' in s.title) else '' }}"><b>{{ s.id }}</b> {{ s.title }}<span>{{ s.publisher }}{% if s.as_of %} · as of {{ s.as_of }}{% endif %}</span></li>{% endfor %}</ol>
+        <details class="rs-checks no-print"><summary>Automatic checks on this report</summary>
+          <ul>
+            <li>{{ report.checks.numbers_total }} figures in the text; <b>{{ report.checks.numbers_not_in_sources|length }}</b> could not be matched to a source{% if report.checks.numbers_not_in_sources %} ({{ report.checks.numbers_not_in_sources|join(', ') }}){% endif %}. A figure listed here is not a source figure rounded to the digits shown: usually something the writer worked out itself. Verify it before relying on it.</li>
+            <li>Banned phrases found: {{ report.checks.banned_phrases|join(', ') or 'none' }}. Dashes removed: {{ report.checks.dashes_removed }}.</li>
+            {% if report.checks.documents_read %}<li>{{ report.checks.guidance_quotes_unverified }} guidance quote(s) not found word for word in the documents{% if report.checks.quotes_not_found %}; quoted passages in the text not found: {{ report.checks.quotes_not_found|length }}{% endif %}.</li>{% endif %}
+            <li>Sections missing: {{ report.checks.missing_sections|join(', ') or 'none' }}. Data gaps flagged by code: {{ report.meta.gaps|join('; ') or 'none' }}.</li>
+          </ul></details>
+      </section>
+
+      <footer class="rs2-foot"><p>{{ report.disclaimer }}</p><p class="rs2-brand">Prepared with Tenetfolio · tenetfolio.com</p></footer>
+    </div>
+  </div>
 </article>
 {% endif %}
 
 {% if history|length > 1 %}
-<section class="section"><h2 class="section-title">Earlier reports</h2>
+<section class="section no-print"><h2 class="section-title">Earlier reports</h2>
   <ul class="rs-hist">{% for h in history %}<li><a href="/management/{{ pos.id }}/research/{{ h.id }}">{{ h.created_at[:16] }}</a> · {{ h.status }}{% if h.model %} · {{ h.model }}{% endif %}</li>{% endfor %}</ul></section>
 {% endif %}
 
@@ -106,6 +198,21 @@
     catch (e) { go.disabled = false; go.textContent = "Generate the report"; say(e.message, true); return; }
     location.reload();
   });
+
+  // Save as PDF = the device's own print window. The file name defaults to the page title, so set it to something sensible while printing,
+  // and leave the personal parts (my rules, position, journal) out unless the box is ticked.
+  const open = document.getElementById("rs-pdf-open"), box = document.getElementById("rs-pdfbox"), doc = document.getElementById("rs-doc");
+  if (open && box && doc) {
+    open.addEventListener("click", () => { box.hidden = !box.hidden; });
+    document.getElementById("rs-pdf-go").addEventListener("click", () => {
+      const oldTitle = document.title;
+      doc.classList.toggle("print-clean", !document.getElementById("rs-personal").checked);
+      document.title = doc.dataset.title;
+      const restore = () => { document.title = oldTitle; doc.classList.remove("print-clean"); window.removeEventListener("afterprint", restore); };
+      window.addEventListener("afterprint", restore);
+      window.print();
+    });
+  }
 })();
 </script>
 {% endblock %}
