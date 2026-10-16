@@ -1878,3 +1878,8 @@ details.auth-pw[open] > summary { margin-bottom: 0.8rem; }
 .rs-srcl li { display: grid; grid-template-columns: 2.6rem 1fr; gap: 0 0.5rem; align-items: baseline; padding-bottom: 0.45rem; border-bottom: 1px solid var(--border); scroll-margin-top: 4rem; }
 .rs-srcl li:target { background: var(--badge-accent-bg); }
 .rs-srcl b { font: 500 0.76rem var(--font-mono); color: var(--structure); } .rs-srcl span { grid-column: 2; font-size: 0.76rem; color: var(--muted); }
+.rs-guid { list-style: none; margin: 0.4rem 0 0; padding: 0; display: grid; gap: 0.9rem; }
+.rs-guid li { padding: 0.7rem 0.9rem; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--card); }
+.rs-guid .g-head { font-size: 0.82rem; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; } .rs-guid .g-head a { font: 400 0.72rem var(--font-mono); color: var(--structure); }
+.rs-guid blockquote { margin: 0.45rem 0; padding-left: 0.8rem; border-left: 3px solid var(--structure); font-size: 0.92rem; line-height: 1.55; }
+.rs-guid .g-topic { margin: 0; font-size: 0.86rem; } .g-ver { display: block; margin-top: 0.25rem; font: 400 0.72rem var(--font-mono); } .g-ver.ok { color: var(--pos); } .g-ver.bad { color: var(--neg); }

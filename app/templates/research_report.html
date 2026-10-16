@@ -28,7 +28,7 @@
 
 {% if report %}
 <article class="rs">
-  <aside class="rs-banner"><b>What this report did not read.</b> {{ report.checks.note }} It uses our data, the filings list and headlines. Reference price {{ report.meta.currency }} {{ '{:,.2f}'.format(report.meta.ref_price) if report.meta.ref_price else 'n/a' }} on {{ report.meta.ref_date }}.</aside>
+  <aside class="rs-banner"><b>{{ "What this report read." if report.checks.documents_read else "What this report did not read." }}</b> {{ report.checks.note }} Reference price {{ report.meta.currency }} {{ '{:,.2f}'.format(report.meta.ref_price) if report.meta.ref_price else 'n/a' }} on {{ report.meta.ref_date }}.</aside>
   <p class="rs-dek">{{ report.dek }}</p>
   <ol class="rs-take">{% for t in report.takeaways %}<li>{{ t }}</li>{% endfor %}</ol>
 
@@ -39,6 +39,18 @@
     {% if s.cites %}<p class="rs-cites">Sources {% for c in s.cites %}<a href="#src-{{ c }}">{{ c }}</a>{% endfor %}</p>{% endif %}
   </section>
   {% endfor %}
+
+  {% if report.guidance %}
+  <section class="rs-sec" id="sec-guidance"><h2>What management said and what happened</h2>
+    <p class="rs-fine">Statements are quoted word for word from the documents we read. A mark shows whether the quote was found in the document text.</p>
+    <ul class="rs-guid">{% for g in report.guidance %}
+      <li><div class="g-head"><span class="mono">{{ g.said_on }}</span> {{ g.speaker }}{% if g.source %} <a href="#src-{{ g.source }}">{{ g.source }}</a>{% endif %}
+        <span class="badge {{ {'met': 'pos', 'beat': 'pos', 'missed': 'neg', 'partial': 'accent', 'pending': 'neutral', 'unclear': 'neutral'}[g.status] }}">{{ g.status }}</span></div>
+        <blockquote>{{ g.quote }}</blockquote>
+        <p class="g-topic"><b>{{ g.topic }}.</b> {{ g.outcome }} <span class="g-ver {{ 'ok' if g.quote_verified else 'bad' }}">{{ 'quote found in the document' if g.quote_verified else 'quote not found in the document text: treat as a paraphrase' }}</span></p></li>
+    {% endfor %}</ul>
+  </section>
+  {% endif %}
 
   <section class="rs-sec rs-val"><h2>The price against the evidence</h2><p>{{ report.valuation_read }}</p></section>
 
@@ -59,6 +71,7 @@
     <ul>
       <li>{{ report.checks.numbers_total }} figures in the text; <b>{{ report.checks.numbers_not_in_sources|length }}</b> could not be matched to a source{% if report.checks.numbers_not_in_sources %} ({{ report.checks.numbers_not_in_sources|join(', ') }}){% endif %}. A figure listed here is not a source figure rounded to the digits shown: usually something the writer worked out itself, such as a percentage difference. Verify it before relying on it.</li>
       <li>Banned phrases found: {{ report.checks.banned_phrases|join(', ') or 'none' }}. Dashes removed: {{ report.checks.dashes_removed }}.</li>
+      {% if report.checks.documents_read %}<li>Quotes: {{ report.checks.guidance_quotes_unverified }} guidance quote(s) not found word for word in the documents{% if report.checks.quotes_not_found %}; quoted passages in the text not found: {{ report.checks.quotes_not_found|length }}{% endif %}.</li>{% endif %}
       <li>Sections missing: {{ report.checks.missing_sections|join(', ') or 'none' }}.</li>
       <li>Data gaps flagged by code: {{ report.meta.gaps|join('; ') or 'none' }}.</li>
     </ul>

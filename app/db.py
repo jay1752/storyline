@@ -136,6 +136,19 @@ CREATE TABLE IF NOT EXISTS us_mcap_override (   -- US market cap from Yahoo wher
     symbol TEXT PRIMARY KEY, mcap_m REAL, as_of TEXT
 );
 
+CREATE TABLE IF NOT EXISTS filings (         -- every exchange filing we have seen for a stock, kept (the 45-day feed cache is overwritten; this is not); app/filings.py
+    id TEXT PRIMARY KEY,                     -- the PDF's file name on the exchange archive: unique per filing
+    symbol TEXT NOT NULL, filed_at TEXT NOT NULL, category TEXT, title TEXT, url TEXT NOT NULL,
+    kind TEXT NOT NULL,                      -- transcript | presentation | results | press_release | annual_report | audio | schedule | other
+    source TEXT NOT NULL DEFAULT 'nse', first_seen TEXT, last_seen TEXT,
+    text_status TEXT NOT NULL DEFAULT 'none' -- none | ok | failed | too_big | no_text
+);
+CREATE INDEX IF NOT EXISTS idx_filings_symbol ON filings(symbol, filed_at);
+
+CREATE TABLE IF NOT EXISTS filing_text (     -- the extracted text of the filings we chose to read (call transcripts, decks, results)
+    id TEXT PRIMARY KEY, text TEXT, pages INTEGER, chars INTEGER, extracted_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS index_prices (    -- benchmark and sector index closes (Yahoo), for "stock vs its market / sector"; filled by scripts/fill_index_prices.py
     symbol TEXT NOT NULL, date TEXT NOT NULL, close REAL,
     PRIMARY KEY (symbol, date)

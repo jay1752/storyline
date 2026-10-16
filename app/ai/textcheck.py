@@ -82,3 +82,19 @@ def strings_of(obj) -> list[str]:
     if isinstance(obj, dict):
         return [s for v in obj.values() for s in strings_of(v)]
     return []
+
+
+def style_fix(s: str) -> tuple[str, int]:
+    """Safe one-for-one fixes for banned phrases the model keeps writing. Anything that needs a rewrite (e.g. "overall") is left for the report's check to list."""
+    n = 0
+    for pat, rep in ((r"\bit(?:'s| is) important to note that\s+", ""), (r"\brobust\b", "strong"), (r"\bcompelling\b", "strong")):
+        s, k = re.subn(pat, rep, s, flags=re.I)
+        n += k
+    s = re.sub(r"(^|[.!?]\s+)([a-z])", lambda m: m.group(1) + m.group(2).upper(), s)   # the sentence that lost its opener starts with a capital again
+    return s, n
+
+
+def first_words(quote: str, limit: int = 40) -> tuple[str, bool]:
+    """A quote longer than `limit` words is cut to its first `limit` words plus an ellipsis (still word for word). Returns (text, was_cut)."""
+    w = quote.split()
+    return (quote, False) if len(w) <= limit else (" ".join(w[:limit]).rstrip(",;:") + " ...", True)

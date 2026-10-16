@@ -48,7 +48,7 @@ say so and offer the nearest thing. For general questions (what a ratio means, h
 comparing approaches) answer from your own knowledge, clearly separate it from the user's data, and note when something may be out of date. \
 You have no live web access: for news after your knowledge, say you can't check.
 
-Tools: get_stock_analytics (everything the Analytics page shows for any stock), get_my_rules, get_management_overview (the user's tracked \
+Tools: get_filings and get_filing_text (the exchange filings we keep for an Indian stock, and the text of its latest call transcript, investor presentation or results filing: use them when asked what management said or promised), get_stock_analytics (everything the Analytics page shows for any stock), get_my_rules, get_management_overview (the user's tracked \
 stocks and their latest stories), get_portfolio_summary, get_community_briefing, get_stock_summary, get_price_history, search_stocks. \
 Call a tool when the user asks about something other than the screen they are on. To judge any stock against the user's rules, use get_stock_analytics (it carries the pass/fail per rule); get_stock_summary is only a quick look. Speak to the user as \"you\" / \"your\", never \"the user\". Do not narrate before calling a tool; just call it, \
 then answer.
@@ -289,3 +289,46 @@ def get_community_briefing(date: Optional[str] = None) -> str:
     _note_tool("get_community_briefing", date)
     from app.ai.page_context import briefing_digest
     return briefing_digest(date) or "no briefing found"
+
+
+@agent.tool_plain
+def get_filings(symbol: str, kind: Optional[str] = None) -> str:
+    """The exchange filings we keep for one Indian stock, newest first: date, kind (transcript, presentation, results, press_release, other) and title, with whether we hold the
+    document's text. `symbol` is exchange-qualified, e.g. "NSE:TITAN". `kind` optionally narrows the list. Use it to see what a company has filed before reading one."""
+    _note_tool("get_filings", symbol)
+    from app import filings as fil
+
+    rows = fil.latest(symbol, kind, 15)
+    if not rows:
+        res = fil.sync(symbol)
+        rows = fil.latest(symbol, kind, 15)
+        if not rows:
+            return f"no filings found for {symbol}" + (f" ({res['error']})" if res.get("error") else "")
+    return "\n".join(f"{r['filed_at'][:10]} | {r['kind']} | {(r['title'] or r['category'] or '')[:120]} | text {'held' if r['text_status'] == 'ok' else r['text_status']}" for r in rows)
+
+
+@agent.tool_plain
+def get_filing_text(symbol: str, kind: str = "transcript", offset: int = 0) -> str:
+    """The text of the latest filing of a kind for one Indian stock: kind is "transcript" (earnings call, with named speakers), "presentation" (investor deck) or "results" (the
+    financial results filing). Returns up to 12,000 characters starting at `offset`, with the title and filing date; call again with a larger offset to read on. Quote it
+    word for word only in short passages (25 words at most) with the date and speaker; otherwise paraphrase and say so."""
+    _note_tool("get_filing_text", f"{symbol} {kind}")
+    from app import filings as fil
+
+    if kind not in ("transcript", "presentation", "results"):
+        return "kind must be transcript, presentation or results"
+    rows = fil.latest(symbol, kind, 1)
+    if not rows:
+        fil.sync(symbol)
+        rows = fil.latest(symbol, kind, 1)
+    if not rows:
+        return f"no {kind} found for {symbol}"
+    r = rows[0]
+    if r["text_status"] != "ok":
+        r["text_status"] = fil.ensure_text(r["id"])
+    text = fil.text_of(r["id"]) if r["text_status"] == "ok" else None
+    if not text:
+        return f"found the {kind} filed {r['filed_at'][:10]} ({r['url']}) but could not read its text ({r['text_status']})"
+    chunk = text[max(0, offset): max(0, offset) + 12000]
+    more = len(text) - (max(0, offset) + len(chunk))
+    return f"{kind} filed {r['filed_at'][:10]}: {(r['title'] or '')[:140]}\nsource: {r['url']}\n(characters {max(0, offset)} to {max(0, offset) + len(chunk)} of {len(text)}; {more if more > 0 else 0} more)\n\n{chunk}"

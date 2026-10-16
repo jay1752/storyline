@@ -20,6 +20,8 @@ import threading
 import time
 from datetime import date, datetime, timedelta, timezone
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.ai import errors, textcheck
@@ -44,7 +46,7 @@ SECTIONS = [
     ("cash", "Does reported profit turn into cash?", "Operating cash flow against profit for at least three years, free cash flow, and working-capital days. State plainly when profit grows but cash does not."),
     ("balance", "What could break the balance sheet?", "Borrowings against reserves, interest cover, current and quick ratio, and any pledge. If a lender's figures are missing, say they are missing."),
     ("people", "Who runs it and who owns it", "Named officers, promoter holding and its trend, pledge, and the largest named holders with their change. Note what the data cannot show (pay, incentives)."),
-    ("promises", "What management promised and what happened", "We have not read the call transcripts or presentations in this version. Say so, then use only what the filings list, corporate actions and headlines show (results dates, dividends, board outcomes, orders)."),
+    ("promises", "What management promised and what happened", "If call transcripts or presentations are in the dossier: write 90 to 200 words of narrative that walks through the material statements management made (what, when, by whom), what the figures and later filings since show, and where they fell short or beat. The guidance list is shown separately under this section, so do not just point to it: the narrative must stand on its own and quote at most one or two short passages. If no document text was read, say so and use only the filings list, corporate actions and headlines."),
     ("growth", "What drives growth over the next two to three years", "From the analyst estimates if present (label them as analysts' views, with the number of analysts) and the company's own growth record. No forecast of your own."),
     ("better", "What could go better than the base case", "Specific levers, each with the figure that would confirm it."),
     ("worse", "What could go worse than the base case", "A ranked, specific bear case, each with the figure that would confirm it."),
@@ -64,9 +66,7 @@ HONESTY RULES (non-negotiable)
 - You do not give a price target, a buy, sell or hold instruction, or a personal recommendation. You give a valuation-versus-price read and measurable triggers.
 - Not every section can be filled from this dossier. Where evidence is missing, say what is missing in one sentence and move on. An honest gap is better than a guess.
 
-EVIDENCE LIMITS OF THIS VERSION
-The annual report, earnings-call transcripts and investor presentations have NOT been read. The filings feed gives titles, dates and categories only. Never describe
-what a call or a filing "said" unless the dossier quotes it.
+<<evidence>>
 
 HOW TO WRITE
 - Plain English, long direct sentences, one causal thread from the first section to the last. Stop when the point is made.
@@ -91,6 +91,16 @@ class Sec(BaseModel):
     cites: list[str] = Field(default_factory=list)
 
 
+class Guidance(BaseModel):
+    said_on: str = Field(description="date of the call or document, YYYY-MM-DD")
+    speaker: str = Field(description="name and role as printed in the transcript, or 'company presentation'")
+    quote: str = Field(description="word for word from the document, at most 40 words")
+    topic: str
+    outcome: str = Field(description="what the figures and later filings in the dossier show since, with source ids; or 'not yet known'")
+    status: Literal["pending", "met", "beat", "missed", "partial", "unclear"]
+    source: str = Field(description="source id of the document, for example S14")
+
+
 class Report(BaseModel):
     dek: str
     takeaways: list[str]
@@ -99,6 +109,24 @@ class Report(BaseModel):
     upgrade_if: list[str] = Field(default_factory=list)
     downgrade_if: list[str] = Field(default_factory=list)
     unknowns: list[str] = Field(default_factory=list)
+    guidance: list[Guidance] = Field(default_factory=list, description="4 to 8 material management statements from the documents with what happened since; empty if no document text was read")
+
+
+def system_prompt(meta: dict) -> str:
+    docs = meta.get("documents") or []
+    if docs:
+        listing = "; ".join(f"{d['source_id']} {d['label']}" for d in docs)
+        evidence = (f"DOCUMENTS READ\nThe dossier includes the extracted text of: {listing}. You may quote them. A quote is word for word and SHORT: at most 25 words (anything longer is cut by the system), with the speaker (call transcripts name "
+                    "their speakers) and the source id, for example: Ajoy Chawla said \"...\" [S15]. If you are not certain of the exact words, paraphrase and say \"in paraphrase\". Never attribute a "
+                    "statement to a person unless the transcript text shows it. Extraction can drop a table or a chart: do not infer a figure that is not in the text.\n"
+                    "The annual report was NOT read. The filings list gives titles, dates and categories for everything else.\n"
+                    "Fill the guidance list with 4 to 8 of the most material statements management made (targets, plans, expectations), each with its date, speaker, verbatim quote, "
+                    "what the figures and later filings in the dossier show since (cite ids), and a status: pending if the period is not complete, met, beat, missed or partial against what was said, "
+                    "unclear if the dossier cannot tell.")
+    else:
+        evidence = ("EVIDENCE LIMITS OF THIS RUN\nNo filing documents (annual report, call transcripts, presentations) were read. The filings feed gives titles, dates and categories only. "
+                    "Never describe what a call or a filing \"said\". Leave the guidance list empty and say in the promises section that no documents were read.")
+    return SYSTEM_PROMPT.replace("<<evidence>>", evidence)
 
 
 def _now() -> str:
@@ -251,14 +279,46 @@ def build_dossier(user_id: int, pos) -> tuple[Dossier, dict]:
     elif market == "IN":
         meta["gaps"].append("No company profile or corporate actions on file")
 
-    # S7 exchange filings feed (titles only)
-    try:
-        from app.announcements import get_announcements
-        ann = get_announcements(sym, limit=25) if market == "IN" else {"items": []}
-        fl2 = [f"{i['at'][:10]} | {i.get('category') or 'n/a'} | {i['title']}" + (f" | {i['summary']}" if i.get("summary") else "") for i in ann.get("items", [])[:25]]
-        d.add("Exchange filings feed, last 45 days (titles and categories only; the documents themselves were not read)", "BSE announcements", (ann.get("as_of") or "")[:10] or None, fl2)
-    except Exception as e:  # noqa: BLE001
-        logger.info("research: filings feed skipped: %s", e)
+    # S7 the filings we keep (NSE) and the text of the documents worth reading; BSE's 45-day feed is only the fallback
+    meta["documents"], meta["doc_text"] = [], {}
+    index_done = False
+    if market == "IN":
+        try:
+            from app import filings as fil
+
+            got = fil.refresh_key_documents(sym)
+            rows = [r for r in fil.latest(sym, None, 60) if r["kind"] not in ("newspaper", "schedule", "audio")][:30]
+            if rows:
+                fl2 = [f"{r['filed_at'][:10]} | {r['kind']} | {(r['title'] or r['category'] or '')[:150]}" for r in rows]
+                d.add("Exchange filings kept for this company, last 13 months (titles and kinds only; the documents marked as read below are included in full)", "NSE corporate announcements",
+                      rows[0]["filed_at"][:10], fl2)
+                index_done = True
+            caps = {"transcript": 60000, "presentation": 30000, "results": 28000}
+            labels = {"transcript": "Earnings call transcript", "presentation": "Investor presentation", "results": "Financial results filing (outcome of board meeting)"}
+            for doc in got["read"]:
+                txt = fil.text_of(doc["id"]) if doc["text_status"] == "ok" else None
+                if not txt:
+                    meta["gaps"].append(f"Could not read the {labels.get(doc['kind'], doc['kind'])} filed {doc['filed_at'][:10]} ({doc['text_status']})")
+                    continue
+                trimmed = txt[:caps.get(doc["kind"], 20000)]
+                lab = f"{labels.get(doc['kind'], doc['kind'])}, filed {doc['filed_at'][:10]}"
+                sid = d.add(f"{lab} (document text, extracted from the PDF" + (", first part only" if len(trimmed) < len(txt) else "") + ")", "The company, via NSE", doc["filed_at"][:10],
+                            [trimmed], note=doc["url"])
+                if sid:
+                    meta["documents"].append({"source_id": sid, "kind": doc["kind"], "label": lab, "filed_at": doc["filed_at"][:10], "url": doc["url"], "chars": len(trimmed)})
+                    meta["doc_text"][sid] = trimmed
+            if got["sync"].get("error") and not rows:
+                meta["gaps"].append("The exchange filings list could not be fetched")
+        except Exception as e:  # noqa: BLE001
+            logger.info("research: filings store skipped: %s", e)
+    if not index_done:
+        try:
+            from app.announcements import get_announcements
+            ann = get_announcements(sym, limit=25) if market == "IN" else {"items": []}
+            fl2 = [f"{i['at'][:10]} | {i.get('category') or 'n/a'} | {i['title']}" + (f" | {i['summary']}" if i.get("summary") else "") for i in ann.get("items", [])[:25]]
+            d.add("Exchange filings feed, last 45 days (titles and categories only; the documents themselves were not read)", "BSE announcements", (ann.get("as_of") or "")[:10] or None, fl2)
+        except Exception as e:  # noqa: BLE001
+            logger.info("research: filings feed skipped: %s", e)
 
     # S8 shareholding and named holders
     sl = []
@@ -352,7 +412,7 @@ WRITE THE REPORT with these sections, in this order, using these keys:
 Then valuation_read (2 to 4 sentences: where the price sits against its own history and the peers, and what the price already seems to expect; no target), upgrade_if, downgrade_if and unknowns."""
 
 
-def _generate(chain: list[dict], prompt: str) -> tuple[Report, dict]:
+def _generate(chain: list[dict], prompt: str, system: str) -> tuple[Report, dict]:
     from pydantic_ai import Agent, PromptedOutput
 
     if not chain:
@@ -362,12 +422,12 @@ def _generate(chain: list[dict], prompt: str) -> tuple[Report, dict]:
         for attempt in range(3):
             try:
                 try:
-                    result = Agent(model=link["model"], system_prompt=SYSTEM_PROMPT, output_type=Report).run_sync(prompt)
+                    result = Agent(model=link["model"], system_prompt=system, output_type=Report).run_sync(prompt)
                 except Exception as first:  # noqa: BLE001
                     t = (type(first).__name__ + " " + str(first)).lower()
                     if not any(w in t for w in ("tool_use_failed", "tool call validation", "did not match schema", "unexpectedmodelbehavior", "validation error", "does not support tool", "tool use")):
                         raise
-                    result = Agent(model=link["model"], system_prompt=SYSTEM_PROMPT, output_type=PromptedOutput(Report)).run_sync(prompt)
+                    result = Agent(model=link["model"], system_prompt=system, output_type=PromptedOutput(Report)).run_sync(prompt)
                 return result.output, link
             except Exception as e:  # noqa: BLE001
                 logger.warning("research: %s failed (attempt %d): %s: %s", link["label"], attempt + 1, type(e).__name__, str(e)[:200])
@@ -386,11 +446,14 @@ def finalise(rep: Report, d: Dossier, meta: dict) -> dict:
     """Turn the model's answer into the stored report, with the automatic checks. Nothing here changes a figure."""
     ids = {s["id"] for s in d.sources}
     dashes = 0
+    fixed = [0]
 
     def cl(x: str) -> str:
         nonlocal dashes
         y, n = textcheck.clean_dashes(x or "")
+        y, k = textcheck.style_fix(y)
         dashes += n
+        fixed[0] += k
         return y.strip()
 
     sections = []
@@ -408,11 +471,34 @@ def finalise(rep: Report, d: Dossier, meta: dict) -> dict:
     banned = banned_in(full)
     expected = [k for k, _, _ in SECTIONS]
     missing = [k for k in expected if k not in {s["key"] for s in sections}]
+    # quotes: every quoted passage (6+ words) and every guidance quote must appear word for word in a document we read
+    def norm(t: str) -> str:
+        return re.sub(r"[^a-z0-9]+", " ", (t or "").lower()).strip()
+
+    doc_norm = norm(" ".join(meta.get("doc_text", {}).values()))
+
+    def verified(q: str) -> bool:
+        parts = [norm(x) for x in re.split(r"\.\.\.|\u2026|\[\.\.\.\]", q) if len(norm(x).split()) >= 4]
+        return bool(parts) and all(x in doc_norm for x in parts) if doc_norm else False
+
+    guidance = []
+    for g in rep.guidance[:8]:
+        q_text, cut = textcheck.first_words((g.quote or "").strip(), 40)
+        gd = {"said_on": cl(g.said_on), "speaker": cl(g.speaker), "quote": q_text, "quote_cut": cut, "topic": cl(g.topic), "outcome": cl(g.outcome), "status": g.status,
+              "source": g.source if g.source in ids else None}
+        gd["quote_verified"] = verified(gd["quote"])
+        guidance.append(gd)
+    inline_quotes = [q for sec in sections for q in re.findall(r"[\"\u201c]([^\"\u201d]{30,400})[\"\u201d]", sec["body"]) if len(q.split()) >= 6]
+    quotes_not_found = [q[:120] for q in inline_quotes if not verified(q)]
+    out["guidance"] = guidance
     out["sources"] = d.sources
     out["meta"] = {k: meta.get(k) for k in ("symbol", "name", "market", "sector", "ref_price", "ref_date", "currency", "gaps")}
     out["checks"] = {"numbers_total": total, "numbers_not_in_sources": [round(x, 2) for x in dict.fromkeys(unmatched)][:15], "numbers_not_in_sources_pct": round(100 * len(unmatched) / total),
-                     "banned_phrases": banned, "dashes_removed": dashes, "missing_sections": missing,
-                     "documents_read": False, "note": "Annual report, call transcripts and presentations were not read in this version."}
+                     "banned_phrases": banned, "dashes_removed": dashes, "phrases_replaced": fixed[0], "missing_sections": missing,
+                     "documents_read": [{k: x[k] for k in ("source_id", "kind", "label", "filed_at", "url")} for x in meta.get("documents", [])],
+                     "quotes_not_found": quotes_not_found, "guidance_quotes_unverified": sum(1 for g in guidance if not g["quote_verified"]),
+                     "note": ("The annual report was not read. Documents read: " + "; ".join(x["label"] for x in meta.get("documents", [])) + ".") if meta.get("documents")
+                             else "No filing documents were read for this report: it uses our data, the filings list and headlines."}
     out["disclaimer"] = DISCLAIMER
     return out
 
@@ -458,7 +544,7 @@ def execute_research(report_id: int) -> None:
                 raise AnalysisError("That tracked stock no longer exists.")
             d, meta = build_dossier(row["user_id"], pos)
             today = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%A %d %B %Y")
-            rep, link = _generate(chain, build_prompt(d, meta, today))
+            rep, link = _generate(chain, build_prompt(d, meta, today), system_prompt(meta))
             model = link["label"]
             payload = finalise(rep, d, meta)
             payload["generated_at"] = datetime.now(timezone.utc).isoformat()
