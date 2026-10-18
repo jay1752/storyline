@@ -72,7 +72,7 @@ _GOALS = [  # the "not sure where to start" chooser: plain goal -> screen
 
 @router.get("/analytics", response_class=HTMLResponse)
 def analytics_landing(request: Request, screen: str = "rules", market: str = "IN", cap: str = "", sector: str = "",
-                      roce: str = "", de: str = "", growth: str = "", pe: str = "", opm: str = "", div: str = "", sort: str = "", n: int = 60):
+                      roce: str = "", de: str = "", growth: str = "", pe: str = "", opm: str = "", div: str = "", sort: str = "", n: int = 60, rs: str = ""):
     from urllib.parse import urlencode
 
     from app import discovery
@@ -98,7 +98,9 @@ def analytics_landing(request: Request, screen: str = "rules", market: str = "IN
         screen = "browse"  # a size/sector pick on the default screen means "browse this group"
     _refresh_metrics_if_stale()
     with get_users_conn() as u:
-        th = fw.resolve(u, request.state.user_id)
+        sets = fw.list_sets(u, request.state.user_id)
+        rs_set = fw.owned_set(u, request.state.user_id, rs) if rs else None   # a screener of the user's own, else their rules
+        th = fw.resolve(u, request.state.user_id, set_id=rs_set["id"] if rs_set else None)
         tracked = {r["symbol"] for r in u.execute("SELECT symbol FROM tracked_positions WHERE user_id = ? AND status = 'active'", (request.state.user_id,))}
     n = min(max(n, 60), 600)
     res = discovery.run_screen(screen, th, market, limit=n, cap=cap or None, sector=sector or None, custom=custom if screen == "custom" else None)
@@ -108,7 +110,7 @@ def analytics_landing(request: Request, screen: str = "rules", market: str = "IN
     fc = discovery.facets(market)
 
     def link(**kw):
-        q = {"screen": screen, "market": market, "cap": cap, "sector": sector}
+        q = {"screen": screen, "market": market, "cap": cap, "sector": sector, "rs": rs_set["id"] if rs_set else ""}
         q.update(kw)
         return "/analytics?" + urlencode({k: v for k, v in q.items() if v not in ("", None)})
 
@@ -123,7 +125,7 @@ def analytics_landing(request: Request, screen: str = "rules", market: str = "IN
          "screen": discovery.SCREEN_BY_KEY[screen], "market": market, "cap": cap, "sector": sector, "custom": custom, "result": res,
          "facets": fc, "goals": _GOALS, "link": link, "preparing": discovery.metrics_age_days() is None, "n": n,
          "more_href": link(n=n + 60, **{k: v for k, v in (("roce", roce), ("de", de), ("growth", growth), ("pe", pe), ("opm", opm), ("div", div), ("sort", sort)) if v != ""}),
-         "custom_open": screen == "custom"},
+         "custom_open": screen == "custom", "sets": sets, "rs_set": rs_set},
     )
 
 def _delta(cur, prev, unit=""):
@@ -518,8 +520,17 @@ def _verdict(request, stock, quarter_rows, annual):
         from app.ai.checklist import evaluate_framework
         from app.db import get_users_conn
         uid = getattr(request.state, "user_id", None)
+        sets, cur, assigned, tracked = [], None, None, False
         with get_users_conn() as u:
-            th = fr.resolve(u, uid, stock["symbol"]) if uid else None
+            if uid:
+                sets = fr.list_sets(u, uid)
+                asked = request.query_params.get("rs")
+                cur = fr.owned_set(u, uid, asked) if asked else None          # a screener of the user's own, picked for this view
+                a_id = fr.assigned_set(u, uid, stock["symbol"])
+                assigned = fr.owned_set(u, uid, a_id) if a_id else None       # the one this stock is set to follow
+                cur = cur or assigned
+                tracked = bool(u.execute("SELECT 1 FROM tracked_positions WHERE user_id = ? AND symbol = ? AND status = 'active'", (uid, stock["symbol"])).fetchone())
+            th = fr.resolve(u, uid, stock["symbol"], set_id=cur["id"] if cur else None) if uid else None
         by_end = {r["period_end_date"]: r for r in quarter_rows}
         rows = []
         for r in quarter_rows[-8:]:
@@ -535,7 +546,9 @@ def _verdict(request, stock, quarter_rows, annual):
         return None
     failed = [{"label": f["label"], "value": f["value"], "threshold": f["threshold"]} for f in ev if f["status"] == "fail"]
     return {"passed": len(ev) - len(failed), "total": len(ev), "failed": failed[:4], "more": max(0, len(failed) - 4),
-            "unknown": sum(1 for f in fw["filters"] if f["status"] == "unknown")}
+            "unknown": sum(1 for f in fw["filters"] if f["status"] == "unknown"),
+            "sets": sets, "current_id": cur["id"] if cur else None, "current_name": cur["name"] if cur else None,
+            "assigned_id": assigned["id"] if assigned else None, "tracked": tracked, "symbol": stock["symbol"]}
 
 
 def _ownership_table(quarter_rows):

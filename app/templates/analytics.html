@@ -44,11 +44,32 @@
 <div class="verdict" id="verdict">
   {% if verdict %}
   <div class="verdict-main">
-    <b class="{{ 'val-pos' if verdict.passed == verdict.total else '' }}">Your rules: {{ verdict.passed }} of {{ verdict.total }} pass</b>
+    <b class="{{ 'val-pos' if verdict.passed == verdict.total else '' }}">{{ verdict.current_name or 'Your rules' }}: {{ verdict.passed }} of {{ verdict.total }} pass</b>
     {% for f in verdict.failed %}<span class="vchip neg" title="{{ f.value }} against {{ f.threshold }}">{{ f.label }}</span>{% endfor %}
     {% if verdict.more %}<span class="vchip">+{{ verdict.more }} more</span>{% endif %}
     {% if verdict.unknown %}<span class="vchip" title="Rules we can't check yet for this stock">{{ verdict.unknown }} unchecked</span>{% endif %}
-    <a class="vlink" href="/rules">Edit rules</a>
+    <a class="vlink" href="{{ '/rules?set=' ~ verdict.current_id ~ '#screeners' if verdict.current_id else '/rules' }}">Edit rules</a>
+    {% if verdict.sets %}
+    <label class="vsel">Screener <select id="rs-pick" aria-label="Screener for this stock">
+      <option value="">My rules</option>{% for x in verdict.sets %}<option value="{{ x.id }}" {{ 'selected' if verdict.current_id == x.id else '' }}>{{ x.name }}</option>{% endfor %}</select></label>
+    {% if verdict.tracked %}
+      {% if verdict.current_id and verdict.assigned_id != verdict.current_id %}<button type="button" class="vlink" id="rs-assign" data-set="{{ verdict.current_id }}">Use for this stock</button>{% endif %}
+      {% if verdict.assigned_id %}<span class="vchip" title="Its daily story and checks follow this screener">stock follows it</span> <button type="button" class="vlink" id="rs-unassign">Back to my rules</button>{% endif %}
+    {% endif %}
+    <script>
+    (function () {
+      var sel = document.getElementById("rs-pick"); if (!sel) return;
+      sel.addEventListener("change", function () { var u = new URL(location.href); if (sel.value) u.searchParams.set("rs", sel.value); else u.searchParams.delete("rs"); location.href = u.toString(); });
+      function assign(setId) {
+        fetch("/rules/set/assign", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({symbol: {{ verdict.symbol|tojson }}, set_id: setId})})
+          .then(function (r) { if (!r.ok) throw 0; var u = new URL(location.href); u.searchParams.delete("rs"); location.href = u.toString(); }).catch(function () { alert("Couldn't change that. Try again."); });
+      }
+      var a = document.getElementById("rs-assign"), b = document.getElementById("rs-unassign");
+      if (a) a.addEventListener("click", function () { assign(Number(a.dataset.set)); });
+      if (b) b.addEventListener("click", function () { assign(null); });
+    })();
+    </script>
+    {% endif %}
   </div>
   {% endif %}
   {% if next_result %}{% set nr = next_result %}<span class="vchip warn" title="{% if nr.updating %}The results are filed. The new quarter is added as soon as our data provider publishes it; until then this page shows the last quarter we hold.{% else %}{{ nr.date }}{% endif %}">{{ nr.label }} {% if nr.updating %}announced {{ nr.date }}, new quarter awaited{% elif nr.days == 0 %}today{% elif nr.days == 1 %}tomorrow{% else %}in {{ nr.days }} days{% endif %}</span>{% endif %}

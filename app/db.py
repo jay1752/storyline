@@ -368,6 +368,29 @@ CREATE TABLE IF NOT EXISTS framework_overrides (
     UNIQUE (scope, user_id, symbol, key)
 );
 
+-- Named screeners: a user's own copies of the scan thresholds. "My rules" (framework_overrides) stays the master for the portfolio; a screener
+-- is picked for Analytics, a stock page or one Deep research run, or assigned to one stock (stock_rule_set) until the user clears it.
+CREATE TABLE IF NOT EXISTS rule_sets (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL,
+    name        TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, name)
+);
+CREATE TABLE IF NOT EXISTS rule_set_values (
+    set_id      INTEGER NOT NULL,
+    key         TEXT NOT NULL,
+    value       REAL NOT NULL,
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (set_id, key)
+);
+CREATE TABLE IF NOT EXISTS stock_rule_set (
+    user_id     INTEGER NOT NULL,
+    symbol      TEXT NOT NULL,
+    set_id      INTEGER NOT NULL,
+    PRIMARY KEY (user_id, symbol)
+);
+
 -- BYOK settings (AI chat + Insights). One row per user, created on first /settings POST
 -- (see app/ai/providers.py's get_user_settings for the "no row yet" default).
 CREATE TABLE IF NOT EXISTS user_settings (
@@ -725,6 +748,9 @@ def init_db() -> None:
         for col, decl in [("closed_at", "TEXT"), ("exit_price", "REAL")]:
             if col not in tp_cols:
                 u.execute(f"ALTER TABLE tracked_positions ADD COLUMN {col} {decl}")
+        rr_cols = {row["name"] for row in u.execute("PRAGMA table_info(research_reports)").fetchall()}
+        if "rule_set_id" not in rr_cols:  # which screener the report's rules section used (NULL = the user's own rules)
+            u.execute("ALTER TABLE research_reports ADD COLUMN rule_set_id INTEGER")
         if "auto_insights" not in us_cols:  # daily automatic analysis of the user's tracked stocks: on unless switched off
             u.execute("ALTER TABLE user_settings ADD COLUMN auto_insights INTEGER NOT NULL DEFAULT 1")
         _migrate_legacy_api_keys(u)

@@ -277,7 +277,7 @@ def position_weight(u, pos, price) -> float | None:
     return round(mine / total * 100, 1) if total else None
 
 
-def _gather(u, pos) -> dict:
+def _gather(u, pos, set_id: int | None = None) -> dict:
     """Everything the analysis needs about one tracked stock, computed in code. `u` is a users-DB connection."""
     from app.routes.analytics import _compute_pe, _yoy  # reuse the exact valuation / growth logic the Analytics page shows
 
@@ -303,7 +303,7 @@ def _gather(u, pos) -> dict:
     from app.annual import annual_rows
     with get_market_conn() as _am:
         annual = annual_rows(_am, sym)
-    th = framework_rules.resolve(u, pos["user_id"], sym)
+    th = framework_rules.resolve(u, pos["user_id"], sym, set_id=set_id)
     sz = framework_rules.sizing_plan(u, pos["user_id"])
     framework = evaluate_framework(q_dicts, stock["sector"], th, annual=annual)
 

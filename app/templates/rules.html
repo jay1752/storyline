@@ -29,6 +29,30 @@
   {{ rule_table(mine, 'user') }}
 </section>
 
+<section class="section" id="screeners">
+  <div class="section-head">
+    <div><h2 class="section-title">Screeners</h2><span class="section-note">named copies of the thresholds above · pick one in Analytics, on a stock page or before a Deep research run · your own rules above stay the master for your portfolio</span></div>
+  </div>
+  {% if sets %}
+  <div class="table-wrap"><table class="fin"><thead><tr><th>Screener</th><th>Used by</th><th></th></tr></thead><tbody>
+    {% for x in sets %}<tr><td><a href="/rules?set={{ x.id }}#screeners"><b>{{ x.name }}</b></a></td><td class="row-sub">{{ x.assigned }} tracked stock{{ '' if x.assigned == 1 else 's' }}</td>
+      <td class="rule-actions"><a class="btn btn-sm" href="/rules?set={{ x.id }}#screeners">Edit</a> <a class="btn btn-sm" href="/analytics?screen=rules&rs={{ x.id }}">Screen stocks</a>
+        <button type="button" class="btn btn-sm set-rename" data-set="{{ x.id }}" data-name="{{ x.name }}">Rename</button> <button type="button" class="btn btn-sm set-delete" data-set="{{ x.id }}" data-name="{{ x.name }}">Delete</button></td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="prose">None yet. A screener starts as a copy of your rules above, so you only change what differs, for example a stricter debt limit.</p>{% endif %}
+  {% if sets|length < max_sets %}
+  <form class="set-new" id="set-new" style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.8rem;align-items:center">
+    <input class="form-input" id="set-name" maxlength="40" placeholder="Name, e.g. Quality compounders" aria-label="Screener name" style="max-width:20rem">
+    <button type="submit" class="btn btn-sm btn-primary">New screener from my rules</button><span class="rule-msg" id="set-msg" role="status"></span>
+  </form>
+  {% else %}<p class="section-note">You have the maximum of {{ max_sets }} screeners.</p>{% endif %}
+  {% if edit_set %}
+  <div class="section-head" style="margin-top:1.6rem"><div><h3 class="section-title">{{ edit_set.name }}</h3><span class="section-note">changes here affect only this screener · Reset puts a rule back to your rules as they are now</span></div>
+    <button type="button" class="btn btn-sm" id="reset-all-set">↺ Reset all to my rules</button></div>
+  {{ rule_table(set_rows, 'set') }}
+  {% endif %}
+</section>
+
 <section class="section">
   <div class="section-head">
     <div><h2 class="section-title">Daily story</h2><span class="section-note">which of your tracked stocks get an AI story every morning · you can also switch one stock on or off from its own story page</span></div>

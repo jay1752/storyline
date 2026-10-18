@@ -106,8 +106,13 @@ def _rows(u, user_id, symbol):
     ).fetchall()
 
 
-def resolve(u, user_id: int | None, symbol: str | None = None) -> dict:
-    """{key: rule dict with the effective value/enabled and `source` = built-in | platform | user | stock}."""
+def resolve(u, user_id: int | None, symbol: str | None = None, set_id: int | None = None) -> dict:
+    """{key: rule dict with the effective value/enabled and `source` = built-in | platform | user | stock | screener}.
+    `set_id` (a screener the caller has already checked belongs to the user) wins; else a screener assigned to this stock; else the layers."""
+    if set_id is None and symbol and user_id:
+        set_id = assigned_set(u, user_id, symbol)
+    if set_id is not None:
+        return set_resolve(u, set_id)
     rows, out = _rows(u, user_id, symbol), _blank()
     for scope in ("platform", "user") + (("stock",) if symbol else ()):
         _apply(out, rows, scope)
@@ -249,3 +254,105 @@ def story_select(plan: dict, positions) -> list:
         if o == 1 or plan["scope"] == 2 or (plan["scope"] == 1 and p["anchor_type"] == "position"):
             chosen.append(p)
     return chosen[: plan["max"]]
+
+
+# ---------------------------------------------------------------------------- screeners (named copies of the scan thresholds)
+
+MAX_SETS = 10
+
+
+def list_sets(u, user_id: int) -> list[dict]:
+    return [dict(r) for r in u.execute(
+        "SELECT s.id, s.name, (SELECT COUNT(*) FROM stock_rule_set a WHERE a.set_id = s.id) AS assigned FROM rule_sets s WHERE s.user_id = ? ORDER BY s.name COLLATE NOCASE", (user_id,))]
+
+
+def owned_set(u, user_id: int, set_id) -> dict | None:
+    """The screener as {id, name} when it exists and belongs to this user, else None (so a stray id in a URL is simply ignored)."""
+    try:
+        sid = int(set_id)
+    except (TypeError, ValueError):
+        return None
+    r = u.execute("SELECT id, name FROM rule_sets WHERE id = ? AND user_id = ?", (sid, user_id)).fetchone()
+    return dict(r) if r else None
+
+
+def assigned_set(u, user_id: int, symbol: str) -> int | None:
+    r = u.execute("SELECT set_id FROM stock_rule_set WHERE user_id = ? AND symbol = ?", (user_id, symbol)).fetchone()
+    return r["set_id"] if r else None
+
+
+def set_resolve(u, set_id: int) -> dict:
+    """A screener's thresholds over the platform / built-in ones (a screener is created as a full copy, so normally every key has its own row)."""
+    out = _blank()
+    _apply(out, u.execute("SELECT scope, key, value, enabled FROM framework_overrides WHERE scope = 'platform'").fetchall(), "platform")
+    for r in u.execute("SELECT key, value, enabled FROM rule_set_values WHERE set_id = ?", (set_id,)):
+        if r["key"] in out:
+            out[r["key"]].update(value=r["value"], enabled=bool(r["enabled"]), source="screener")
+    return out
+
+
+def set_layers(u, user_id: int, set_id: int) -> dict:
+    """For the screener editor: each rule's state in the screener, and what Reset returns it to (the master 'my rules' value right now)."""
+    eff, master = set_resolve(u, set_id), resolve(u, user_id, None)
+    return {k: {**v, "reset_value": master[k]["value"], "reset_enabled": master[k]["enabled"], "reset_source": master[k]["source"],
+                "customised": abs(v["value"] - master[k]["value"]) > 1e-9 or v["enabled"] != master[k]["enabled"]} for k, v in eff.items()}
+
+
+def clean_name(name) -> str:
+    n = " ".join(str(name or "").split())[:40]
+    if len(n) < 2:
+        raise RuleError("Give the screener a name of at least 2 characters.")
+    return n
+
+
+def create_set(u, user_id: int, name) -> int:
+    """A new screener = a full copy of the user's rules as they are today (so it stays put if 'my rules' change later)."""
+    n = clean_name(name)
+    if u.execute("SELECT COUNT(*) FROM rule_sets WHERE user_id = ?", (user_id,)).fetchone()[0] >= MAX_SETS:
+        raise RuleError(f"You can keep up to {MAX_SETS} screeners. Delete one first.")
+    if u.execute("SELECT 1 FROM rule_sets WHERE user_id = ? AND name = ? COLLATE NOCASE", (user_id, n)).fetchone():
+        raise RuleError("You already have a screener with that name.")
+    sid = u.execute("INSERT INTO rule_sets (user_id, name) VALUES (?, ?)", (user_id, n)).lastrowid
+    for k, v in resolve(u, user_id, None).items():
+        u.execute("INSERT INTO rule_set_values (set_id, key, value, enabled) VALUES (?,?,?,?)", (sid, k, v["value"], 1 if v["enabled"] else 0))
+    return sid
+
+
+def rename_set(u, user_id: int, set_id: int, name) -> None:
+    n = clean_name(name)
+    if u.execute("SELECT 1 FROM rule_sets WHERE user_id = ? AND name = ? COLLATE NOCASE AND id <> ?", (user_id, n, set_id)).fetchone():
+        raise RuleError("You already have a screener with that name.")
+    u.execute("UPDATE rule_sets SET name = ? WHERE id = ? AND user_id = ?", (n, set_id, user_id))
+
+
+def delete_set(u, user_id: int, set_id: int) -> None:
+    """Stocks assigned to it go back to following 'my rules'; reports already written keep the name they were written with."""
+    u.execute("DELETE FROM stock_rule_set WHERE user_id = ? AND set_id = ?", (user_id, set_id))
+    u.execute("DELETE FROM rule_set_values WHERE set_id = ?", (set_id,))
+    u.execute("DELETE FROM rule_sets WHERE id = ? AND user_id = ?", (set_id, user_id))
+
+
+def save_set_value(u, set_id: int, key: str, value, enabled: bool) -> None:
+    if key not in BY_KEY:
+        raise RuleError("Unknown rule.")
+    v = validate(key, value)
+    u.execute("INSERT INTO rule_set_values (set_id, key, value, enabled) VALUES (?,?,?,?) "
+              "ON CONFLICT(set_id, key) DO UPDATE SET value = excluded.value, enabled = excluded.enabled", (set_id, key, v, 1 if enabled else 0))
+
+
+def reset_set_value(u, user_id: int, set_id: int, key: str | None = None) -> int:
+    """Put one rule (or all) of a screener back to the user's current rules."""
+    master = resolve(u, user_id, None)
+    keys = [key] if key else list(master)
+    for k in keys:
+        if k in master:
+            save_set_value(u, set_id, k, master[k]["value"], master[k]["enabled"])
+    return len(keys)
+
+
+def assign(u, user_id: int, symbol: str, set_id: int | None) -> None:
+    """Make one stock follow a screener (its daily story and checks use it); None = back to 'my rules'."""
+    if set_id is None:
+        u.execute("DELETE FROM stock_rule_set WHERE user_id = ? AND symbol = ?", (user_id, symbol))
+    else:
+        u.execute("INSERT INTO stock_rule_set (user_id, symbol, set_id) VALUES (?,?,?) ON CONFLICT(user_id, symbol) DO UPDATE SET set_id = excluded.set_id", (user_id, symbol, set_id))

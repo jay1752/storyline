@@ -47,6 +47,8 @@
   <div class="page-actions">
     <a class="btn" href="/management/{{ pos.id }}">Back to the story</a>
     {% if report %}<button class="btn" type="button" id="rs-pdf-open"><svg class="icon icon-sm"><use href="#i-copy"/></svg>Save as PDF</button>{% endif %}
+    {% if pos.status == 'active' and rule_sets %}<label class="rs2-rs no-print">Check it against <select id="rs-rules" class="form-input" aria-label="Rules to check against" {{ 'disabled' if busy else '' }}>
+      <option value="">{{ 'My rules' }}</option>{% for x in rule_sets %}<option value="{{ x.id }}" {{ 'selected' if assigned_set_id == x.id else '' }}>{{ x.name }}</option>{% endfor %}</select></label>{% endif %}
     {% if pos.status == 'active' %}<button class="btn btn-primary" type="button" id="rs-go" data-id="{{ pos.id }}" {{ 'disabled' if busy or left_today == 0 else '' }}>{{ 'Writing…' if busy else ('Generate a new report' if report else 'Generate the report') }}</button>{% endif %}
   </div>
 </div>
@@ -112,6 +114,7 @@
       {% for s in report.sections %}
       <section class="rs2-sec{{ ' personal' if s.key == 'rules' else '' }}" id="sec-{{ s.key }}">
         <div class="rs2-h"><span class="num">{{ '%02d'|format(loop.index) }}</span><h2>{{ s.title }}</h2></div>
+        {% if s.key == 'rules' and report.meta.rules_name %}<p class="section-note">Checked against the screener &ldquo;{{ report.meta.rules_name }}&rdquo;.</p>{% endif %}
         {% if s.lead or s.points %}
           {% if s.lead %}<p class="lead">{{ s.lead|nocite }}</p>{% endif %}
           <div class="rs2-cols">
@@ -194,7 +197,8 @@
   if (busy) poll();
   if (go) go.addEventListener("click", async () => {
     go.disabled = true; go.textContent = "Starting…"; say("");
-    let out; try { const res = await fetch("/management/" + id + "/research", { method: "POST" }); out = await res.json(); if (!res.ok) throw new Error(out.error || "Could not start"); }
+    let out; try { const pick = document.getElementById("rs-rules");
+    const res = await fetch("/management/" + id + "/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rule_set: pick && pick.value ? pick.value : null }) }); out = await res.json(); if (!res.ok) throw new Error(out.error || "Could not start"); }
     catch (e) { go.disabled = false; go.textContent = "Generate the report"; say(e.message, true); return; }
     location.reload();
   });

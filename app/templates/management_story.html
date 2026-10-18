@@ -249,6 +249,18 @@
         <option value="0" {{ 'selected' if story_over == 0 else '' }}>Never run</option>
       </select>
     </label>
+    {% if rule_sets %}<label class="story-mode" title="Which rules this stock is checked against: its Fundamentals scan, daily story and Deep research. The next analysis uses the change.">
+      <span>Rules</span>
+      <select class="form-input" id="stock-rules" aria-label="Rules for this stock">
+        <option value="">My rules</option>{% for x in rule_sets %}<option value="{{ x.id }}" {{ 'selected' if assigned_set_id == x.id else '' }}>{{ x.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <script>
+    document.getElementById("stock-rules").addEventListener("change", function () {
+      fetch("/rules/set/assign", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({symbol: {{ pos.symbol|tojson }}, set_id: this.value ? Number(this.value) : null})})
+        .then(function (r) { if (!r.ok) throw 0; location.reload(); }).catch(function () { alert("Couldn't change that. Try again."); });
+    });
+    </script>{% endif %}
     <a class="btn" href="/management/{{ pos.id }}/research" title="A long sourced report on this company, written when you ask for it"><svg class="icon icon-sm"><use href="#i-guide"/></svg>Deep research</a>
     <button class="btn btn-primary" type="button" id="run-btn" data-id="{{ pos.id }}" data-running="{{ 1 if running else 0 }}"><svg class="icon icon-sm"><use href="#i-refresh"/></svg><span>{{ 'Run analysis again' if latest else 'Run analysis now' }}</span></button>
     {% endif %}

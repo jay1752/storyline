@@ -1973,3 +1973,7 @@ details.auth-pw[open] > summary { margin-bottom: 0.8rem; }
 .rs2-points sup.rs2-c { font: 400 0.62rem var(--font-mono); margin-left: 0.15rem; vertical-align: super; line-height: 0; } .rs2-points sup.rs2-c a { color: var(--muted); text-decoration: none; }
 .rs2-tile b { font-size: 1.25rem; }
 .rs2-take { counter-reset: tk; } .rs2-take li { counter-increment: tk; } .rs2-take .n::before { content: counter(tk); }
+button.vlink { background: none; border: 0; padding: 0; cursor: pointer; color: var(--structure); text-decoration: underline; font-family: inherit; }
+.vsel { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.78rem; margin-left: 0.6rem; color: var(--muted); } .vsel select { font-size: 0.78rem; padding: 0.15rem 0.4rem; }
+.rs2-rs { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: var(--muted); } .rs2-rs select { font-size: 0.82rem; }
+.rs2-rs { white-space: nowrap; }

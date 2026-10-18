@@ -146,6 +146,8 @@ def management_story(request: Request, position_id: int, all: int = 0):
         scan = live_scan(u, user_id, pos["symbol"])           # recomputed now, from the user's current rules
         rule_layers = fw.layers(u, user_id, pos["symbol"])
         story_over = fw.story_stock_override(u, user_id, pos["symbol"])
+        rule_sets = fw.list_sets(u, user_id)
+        assigned_set_id = fw.assigned_set(u, user_id, pos["symbol"])
         sizing = fw.sizing_plan(u, user_id)
         story_scope = fw.story_layers(u, user_id)["story_scope"]
     more = len(snaps) > limit
@@ -180,7 +182,7 @@ def management_story(request: Request, position_id: int, all: int = 0):
             "saved": request.query_params.get("saved"),
             "latest": latest, "history": [e for e in entries if e is not latest and (e["analysis"] or (e["legacy"] and not e["legacy"][0].startswith("Just added")))],
             "scan": scan, "rule_layers": rule_layers,
-            "size": size, "story_over": story_over, "story_default": dict(fw.STORY_BY_KEY["story_scope"]["choices"]).get(int(story_scope["value"]), ""),
+            "size": size, "story_over": story_over, "rule_sets": rule_sets, "assigned_set_id": assigned_set_id, "story_default": dict(fw.STORY_BY_KEY["story_scope"]["choices"]).get(int(story_scope["value"]), ""),
             "run": run, "running": bool(run and run["status"] in ("queued", "running")),
             "total_entries": total, "more": more,
         },
@@ -238,7 +240,7 @@ def _owned_position(u, user_id, position_id):
 
 
 @router.post("/management/{position_id:int}/research")
-def research_start(request: Request, position_id: int):
+async def research_start(request: Request, position_id: int):
     from app.ai import research
     from app.ai.providers import build_chain
 
@@ -250,7 +252,12 @@ def research_start(request: Request, position_id: int):
         return JSONResponse({"error": "Add an AI key in AI settings first: the report is written by an AI model."}, status_code=400)
     if research.used_today(user_id) >= research.MANUAL_PER_DAY:
         return JSONResponse({"error": f"You've started today's {research.MANUAL_PER_DAY} reports. Try again tomorrow."}, status_code=429)
-    report_id, created = research.queue_research(user_id, position_id)
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001 - older pages post no body
+        body = {}
+    rule_set = body.get("rule_set") if isinstance(body, dict) else None
+    report_id, created = research.queue_research(user_id, position_id, int(rule_set) if str(rule_set or "").isdigit() else None)
     if created:
         enqueue_research(report_id)
     return {"report_id": report_id, "started": created}
@@ -280,10 +287,14 @@ def research_page(request: Request, position_id: int, report_id: int | None = No
                    or u.execute("SELECT * FROM research_reports WHERE position_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1", (position_id, user_id)).fetchone())
         busy = u.execute("SELECT id, status FROM research_reports WHERE position_id = ? AND user_id = ? AND status IN ('queued','running') ORDER BY id DESC LIMIT 1", (position_id, user_id)).fetchone()
         history = u.execute("SELECT id, status, created_at, model FROM research_reports WHERE position_id = ? AND user_id = ? ORDER BY id DESC LIMIT 12", (position_id, user_id)).fetchall()
+        from app import framework as fw_sets
+        rule_sets = fw_sets.list_sets(u, user_id)
+        a_id = fw_sets.assigned_set(u, user_id, pos["symbol"])
     report = json.loads(row["report_json"]) if row and row["report_json"] else None
     return templates.TemplateResponse("research_report.html", {
         "request": request, "active_nav": "management", "pos": pos, "row": row, "report": report, "busy": busy, "history": history,
-        "left_today": max(0, research.MANUAL_PER_DAY - research.used_today(user_id)), "per_day": research.MANUAL_PER_DAY})
+        "left_today": max(0, research.MANUAL_PER_DAY - research.used_today(user_id)), "per_day": research.MANUAL_PER_DAY,
+        "rule_sets": rule_sets, "assigned_set_id": a_id})
 
 
 @router.post("/management/{position_id:int}/journal")

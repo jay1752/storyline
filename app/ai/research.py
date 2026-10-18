@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 
 from app.ai import errors, textcheck
 from app.ai.textcheck import BANNED, DRIVER_TABLE, banned_in
+from app import framework as framework_rules
 from app.ai.insights_engine import AnalysisError, _gather
 from app.ai.providers import build_chain
 from app.auth.middleware import current_user_id
@@ -183,18 +184,22 @@ def _file_date(path) -> str | None:
         return None
 
 
-def build_dossier(user_id: int, pos) -> tuple[Dossier, dict]:
+def build_dossier(user_id: int, pos, set_id: int | None = None) -> tuple[Dossier, dict]:
     """Gather everything we hold about the stock into numbered sources. Returns (dossier, meta) where meta carries the reference price and flags."""
     from app.annual import annual_rows
     from app.indianapi_db import INDIANAPI_DB
 
     with get_users_conn() as u:
-        ctx = _gather(u, pos)
+        rs = framework_rules.owned_set(u, user_id, set_id) if set_id else None   # a screener picked for this run (must be the user's own)
+        if not rs and not set_id:
+            a = framework_rules.assigned_set(u, user_id, pos["symbol"])          # else the one this stock follows, else their own rules
+            rs = framework_rules.owned_set(u, user_id, a) if a else None
+        ctx = _gather(u, pos, rs["id"] if rs else None)
     sym, market = ctx["symbol"], ctx["market"]
     cur = "Rs" if market == "IN" else "USD"
     unit = "Cr" if market == "IN" else "M"
     d = Dossier()
-    meta = {"symbol": sym, "name": ctx["name"], "market": market, "sector": ctx["sector"], "gaps": []}
+    meta = {"symbol": sym, "name": ctx["name"], "market": market, "sector": ctx["sector"], "gaps": [], "rules_name": rs["name"] if rs else None}
 
     with get_market_conn() as m:
         qrows = [r for r in m.execute("SELECT * FROM quarterly_data WHERE symbol = ? ORDER BY period_end_date", (sym,)).fetchall()
@@ -259,7 +264,7 @@ def build_dossier(user_id: int, pos) -> tuple[Dossier, dict]:
 
     # S4 the user's own rules
     fl = [f"{f['label']}: {f['value'] if f['value'] is not None else 'UNKNOWN'} against {f['threshold']} -> {f['status'].upper()}" + (f" ({f['note']})" if f.get("note") else "") for f in ctx["framework"]["filters"]]
-    d.add("The user's own investment rules, applied to the latest data", "Tenetfolio, using the user's thresholds", meta["ref_date"], fl)
+    d.add("The user's own investment rules, applied to the latest data", "Tenetfolio, using the user's thresholds" + (f" (screener: {rs['name']})" if rs else ""), meta["ref_date"], fl)
 
     # S5 company profile, S6 corporate actions (the Company section)
     company = None
@@ -450,7 +455,7 @@ def _glance(ctx, met, arows, qrows, us_ann, meta, v) -> list[dict]:
     fl = [f for f in ctx["framework"]["filters"] if f["status"] in ("pass", "fail")]
     if fl:
         ok = sum(1 for f in fl if f["status"] == "pass")
-        t.append({"label": "Your rules", "value": f"{ok} of {len(fl)} pass", "sub": "against your own thresholds", "tone": "pos" if ok == len(fl) else "", "personal": True})
+        t.append({"label": "Your rules", "value": f"{ok} of {len(fl)} pass", "sub": f"against {meta['rules_name']}" if meta.get("rules_name") else "against your own thresholds", "tone": "pos" if ok == len(fl) else "", "personal": True})
     return t
 
 
@@ -622,7 +627,7 @@ def finalise(rep: Report, d: Dossier, meta: dict) -> dict:
     out["glance"] = meta.get("glance") or []
     out["catalysts"] = meta.get("catalysts") or []
     out["sources"] = d.sources
-    out["meta"] = {k: meta.get(k) for k in ("symbol", "name", "market", "sector", "ref_price", "ref_date", "currency", "gaps")}
+    out["meta"] = {k: meta.get(k) for k in ("symbol", "name", "market", "sector", "ref_price", "ref_date", "currency", "gaps", "rules_name")}
     out["checks"] = {"numbers_total": total, "numbers_not_in_sources": [round(x, 2) for x in dict.fromkeys(unmatched)][:15], "numbers_not_in_sources_pct": round(100 * len(unmatched) / total),
                      "banned_phrases": banned, "dashes_removed": dashes, "phrases_replaced": fixed[0], "missing_sections": missing,
                      "documents_read": [{k: x[k] for k in ("source_id", "kind", "label", "filed_at", "url")} for x in meta.get("documents", [])],
@@ -637,7 +642,7 @@ def finalise(rep: Report, d: Dossier, meta: dict) -> dict:
 MANUAL_PER_DAY = 5
 
 
-def queue_research(user_id: int, position_id: int) -> tuple[int | None, bool]:
+def queue_research(user_id: int, position_id: int, rule_set_id: int | None = None) -> tuple[int | None, bool]:
     with get_users_conn() as u:
         pos = u.execute("SELECT symbol FROM tracked_positions WHERE id = ? AND user_id = ? AND status = 'active'", (position_id, user_id)).fetchone()
         if not pos:
@@ -645,7 +650,10 @@ def queue_research(user_id: int, position_id: int) -> tuple[int | None, bool]:
         busy = u.execute("SELECT id FROM research_reports WHERE position_id = ? AND status IN ('queued','running') ORDER BY id DESC LIMIT 1", (position_id,)).fetchone()
         if busy:
             return busy["id"], False
-        cur = u.execute("INSERT INTO research_reports (user_id, position_id, symbol, status, created_at) VALUES (?,?,?, 'queued', ?)", (user_id, position_id, pos["symbol"], _now()))
+        if rule_set_id and not framework_rules.owned_set(u, user_id, rule_set_id):
+            rule_set_id = None
+        cur = u.execute("INSERT INTO research_reports (user_id, position_id, symbol, status, created_at, rule_set_id) VALUES (?,?,?, 'queued', ?, ?)",
+                        (user_id, position_id, pos["symbol"], _now(), rule_set_id))
         u.commit()
         return cur.lastrowid, True
 
@@ -672,7 +680,7 @@ def execute_research(report_id: int) -> None:
                 pos = u.execute("SELECT * FROM tracked_positions WHERE id = ? AND user_id = ?", (row["position_id"], row["user_id"])).fetchone()
             if not pos:
                 raise AnalysisError("That tracked stock no longer exists.")
-            d, meta = build_dossier(row["user_id"], pos)
+            d, meta = build_dossier(row["user_id"], pos, row["rule_set_id"])
             today = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%A %d %B %Y")
             rep, link = _generate(chain, build_prompt(d, meta, today), system_prompt(meta))
             model = link["label"]

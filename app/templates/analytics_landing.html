@@ -52,10 +52,15 @@
   <div class="card dz-card">
     <div class="card-head">
       <div>
-        <h3 class="card-title">{{ screen.label }}{% if screen.key == 'browse' %}{% if sector %} · {{ sector }}{% endif %}{% if cap %} · {{ cap|capitalize }} cap{% endif %}{% endif %}</h3>
+        <h3 class="card-title">{{ screen.label }}{% if screen.key == 'rules' and rs_set %} · {{ rs_set.name }}{% endif %}{% if screen.key == 'browse' %}{% if sector %} · {{ sector }}{% endif %}{% if cap %} · {{ cap|capitalize }} cap{% endif %}{% endif %}</h3>
         <span class="section-note">{{ screen.desc }}</span>
       </div>
       <div class="card-tools">
+        {% if screen.key == 'rules' %}<label class="section-note" style="display:flex;gap:.4rem;align-items:center">Screener
+          <select class="form-input" aria-label="Screener" onchange="location.href=this.value">
+            <option value="{{ link(rs='') }}" {{ '' if rs_set else 'selected' }}>My rules</option>
+            {% for x in sets %}<option value="{{ link(rs=x.id) }}" {{ 'selected' if rs_set and rs_set.id == x.id else '' }}>{{ x.name }}</option>{% endfor %}
+          </select></label>{% endif %}
         <div class="seg" role="group" aria-label="Market">
           {% for m, lbl in (('IN', 'India'), ('US', 'US'), ('ALL', 'Both')) %}<a class="{{ 'active' if m == market else '' }}" href="{{ link(market=m) }}">{{ lbl }}</a>{% endfor %}
         </div>
@@ -83,7 +88,7 @@
       </table>
     </div>
     <div class="dz-foot"><span class="section-note">{% if result.count > result.rows|length %}Showing {{ result.rows|length }} of {{ result.count }} · <a href="{{ more_href }}">Show 60 more</a> · {% endif %}{% if screen.key in ('rules', 'browse') %}Best match against your rules comes first. {% endif %}{% if screen.key == 'rules' %}Stocks with too little data to judge most rules are left out. {% endif %}Open any stock for its full story, or track it to watch it against your rules.</span>
-      {% if screen.key in ('rules', 'browse') %}<a class="btn btn-sm btn-ghost" href="/rules">Change my rules</a>{% endif %}</div>
+      {% if screen.key in ('rules', 'browse') %}<a class="btn btn-sm btn-ghost" href="{{ '/rules?set=' ~ rs_set.id ~ '#screeners' if rs_set else '/rules' }}">{{ 'Edit this screener' if rs_set else 'Change my rules' }}</a>{% if not sets %} <a class="btn btn-sm btn-ghost" href="/rules#screeners">Make a screener</a>{% endif %}{% endif %}</div>
     {% else %}
     <div class="empty">
       <svg class="icon"><use href="#i-analytics"/></svg>
