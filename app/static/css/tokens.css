@@ -1983,3 +1983,5 @@ button.vlink { background: none; border: 0; padding: 0; cursor: pointer; color: 
 .section.collapsed .sec-toggle svg { transform: rotate(-90deg); }
 .section.collapsed > :not(.section-head) { display: none; }
 @media (prefers-reduced-motion: reduce) { .sec-toggle svg { transition: none; } }
+.dz-chip.dz-mine { border-style: dashed; color: var(--ink); }
+.dz-tag { display: inline-block; margin-left: 0.45rem; padding: 0.05rem 0.45rem; border-radius: 999px; background: rgba(138, 90, 10, 0.12); color: var(--accent); font: 500 0.64rem/1.4 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; vertical-align: 0.1em; }

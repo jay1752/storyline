@@ -40,7 +40,7 @@
   <div class="section-head"><div><h2 class="section-title">What are you looking for?</h2><span class="section-note">ready-made screens in plain words, then your own screeners</span></div></div>
   <div class="dz-chips" role="group" aria-label="Screens">
     {% for s in screens %}<a class="dz-chip {{ 'on' if s.key == screen.key and not rs_set else '' }} {{ 'star' if s.star else '' }}" href="{{ link(screen=s.key) }}">{{ s.label }}</a>{% endfor %}
-    {% for x in sets %}<a class="dz-chip {{ 'on' if rs_set and rs_set.id == x.id else '' }}" href="{{ link(screen='rs-' ~ x.id) }}" title="Your screener">{{ x.name }}</a>{% endfor %}
+    {% for x in sets %}<a class="dz-chip dz-mine {{ 'on' if rs_set and rs_set.id == x.id else '' }}" href="{{ link(screen='rs-' ~ x.id) }}" title="A screener you made, not a ready-made screen">{{ x.name }}<span class="dz-tag">Mine</span></a>{% endfor %}
     <a class="dz-chip" href="/rules#screeners" title="Make your own screener from your rules">+ New screener</a>
   </div>
 
@@ -54,7 +54,7 @@
   <div class="card dz-card">
     <div class="card-head">
       <div>
-        <h3 class="card-title">{{ screen.label }}{% if screen.key == 'browse' %}{% if sector %} · {{ sector }}{% endif %}{% if cap %} · {{ cap|capitalize }} cap{% endif %}{% endif %}</h3>
+        <h3 class="card-title">{{ screen.label }}{% if rs_set %} <span class="dz-tag">Your screener</span>{% endif %}{% if screen.key == 'browse' %}{% if sector %} · {{ sector }}{% endif %}{% if cap %} · {{ cap|capitalize }} cap{% endif %}{% endif %}</h3>
         <span class="section-note">{{ screen.desc }}</span>
       </div>
       <div class="card-tools">
