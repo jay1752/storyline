@@ -300,12 +300,12 @@ _VENDOR_LABEL = re.compile(r"\s*\((?:MoneyControl|IndianAPI)[^)]*\)", re.I)
 
 def _next_result(symbol: str, ia_company) -> dict | None:
     """Next results date: the exchange-fed results_calendar first (refreshed daily), IndianAPI's board-meeting list as the fallback.
-    A date that has just passed and is still 'upcoming' means the filing is being picked up ('updating')."""
+    A date that has passed and is still 'upcoming' means the results are filed and the quarter is awaited from the data provider ('updating', up to 25 days)."""
     today = date.today()
     try:
         with get_market_conn() as m:
             row = m.execute("SELECT event_date, status FROM results_calendar WHERE symbol = ? AND event_date >= ? AND status = 'upcoming' ORDER BY event_date LIMIT 1",
-                            (symbol, (today - timedelta(days=6)).isoformat())).fetchone()
+                            (symbol, (today - timedelta(days=25)).isoformat())).fetchone()
     except Exception:  # noqa: BLE001 - table missing on an old DB: fall through to the fallback
         row = None
     if row:

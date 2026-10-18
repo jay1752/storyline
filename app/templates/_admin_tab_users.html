@@ -10,6 +10,7 @@
   <div class="kpi"><span class="kpi-label">Time per visit</span><span class="kpi-value">{{ o.median_visit }}</span><span class="kpi-sub">median</span></div>
   <div class="kpi"><span class="kpi-label">Added or imported</span><span class="kpi-value">{{ o.first_step }}</span><span class="kpi-sub">{{ o.first_step_n }}</span></div>
   <div class="kpi"><span class="kpi-label">Came back</span><span class="kpi-value">{{ o.came_back }}</span><span class="kpi-sub">on a later day</span></div>
+  <div class="kpi"><span class="kpi-label">Deep research</span><span class="kpi-value">{{ o.dr_total.n }}</span><span class="kpi-sub">{{ o.dr_total.users }} user{{ '' if o.dr_total.users == 1 else 's' }} · {{ o.dr_total.failed }} failed · median {{ o.dr_total.median }}</span></div>
   <div class="kpi"><span class="kpi-label">AI failures</span><span class="kpi-value {{ 'val-neg' if o.ai_fail_total else '' }}">{{ o.ai_fail_total }}</span><span class="kpi-sub">{{ o.ai_fail.etf }} ETF · {{ o.ai_fail.limit }} usage limit · {{ o.ai_fail.other }} other</span></div>
 </div>
 
@@ -27,7 +28,7 @@
   <h3 class="card-title">Users <span class="section-note">{{ o.rows|length }} shown of {{ o.total_users }}</span></h3>
   <p class="section-note">Steps: {{ o.steps|join(' · ') }}. Time on site and steps are recorded from {{ o.tracking_since or 'the day this shipped' }}; older steps come from the database where they exist.</p>
   <div class="table-wrap"><table class="fin au-table">
-    <thead><tr><th>User</th><th>Joined</th><th>Last seen</th><th>Visits</th><th>Time on site</th><th>Steps</th><th>Actions</th><th>Status</th></tr></thead>
+    <thead><tr><th>User</th><th>Joined</th><th>Last seen</th><th>Visits</th><th>Time on site</th><th>Steps</th><th>Deep research</th><th>Actions</th><th>Status</th></tr></thead>
     <tbody>
     {% for r in o.rows %}
       <tr class="au-row" hx-get="/admin/users/{{ r.id }}" hx-target="#user-detail" hx-swap="innerHTML" style="cursor:pointer" tabindex="0" onclick="document.getElementById('user-detail').scrollIntoView({behavior:'smooth'})">
@@ -35,15 +36,16 @@
         <td>{{ r.joined }}</td><td>{{ r.last }}</td><td>{{ r.visits or '—' }}</td>
         <td>{{ r.time }}{% if r.avg %}<span class="row-sub">avg {{ r.avg }}</span>{% endif %}</td>
         <td><span class="au-steps" title="{{ r.n_reached }} of 6">{% for ok in r.reached %}<i class="{{ 'd' if ok else '' }}"></i>{% endfor %}</span></td>
+        <td>{% if r.dr_all %}{{ r.dr_n }}<span class="row-sub">{{ r.dr_all }} all time{% if r.dr_failed %} · {{ r.dr_failed }} failed{% endif %} · last {{ r.dr_last }}</span>{% else %}—{% endif %}</td>
         <td class="row-sub" style="max-width:15rem">{{ r.actions }}</td>
         <td><span class="badge {{ {'g': 'pos', 'w': 'accent', 'r': 'neg'}.get(r.tone, 'neutral') }}">{{ r.status }}</span></td>
       </tr>
     {% else %}
-      <tr><td colspan="8"><span class="stub">No users match.</span></td></tr>
+      <tr><td colspan="9"><span class="stub">No users match.</span></td></tr>
     {% endfor %}
     </tbody></table></div>
 </section>
 
 <div id="user-detail"><p class="section-note">Select a user to see their activity.</p></div>
 
-<p class="au-priv"><b>Privacy.</b> Only the event type, the page area and the time are stored. Never holdings, prices, uploaded files or chat text. Emails are masked here; open a user and choose Reveal to see one. Records are deleted after 90 days and when an account is deleted.</p>
+<p class="au-priv"><b>Privacy.</b> Only the event type, the page area and the time are stored. Never holdings, prices, uploaded files or chat text. Deep research shows the stock, time, model and outcome of each run, never the report text. Emails are masked here; open a user and choose Reveal to see one. Records are deleted after 90 days and when an account is deleted.</p>

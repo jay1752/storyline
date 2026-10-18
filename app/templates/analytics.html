@@ -51,7 +51,7 @@
     <a class="vlink" href="/rules">Edit rules</a>
   </div>
   {% endif %}
-  {% if next_result %}{% set nr = next_result %}<span class="vchip warn" title="{{ nr.date }}">{{ nr.label }} {% if nr.updating %}announced, data updating{% elif nr.days == 0 %}today{% elif nr.days == 1 %}tomorrow{% else %}in {{ nr.days }} days{% endif %}</span>{% endif %}
+  {% if next_result %}{% set nr = next_result %}<span class="vchip warn" title="{% if nr.updating %}The results are filed. The new quarter is added as soon as our data provider publishes it; until then this page shows the last quarter we hold.{% else %}{{ nr.date }}{% endif %}">{{ nr.label }} {% if nr.updating %}announced {{ nr.date }}, new quarter awaited{% elif nr.days == 0 %}today{% elif nr.days == 1 %}tomorrow{% else %}in {{ nr.days }} days{% endif %}</span>{% endif %}
 </div>
 {% endif %}
 

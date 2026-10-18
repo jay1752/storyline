@@ -11,7 +11,10 @@ Never touched: March ANNUAL rows (MoneyControl, quarter_label '... annual') - a 
 key-collision that once overwrote March quarters with annual figures.
 
     docker compose exec -T -w /app -e PYTHONPATH=/app app python scripts/apply_indianapi_quarterly.py [--apply] [--limit N]
-Without --apply it only counts."""
+Without --apply it only counts.
+
+--period YYYY-MM-DD (used by the post-results refresh): write ONLY that quarter, nothing older or newer, and leave a quarter alone when its net
+profit disagrees with the filing already stored for it (another basis): one quarter at a time, never a history rewrite."""
 import argparse
 import collections
 import sqlite3
@@ -31,6 +34,7 @@ def main() -> None:
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--symbols", default="", help="comma-separated, e.g. NSE:TCS,NSE:INFY (default: every stock)")
+    ap.add_argument("--period", default="", help="only this quarter end (YYYY-MM-DD)")
     a = ap.parse_args()
     only = {("NSE:" + x if ":" not in x else x) for x in a.symbols.split(",") if x.strip()} if getattr(a, "symbols", "") else None
     ia = sqlite3.connect(f"file:{DATA_DIR}/indianapi.db?mode=ro", uri=True)
@@ -62,11 +66,15 @@ def main() -> None:
         existing = {r["period_end_date"]: r for r in m.execute("SELECT * FROM quarterly_data WHERE symbol=?", (sym,))}
         sales = {p: v["revenue_cr"] for p, v in per.items() if "revenue_cr" in v}
         for p, vals in sorted(per.items()):
-            if not vals:
+            if not vals or (a.period and p != a.period):
                 continue
             ex = existing.get(p)
             if ex is not None and "annual" in (ex["quarter_label"] or "").lower():
                 tally["skipped: key held by an annual row"] += 1
+                continue
+            if a.period and ex is not None and ex["source"] != "indianapi" and ex["net_profit_cr"] is not None and vals.get("net_profit_cr") is not None \
+                    and abs(vals["net_profit_cr"] - ex["net_profit_cr"]) > 0.02 * max(abs(ex["net_profit_cr"]), 1e-9) + 0.6:
+                tally["skipped: net profit differs from the stored filing (another basis)"] += 1
                 continue
             if "revenue_cr" in vals:  # growth on the IndianAPI basis, from IndianAPI's own prior-year quarter
                 prior = next((v for k, v in sales.items() if abs((date.fromisoformat(k) - (date.fromisoformat(p) - timedelta(days=365))).days) <= 10), None)

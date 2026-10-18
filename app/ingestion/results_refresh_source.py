@@ -1,11 +1,13 @@
-"""After a company's results date, pull its new quarter.
+"""After a company's results date, pull its new quarter from IndianAPI, and only that quarter.
 
-Candidates are results_calendar rows still 'upcoming' whose date is today or up to 6 days back (filings can lag the board meeting by a day or
-more). Per stock: (1) BSE filings, re-ingested for that one symbol (free, always); (2) if INDIANAPI_KEY is set, the stock is covered by
-IndianAPI and the monthly call cap allows, one /historical_stats call, then the same loader/apply/gate scripts as the bulk backfill, restricted
-to that symbol (IndianAPI stays the source of record wherever it has the quarter; the basis gate still decides). The row becomes 'refreshed' once
-the quarter that ended just before the result date is present in quarterly_data, else it is retried next run (max 5 tries over the window).
-Finally the stock's analytics metrics (stock_metrics) are rebuilt so screens and the stock page show the new quarter."""
+IndianAPI is the one source for new quarters (user decision 2026-10-18: no mixing of sources inside a quarter; BSE is no longer called here).
+It usually has a company's quarter some days after the filing, so each stock is checked on a spaced schedule (CHECK_AFTER_DAYS) instead of daily,
+the biggest companies first, which also spends far fewer of the monthly calls. Candidates are results_calendar rows still 'upcoming' whose date
+is within LOOKBACK_DAYS. Per stock: one /historical_stats call, then the loader and the apply scripts restricted to that stock AND that one
+quarter (--period): the quarter's P&L, its shareholding and, for a March quarter, that fiscal year's annual row. Nothing older is touched.
+The row becomes 'refreshed' once the quarter is stored with source indianapi; until then the stock page says the results are filed and the data
+is awaited. A quarter whose net profit disagrees with the filing already stored (another basis) is left as filed and noted.
+The stock's analytics metrics (stock_metrics) are rebuilt after each new quarter so screens and the stock page show it."""
 import importlib.util
 import json
 import os
@@ -17,10 +19,10 @@ from typing import Callable, Optional
 
 from app.db import DATA_DIR
 from app.ingestion.base import DataSource
-from app.ingestion.bse_source import BseSource
 
-LOOKBACK_DAYS = 6
-MAX_TRIES = 5
+LOOKBACK_DAYS = 25
+CHECK_AFTER_DAYS = [1, 3, 6, 9, 13, 18, 24]  # the n-th check happens this many days after the results date or later
+MAX_TRIES = len(CHECK_AFTER_DAYS)
 MONTHLY_CAP = int(os.environ.get("INDIANAPI_MONTHLY_CAP", "450"))  # free plan = 500/month; keep a margin
 IA_HOST = "https://stock.indianapi.in"
 SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
@@ -78,10 +80,14 @@ def _has(conn, table: str) -> bool:
     return bool(conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone())
 
 
-def _run_scripts(sym: str) -> None:
+def _run_scripts(sym: str, qend: str) -> None:
+    """Load the stock into the staging DB, then apply only the quarter that just reported (and its fiscal year when it is a March quarter).
+    The basis gate is not re-run: it judges a stock's whole history and can delete it, which a one-quarter refresh must never do."""
     env = {**os.environ, "PYTHONPATH": str(SCRIPTS.parent)}
-    for script, extra in (("load_indianapi.py", []), ("apply_indianapi_quarterly.py", ["--apply"]), ("apply_indianapi_annual.py", []),
-                          ("apply_indianapi_holdings.py", ["--apply"]), ("apply_indianapi_gate.py", ["--apply"])):
+    steps = [("load_indianapi.py", []), ("apply_indianapi_quarterly.py", ["--apply", "--period", qend]), ("apply_indianapi_holdings.py", ["--apply", "--period", qend])]
+    if qend.endswith("-03-31"):
+        steps.append(("apply_indianapi_annual.py", ["--period", qend]))
+    for script, extra in steps:
         r = subprocess.run([sys.executable, str(SCRIPTS / script), "--symbols", sym, *extra], cwd=str(SCRIPTS.parent), env=env, capture_output=True, text=True, timeout=300)
         if r.returncode != 0:
             raise RuntimeError(f"{script}: {(r.stderr or r.stdout)[-200:]}")
@@ -102,60 +108,59 @@ class ResultsRefreshSource(DataSource):
     def ingest_prices(self, conn, limit: Optional[int] = None, symbol: Optional[str] = None, progress: Optional[Callable[[int], None]] = None) -> int:
         today = date.today()
         rows = conn.execute(
-            """SELECT symbol, event_date, tries FROM results_calendar
-               WHERE status = 'upcoming' AND event_date <= ? AND event_date >= ? AND tries < ? ORDER BY event_date""",
+            """SELECT c.symbol, c.event_date, c.tries FROM results_calendar c LEFT JOIN stock_metrics s ON s.symbol = c.symbol
+               WHERE c.status = 'upcoming' AND c.event_date <= ? AND c.event_date >= ? AND c.tries < ? ORDER BY COALESCE(s.mcap, 0) DESC""",
             (today.isoformat(), (today - timedelta(days=LOOKBACK_DAYS)).isoformat(), MAX_TRIES)).fetchall()
+        # spaced checks: the n-th check waits CHECK_AFTER_DAYS[n] days from the results date (IndianAPI lags the filing)
+        rows = [r for r in rows if (today - date.fromisoformat(r["event_date"])).days >= CHECK_AFTER_DAYS[r["tries"]]]
         if symbol:
             rows = [r for r in rows if r["symbol"] == symbol]
         if limit:
             rows = rows[:limit]
         key = os.environ.get("INDIANAPI_KEY", "").strip()
-        fetcher, client = (None, None)
-        if key:
-            fetcher = _fetcher()
-            client = fetcher.Client(key, 10 ** 9)  # our own monthly cap (ia_usage) governs; the client adds pacing and the outage breaker
-        bse, done, notes = BseSource(), 0, []
-        ia_stopped = None
+        if not key:
+            print("results_refresh: IndianAPI key not set, nothing to refresh")
+            return 0
+        fetcher = _fetcher()
+        client = fetcher.Client(key, 10 ** 9)  # our own monthly cap (ia_usage) governs; the client adds pacing and the outage breaker
+        done, notes, ia_stopped = 0, [], None
         for r in rows:
             sym, ev = r["symbol"], r["event_date"]
             qend, note = expected_quarter_end(ev), []
-            try:
-                bse.ingest_quarterly(conn, symbol=sym)
+            if not _ia_eligible(conn, sym):
+                conn.execute("UPDATE results_calendar SET status = 'not_covered', last_try = ?, note = ? WHERE symbol = ? AND event_date = ?",
+                             (datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), "not covered by IndianAPI", sym, ev))
                 conn.commit()
-            except Exception as e:  # noqa: BLE001 - one stock failing must not stop the rest
-                note.append(f"bse: {type(e).__name__}")
-            wants_ia = bool(client) and _ia_eligible(conn, sym)
-            if wants_ia and not ia_stopped:
-                if _used(conn) >= MONTHLY_CAP:
-                    ia_stopped = f"IndianAPI monthly cap {MONTHLY_CAP} reached"
+                continue
+            if ia_stopped:
+                break                                           # budget or outage: leave the rest for the next run, tries untouched
+            if _used(conn) >= MONTHLY_CAP:
+                ia_stopped = f"IndianAPI monthly cap {MONTHLY_CAP} reached"
+                break
+            try:
+                p = fetcher._path("historical_stats", sym.split(":")[-1])
+                if p.exists() and datetime.now().timestamp() - p.stat().st_mtime < 20 * 3600:
+                    body, err = json.loads(p.read_text()), None  # fetched earlier today (a failed apply is retried without a new call)
                 else:
-                    try:
-                        p = fetcher._path("historical_stats", sym.split(":")[-1])
-                        if p.exists() and datetime.now().timestamp() - p.stat().st_mtime < 20 * 3600:
-                            body, err = json.loads(p.read_text()), None  # fetched earlier today (a failed apply is retried without a new call)
-                        else:
-                            _bump(conn)
-                            body, err = client.get("historical_stats", {"stock_name": sym.split(":")[-1], "stats": "all"})
-                            if isinstance(body, dict) and "error" not in body and body:
-                                p.write_text(json.dumps(body))
-                        if isinstance(body, dict) and "error" not in body and body:
-                            _run_scripts(sym)
-                        else:
-                            note.append(f"indianapi: {err or 'no data'}")
-                    except Exception as e:  # noqa: BLE001 - Budget (401/402/403/429, breaker) stops IA for this run, not BSE
-                        ia_stopped = f"IndianAPI stopped: {str(e)[:80]}"
-            src = _quarter_source(conn, sym, qend)
-            got = src is not None
-            # IndianAPI usually lags the filing by a day or two: while it is wanted and has not got the quarter, keep the row open
-            # (BSE's figures are already in), and accept BSE-only after a 3rd attempt.
-            final = got and (not wants_ia or src == "indianapi" or r["tries"] + 1 >= 3)
-            if got and not final:
-                note.append("filed; waiting for IndianAPI")
+                    _bump(conn)
+                    body, err = client.get("historical_stats", {"stock_name": sym.split(":")[-1], "stats": "all"})
+                    if isinstance(body, dict) and "error" not in body and body:
+                        p.write_text(json.dumps(body))
+                if isinstance(body, dict) and "error" not in body and body:
+                    _run_scripts(sym, qend)
+                else:
+                    note.append(f"indianapi: {err or 'no data'}")
+            except Exception as e:  # noqa: BLE001 - budget (401/402/403/429, breaker) stops IndianAPI for this run
+                ia_stopped = f"IndianAPI stopped: {str(e)[:80]}"
+                break
+            got = _quarter_source(conn, sym, qend) == "indianapi"
+            if not got:
+                note.append("results filed; quarter not yet at IndianAPI")
             conn.execute("UPDATE results_calendar SET status = ?, tries = tries + 1, last_try = ?, note = ? WHERE symbol = ? AND event_date = ?",
-                         ("refreshed" if final else "upcoming", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), "; ".join(note) or None, sym, ev))
+                         ("refreshed" if got else "upcoming", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), "; ".join(note) or None, sym, ev))
             conn.commit()
             if got:
-                done += 1 if final else 0
+                done += 1
                 try:
                     from app import discovery
                     discovery.build_metrics(only=sym)
@@ -165,8 +170,6 @@ class ResultsRefreshSource(DataSource):
                 progress(done)
         if ia_stopped:
             notes.append(ia_stopped)
-        if not key:
-            notes.append("IndianAPI key not set: BSE filings only")
         if notes:
             print("results_refresh:", "; ".join(notes))
         return done

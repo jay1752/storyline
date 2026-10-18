@@ -2,7 +2,7 @@
 
 Same stock selection as the quarterly apply (status loaded/unchecked). Bank/NBFC layout: only net profit, PBT, tax, EPS, other income,
 balance-sheet totals and the whole cash-flow statement (IndianAPI's bank 'Revenue'/'Financing Profit' are not our revenue/operating profit).
-Idempotent (INSERT OR REPLACE per stock-year). Run: docker compose exec -T -w /app -e PYTHONPATH=/app app python scripts/apply_indianapi_annual.py"""
+Idempotent (INSERT OR REPLACE per stock-year). --period YYYY-MM-DD writes only that fiscal year (the post-results refresh, for a March quarter) and deletes nothing. Run: docker compose exec -T -w /app -e PYTHONPATH=/app app python scripts/apply_indianapi_annual.py"""
 import collections
 import sqlite3
 import sys
@@ -30,6 +30,7 @@ def main() -> None:
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--symbols", default="", help="comma-separated, e.g. NSE:TCS,NSE:INFY (default: every stock)")
+    ap.add_argument("--period", default="", help="only this fiscal year end (YYYY-MM-DD); nothing is deleted")
     a = ap.parse_args()
     only = {("NSE:" + x if ":" not in x else x) for x in a.symbols.split(",") if x.strip()} or None
     init_db()  # creates annual_data on databases that predate it
@@ -43,7 +44,9 @@ def main() -> None:
     except sqlite3.OperationalError:
         reverted, recent_ok = set(), set()
     tally = collections.Counter()
-    if only:  # a targeted refresh: replace just these stocks' rows
+    if a.period:
+        pass  # one year only: other years are left exactly as they are
+    elif only:  # a targeted refresh: replace just these stocks' rows
         m.executemany("DELETE FROM annual_data WHERE source = 'indianapi' AND symbol = ?", [(s,) for s in only])
     else:
         m.execute("DELETE FROM annual_data WHERE source = 'indianapi'")  # rebuild cleanly so rows dropped by a rule change don't linger
@@ -61,6 +64,8 @@ def main() -> None:
             if col and r["value"] is not None:
                 years[r["period_end"]][col] = r["value"]
         for pe, vals in years.items():
+            if a.period and pe != a.period:
+                continue
             if sym in recent_ok and pe not in sorted(years)[-4:]:
                 continue  # older years of a recent_ok stock may be on another basis (restated / demerged): not stored
             if not any(k in vals for k in ("revenue_cr", "net_profit_cr", "cfo_cr")):

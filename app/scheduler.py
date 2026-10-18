@@ -50,7 +50,7 @@ JOBS = {
     },
     "results_refresh": {
         "label": "Post-results data refresh", "source": "results_refresh", "hm": 21 * 60 + 30, "days": ALL_DAYS,
-        "desc": "For every company whose result date has passed: pulls the new quarter from BSE filings and IndianAPI (within a monthly call cap), re-checks it against the filings, and refreshes that stock's analytics. Retries daily for up to a week.",
+        "desc": "For every company whose result date has passed: pulls the new quarter from IndianAPI, the only source, and writes only that quarter (plus its shareholding and, for March, that year's annual row), never older data. IndianAPI lags the filing, so each stock is checked on a spaced schedule (day 1, 3, 6, 9, 13, 18, 24), largest companies first, within the monthly call cap, then its analytics are refreshed.",
     },
     "insights": {
         "label": "Daily stock analysis", "source": "insights", "hm": 8 * 60 + 30, "days": ALL_DAYS,

@@ -17,6 +17,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--symbols", default="", help="comma-separated, e.g. NSE:TCS,NSE:INFY (default: every stock)")
+    ap.add_argument("--period", default="", help="only this quarter end (YYYY-MM-DD)")
     a = ap.parse_args()
     only = {("NSE:" + x if ":" not in x else x) for x in a.symbols.split(",") if x.strip()} if getattr(a, "symbols", "") else None
     ia = sqlite3.connect(f"file:{DATA_DIR}/indianapi.db?mode=ro", uri=True)
@@ -30,7 +31,7 @@ def main() -> None:
         pass
     per = collections.defaultdict(dict)
     for sym, pe, cat, v in ia.execute("SELECT symbol, period_end, category, value FROM ia_holding WHERE freq='Q' AND category IN ('Promoters','FIIs','DIIs')"):
-        if sym in ok and (only is None or sym in only):
+        if sym in ok and (only is None or sym in only) and (not a.period or pe == a.period):
             per[(sym, pe)][COL[cat]] = v
     tally = collections.Counter()
     for (sym, pe), vals in per.items():

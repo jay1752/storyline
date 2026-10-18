@@ -125,6 +125,18 @@ def overview(days: int = 7, flt: str = "all", q: str = "") -> dict:
             e = r["error"] or ""
             ai_fail["etf" if "no reported fundamentals" in e else "limit" if ("usage limit" in e or "429" in e) else "other"] += 1
 
+        dr, dr_all = {}, {}
+        for r in u.execute("SELECT user_id, status, created_at, finished_at FROM research_reports WHERE created_at >= ?", (since,)):
+            d = dr.setdefault(r["user_id"], {"n": 0, "failed": 0, "secs": []})
+            d["n"] += 1
+            d["failed"] += r["status"] == "failed"
+            if r["status"] == "success" and r["finished_at"]:
+                d["secs"].append((_utc(r["finished_at"]) - _utc(r["created_at"])).total_seconds())
+        for r in u.execute("SELECT user_id, COUNT(*) n, MAX(created_at) last FROM research_reports GROUP BY user_id"):
+            dr_all[r["user_id"]] = (r["n"], _utc(r["last"]))
+        dr_total = {"n": sum(d["n"] for d in dr.values()), "failed": sum(d["failed"] for d in dr.values()), "users": len(dr),
+                    "median": fmt_secs(statistics.median([x for d in dr.values() for x in d["secs"]])) if any(d["secs"] for d in dr.values()) else "—"}
+
         funnel = [sum(1 for uid in new_ids if facts[uid]["reached"][i]) for i in range(6)]
         rows = []
         for r in users:
@@ -136,6 +148,7 @@ def overview(days: int = 7, flt: str = "all", q: str = "") -> dict:
             rows.append({"id": uid, "email": mask(r["email"]), "name": r["display_name"] or "", "joined": _utc(r["created_at"]).strftime("%d %b %H:%M"), "joined_dt": _utc(r["created_at"]),
                          "last": _ago(last_seen.get(uid)), "last_dt": last_seen.get(uid), "visits": len(vs) or None, "time": fmt_secs(total) if total else "—",
                          "avg": fmt_secs(total / len(vs)) if vs else "", "reached": f["reached"], "n_reached": sum(f["reached"]), "status": status, "tone": tone, "f": f,
+                         "dr_n": dr.get(uid, {}).get("n", 0), "dr_failed": dr.get(uid, {}).get("failed", 0), "dr_all": dr_all.get(uid, (0, None))[0], "dr_last": _ago(dr_all.get(uid, (0, None))[1]) if uid in dr_all else "",
                          "actions": ", ".join(x for x in (
                              f"{f['tracked']} stock{'s' if f['tracked'] != 1 else ''}" if f["tracked"] else "",
                              "imported" if f["imported"] else "",
@@ -156,7 +169,7 @@ def overview(days: int = 7, flt: str = "all", q: str = "") -> dict:
     first = funnel[3] if funnel else 0
     return {"days": days, "flt": flt, "q": q, "total_users": len(users), "new": len(new_ids), "prior_new": prior_new, "active_now": active_now,
             "median_visit": fmt_secs(statistics.median(durations)) if durations else "—", "first_step": f"{round(100 * first / len(new_ids))}%" if new_ids else "—",
-            "first_step_n": f"{first} of {len(new_ids)} new" if new_ids else "no new users", "came_back": came_back, "ai_fail": ai_fail, "ai_fail_total": sum(ai_fail.values()),
+            "first_step_n": f"{first} of {len(new_ids)} new" if new_ids else "no new users", "came_back": came_back, "ai_fail": ai_fail, "ai_fail_total": sum(ai_fail.values()), "dr_total": dr_total,
             "funnel": [{"label": STEPS[i], "n": funnel[i], "pct": round(100 * funnel[i] / len(new_ids)) if new_ids else 0,
                         "drop": (round(100 * (funnel[i - 1] - funnel[i]) / funnel[i - 1]) if i and funnel[i - 1] and funnel[i] < funnel[i - 1] else None)} for i in range(6)],
             "rows": rows, "steps": STEPS, "tracking_since": _tracking_since()}
@@ -203,6 +216,13 @@ def detail(uid: int, reveal: bool = False) -> dict | None:
             "SELECT ts, secs, area FROM user_activity WHERE user_id = ? AND kind = 'beat' AND ts >= datetime('now','-30 days') ORDER BY ts", (uid,))]
         sessions = [{"at": _utc(s["created_at"]).strftime("%d %b %H:%M")} for s in u.execute("SELECT created_at FROM sessions WHERE user_id = ? ORDER BY created_at DESC LIMIT 8", (uid,))]
         f = _facts(u, uid, "")
+        research = []
+        for x in u.execute("SELECT created_at, finished_at, status, symbol, model, error FROM research_reports WHERE user_id = ? ORDER BY id DESC LIMIT 30", (uid,)):
+            took = fmt_secs((_utc(x["finished_at"]) - _utc(x["created_at"])).total_seconds()) if x["finished_at"] else "—"
+            err = (x["error"] or "").strip()
+            research.append({"at": _utc(x["created_at"]).strftime("%d %b %H:%M"), "symbol": (x["symbol"] or "").split(":")[-1], "status": x["status"], "model": x["model"] or "—", "took": took, "error": err[:90]})
+        research_today = u.execute("SELECT COUNT(*) FROM research_reports WHERE user_id = ? AND created_at > datetime('now', '-1 day')", (uid,)).fetchone()[0]
+        research_all = u.execute("SELECT COUNT(*) FROM research_reports WHERE user_id = ?", (uid,)).fetchone()[0]
     vs = _visits(beats)
     by_area: dict[str, int] = {}
     for _, secs, area in beats:
@@ -214,4 +234,5 @@ def detail(uid: int, reveal: bool = False) -> dict | None:
             "events": [{"t": e[0].strftime("%d %b %H:%M"), "label": e[1], "note": e[2], "tone": e[3]} for e in events[:60]],
             "pages": sorted(({"label": AREA_LABEL.get(a, a), "secs": fmt_secs(s), "pct": max(2, round(100 * s / top))} for a, s in by_area.items()), key=lambda x: -x["pct"]),
             "visits": [{"start": v["start"].strftime("%d %b %H:%M"), "dur": fmt_secs(v["secs"]), "where": ", ".join(AREA_LABEL.get(a, a) for a, _ in sorted(v["areas"].items(), key=lambda kv: -kv[1])[:3])} for v in reversed(vs[-8:])],
-            "total": fmt_secs(sum(v["secs"] for v in vs)), "n_visits": len(vs), "sessions": sessions}
+            "total": fmt_secs(sum(v["secs"] for v in vs)), "n_visits": len(vs), "sessions": sessions,
+            "research": research, "research_today": research_today, "research_all": research_all}

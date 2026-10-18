@@ -5,6 +5,12 @@
     {% if not d.revealed %}<button type="button" class="btn btn-sm" hx-get="/admin/users/{{ d.id }}?reveal=1" hx-target="#user-detail" hx-swap="innerHTML">Reveal email</button>{% endif %}
   </div>
   <div class="au-steps-row">{% for ok in d.reached %}<span class="au-step {{ 'd' if ok else '' }}">{{ d.steps[loop.index0] }}</span>{% endfor %}</div>
+  <h4 class="au-h">Deep research <span class="section-note">{{ d.research_all }} run{{ '' if d.research_all == 1 else 's' }} in total · {{ d.research_today }} in the last 24 hours (limit 5)</span></h4>
+  {% if d.research %}
+  <ul class="au-tl">
+    {% for x in d.research %}<li><time>{{ x.at }}</time><i class="{{ 'bad' if x.status == 'failed' else '' }}"></i><span>{{ x.symbol }} · {{ x.status }}{% if x.took != '—' %} · {{ x.took }}{% endif %}<small>{{ x.model }}{% if x.error %} · {{ x.error }}{% endif %}</small></span></li>{% endfor %}
+  </ul>
+  {% else %}<p class="section-note">No deep research run yet.</p>{% endif %}
   <div class="au-two">
     <div>
       <h4 class="au-h">Activity</h4>
