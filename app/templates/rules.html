@@ -36,7 +36,7 @@
   {% if sets %}
   <div class="table-wrap"><table class="fin"><thead><tr><th>Screener</th><th>Used by</th><th></th></tr></thead><tbody>
     {% for x in sets %}<tr><td><a href="/rules?set={{ x.id }}#screeners"><b>{{ x.name }}</b></a></td><td class="row-sub">{{ x.assigned }} tracked stock{{ '' if x.assigned == 1 else 's' }}</td>
-      <td class="rule-actions"><a class="btn btn-sm" href="/rules?set={{ x.id }}#screeners">Edit</a> <a class="btn btn-sm" href="/analytics?screen=rules&rs={{ x.id }}">Screen stocks</a>
+      <td class="rule-actions"><a class="btn btn-sm" href="/rules?set={{ x.id }}#screeners">Edit</a> <a class="btn btn-sm" href="/analytics?screen=rs-{{ x.id }}">Screen stocks</a>
         <button type="button" class="btn btn-sm set-rename" data-set="{{ x.id }}" data-name="{{ x.name }}">Rename</button> <button type="button" class="btn btn-sm set-delete" data-set="{{ x.id }}" data-name="{{ x.name }}">Delete</button></td></tr>{% endfor %}
   </tbody></table></div>
   {% else %}<p class="prose">None yet. A screener starts as a copy of your rules above, so you only change what differs, for example a stricter debt limit.</p>{% endif %}

@@ -90,16 +90,21 @@ def analytics_landing(request: Request, screen: str = "rules", market: str = "IN
             pass
     if sort in discovery.CUSTOM_SORTS:
         custom["sort"] = sort
+    want_set = None                      # a screener of the user's own is its own screen: ?screen=rs-<id> (older links used ?rs=<id>)
+    if screen.startswith("rs-") and screen[3:].isdigit():
+        want_set, screen = int(screen[3:]), "rules"
+    elif rs.isdigit() and screen == "rules":
+        want_set = int(rs)
     if screen == "custom" and not any(k in custom for k in discovery.CUSTOM_FIELDS):
         screen = "rules"
     if screen not in discovery.SCREEN_BY_KEY:
         screen = "rules"
     if screen == "rules" and (cap or sector):
-        screen = "browse"  # a size/sector pick on the default screen means "browse this group"
+        screen, want_set = "browse", None  # a size/sector pick on the default screen means "browse this group"
     _refresh_metrics_if_stale()
     with get_users_conn() as u:
         sets = fw.list_sets(u, request.state.user_id)
-        rs_set = fw.owned_set(u, request.state.user_id, rs) if rs else None   # a screener of the user's own, else their rules
+        rs_set = fw.owned_set(u, request.state.user_id, want_set) if want_set else None   # the user's own screener, else their rules
         th = fw.resolve(u, request.state.user_id, set_id=rs_set["id"] if rs_set else None)
         tracked = {r["symbol"] for r in u.execute("SELECT symbol FROM tracked_positions WHERE user_id = ? AND status = 'active'", (request.state.user_id,))}
     n = min(max(n, 60), 600)
@@ -110,7 +115,7 @@ def analytics_landing(request: Request, screen: str = "rules", market: str = "IN
     fc = discovery.facets(market)
 
     def link(**kw):
-        q = {"screen": screen, "market": market, "cap": cap, "sector": sector, "rs": rs_set["id"] if rs_set else ""}
+        q = {"screen": f"rs-{rs_set['id']}" if rs_set else screen, "market": market, "cap": cap, "sector": sector}
         q.update(kw)
         return "/analytics?" + urlencode({k: v for k, v in q.items() if v not in ("", None)})
 
@@ -122,7 +127,8 @@ def analytics_landing(request: Request, screen: str = "rules", market: str = "IN
     return templates.TemplateResponse(
         "analytics_landing.html",
         {"request": request, "active_nav": "analytics", "guide": None if gp["dismissed"] or gp["done"]["position"] else gp, "total_with_data": total_with_data, "screens": discovery.SCREENS,
-         "screen": discovery.SCREEN_BY_KEY[screen], "market": market, "cap": cap, "sector": sector, "custom": custom, "result": res,
+         "screen": ({**discovery.SCREEN_BY_KEY["rules"], "label": rs_set["name"], "star": False, "desc": f"Stocks that clear every threshold in your screener \u201c{rs_set['name']}\u201d. Edit it on Investment rules and this list changes."}
+                    if rs_set else discovery.SCREEN_BY_KEY[screen]), "market": market, "cap": cap, "sector": sector, "custom": custom, "result": res,
          "facets": fc, "goals": _GOALS, "link": link, "preparing": discovery.metrics_age_days() is None, "n": n,
          "more_href": link(n=n + 60, **{k: v for k, v in (("roce", roce), ("de", de), ("growth", growth), ("pe", pe), ("opm", opm), ("div", div), ("sort", sort)) if v != ""}),
          "custom_open": screen == "custom", "sets": sets, "rs_set": rs_set},

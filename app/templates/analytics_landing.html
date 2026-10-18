@@ -37,9 +37,11 @@
     {% for key, label, scr in goals %}<a class="dz-goal" href="{{ link(screen=scr) }}">{{ label }}</a>{% endfor %}
   </div>
 
-  <div class="section-head"><div><h2 class="section-title">What are you looking for?</h2><span class="section-note">each one is a ready-made screen, explained in plain words</span></div></div>
+  <div class="section-head"><div><h2 class="section-title">What are you looking for?</h2><span class="section-note">ready-made screens in plain words, then your own screeners</span></div></div>
   <div class="dz-chips" role="group" aria-label="Screens">
-    {% for s in screens %}<a class="dz-chip {{ 'on' if s.key == screen.key else '' }} {{ 'star' if s.star else '' }}" href="{{ link(screen=s.key) }}">{{ s.label }}</a>{% endfor %}
+    {% for s in screens %}<a class="dz-chip {{ 'on' if s.key == screen.key and not rs_set else '' }} {{ 'star' if s.star else '' }}" href="{{ link(screen=s.key) }}">{{ s.label }}</a>{% endfor %}
+    {% for x in sets %}<a class="dz-chip {{ 'on' if rs_set and rs_set.id == x.id else '' }}" href="{{ link(screen='rs-' ~ x.id) }}" title="Your screener">{{ x.name }}</a>{% endfor %}
+    <a class="dz-chip" href="/rules#screeners" title="Make your own screener from your rules">+ New screener</a>
   </div>
 
   {% if cap or sector %}
@@ -52,15 +54,11 @@
   <div class="card dz-card">
     <div class="card-head">
       <div>
-        <h3 class="card-title">{{ screen.label }}{% if screen.key == 'rules' and rs_set %} · {{ rs_set.name }}{% endif %}{% if screen.key == 'browse' %}{% if sector %} · {{ sector }}{% endif %}{% if cap %} · {{ cap|capitalize }} cap{% endif %}{% endif %}</h3>
+        <h3 class="card-title">{{ screen.label }}{% if screen.key == 'browse' %}{% if sector %} · {{ sector }}{% endif %}{% if cap %} · {{ cap|capitalize }} cap{% endif %}{% endif %}</h3>
         <span class="section-note">{{ screen.desc }}</span>
       </div>
       <div class="card-tools">
-        {% if screen.key == 'rules' %}<label class="section-note" style="display:flex;gap:.4rem;align-items:center">Screener
-          <select class="form-input" aria-label="Screener" onchange="location.href=this.value">
-            <option value="{{ link(rs='') }}" {{ '' if rs_set else 'selected' }}>My rules</option>
-            {% for x in sets %}<option value="{{ link(rs=x.id) }}" {{ 'selected' if rs_set and rs_set.id == x.id else '' }}>{{ x.name }}</option>{% endfor %}
-          </select></label>{% endif %}
+        
         <div class="seg" role="group" aria-label="Market">
           {% for m, lbl in (('IN', 'India'), ('US', 'US'), ('ALL', 'Both')) %}<a class="{{ 'active' if m == market else '' }}" href="{{ link(market=m) }}">{{ lbl }}</a>{% endfor %}
         </div>
