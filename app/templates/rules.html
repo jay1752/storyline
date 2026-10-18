@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Investment rules · Tenetfolio{% endblock %}
-{% from "_rules_macros.html" import rule_table, story_table with context %}
+{% from "_rules2_macros.html" import rule_groups, setting_rows with context %}
 {% block content %}
 <div class="page-head">
   <div class="page-head-main">
     <span class="eyebrow">System</span>
     <h1 class="page-title">Investment rules</h1>
-    <p class="page-sub">The thresholds behind the Fundamentals scan on every stock's story page, which of your stocks get a story automatically each day, and how you size positions. They apply in three layers: the <b>platform</b> default, <b>your</b> defaults, and an override for a <b>single stock</b>. Anything you don't change inherits from the layer above, and ↺ Reset sends it back.</p>
+    <p class="page-sub">Set what a good stock means to you. <b>My rules</b> drive your portfolio, stock scores and daily stories. <b>Screeners</b> are extra rule sets you can use to find or check stocks without touching your own.</p>
   </div>
 </div>
 
@@ -14,78 +14,101 @@
 <section class="rules-start" aria-label="Getting started with rules">
   <h2>Set your rules in two steps</h2>
   <ol>
-    <li><a href="#thresholds"><b>Thresholds</b></a>: what a good stock means to you. This drives the &ldquo;Passes your rules&rdquo; screen in Analytics and every stock&rsquo;s verdict.</li>
-    <li><a href="#sizing"><b>Position sizing</b></a>: how big a holding may grow, when to trim, and your sector limit. This drives the alerts on your tracked stocks.</li>
+    <li><a href="#rules"><b>My rules</b></a>: what a good stock means to you. Defaults are filled in, so change only what you disagree with.</li>
+    <li><a href="#portfolio"><b>Portfolio &amp; daily story</b></a>: how big a holding may grow, when to trim, and your sector limit.</li>
   </ol>
-  <p class="prose">Defaults are already filled in. Change a number, then press <b>Save</b> on that row. Anything you leave stays at the default.</p>
 </section>
 {% endif %}
 
-<section class="section" id="thresholds">
-  <div class="section-head">
-    <div><h2 class="section-title">Your defaults</h2><span class="section-note">used for every stock unless that stock has its own</span></div>
-    <button type="button" class="btn btn-sm" id="reset-all-user">↺ Reset all to the platform defaults</button>
+<nav class="rl-tabs" role="tablist" aria-label="Rules sections">
+  <button type="button" role="tab" class="rl-tab" data-tab="rules">My rules</button>
+  <button type="button" role="tab" class="rl-tab" data-tab="screeners">Screeners <span class="rl-count">{{ sets|length }}</span></button>
+  <button type="button" role="tab" class="rl-tab" data-tab="portfolio">Portfolio &amp; daily story</button>
+  <button type="button" role="tab" class="rl-tab" data-tab="stocks">Stock overrides {% if stocks %}<span class="rl-count">{{ stocks|length }}</span>{% endif %}</button>
+</nav>
+
+{# ------------------------------------------------------------------ My rules #}
+<section class="rl-panel" id="tab-rules" role="tabpanel" data-has-edit="1">
+  <div class="rl-panel-head">
+    <p class="rl-lead">Every stock is checked against these. They also drive the <a href="/analytics?screen=rules">Passes your rules</a> screen.</p>
+    <button type="button" class="btn btn-sm" data-reset-all="user" data-ask="Reset ALL of your rules to the platform defaults? Stocks with their own rules keep them.">↺ Reset all to defaults</button>
   </div>
-  {{ rule_table(mine, 'user') }}
+  {{ rule_groups(mine, 'user', groups, by_key) }}
+  {% if start %}<div class="rules-done"><a class="btn btn-primary" href="/analytics?screen=rules">Show me stocks that pass my rules</a><a class="btn" href="/management">Go to my positions</a></div>{% endif %}
 </section>
 
-<section class="section" id="screeners">
-  <div class="section-head">
-    <div><h2 class="section-title">Screeners</h2><span class="section-note">named copies of the thresholds above · pick one in Analytics, on a stock page or before a Deep research run · your own rules above stay the master for your portfolio</span></div>
+{# ------------------------------------------------------------------ Screeners #}
+<section class="rl-panel" id="tab-screeners" role="tabpanel" hidden>
+  <div class="rl-panel-head">
+    <p class="rl-lead">A screener is a named copy of your rules. Change what differs, then use it in <a href="/analytics">Analytics</a>, on a stock page, or before a Deep research run. Your own rules stay the master for your portfolio.</p>
   </div>
-  {% if sets %}
-  <div class="table-wrap"><table class="fin"><thead><tr><th>Screener</th><th>Used by</th><th></th></tr></thead><tbody>
-    {% for x in sets %}<tr><td><a href="/rules?set={{ x.id }}#screeners"><b>{{ x.name }}</b></a></td><td class="row-sub">{{ x.assigned }} tracked stock{{ '' if x.assigned == 1 else 's' }}</td>
-      <td class="rule-actions"><a class="btn btn-sm" href="/rules?set={{ x.id }}#screeners">Edit</a> <a class="btn btn-sm" href="/analytics?screen=rs-{{ x.id }}">Screen stocks</a>
-        <button type="button" class="btn btn-sm set-rename" data-set="{{ x.id }}" data-name="{{ x.name }}">Rename</button> <button type="button" class="btn btn-sm set-delete" data-set="{{ x.id }}" data-name="{{ x.name }}">Delete</button></td></tr>{% endfor %}
-  </tbody></table></div>
-  {% else %}<p class="prose">None yet. A screener starts as a copy of your rules above, so you only change what differs, for example a stricter debt limit.</p>{% endif %}
   {% if sets|length < max_sets %}
-  <form class="set-new" id="set-new" style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.8rem;align-items:center">
-    <input class="form-input" id="set-name" maxlength="40" placeholder="Name, e.g. Quality compounders" aria-label="Screener name" style="max-width:20rem">
-    <button type="submit" class="btn btn-sm btn-primary">New screener from my rules</button><span class="rule-msg" id="set-msg" role="status"></span>
+  <form class="rl-new" id="set-new">
+    <input class="form-input" id="set-name" maxlength="40" placeholder="Name your screener, e.g. Quality compounders" aria-label="Screener name">
+    <button type="submit" class="btn btn-primary">Create from my rules</button><span class="rl-msg" id="set-msg" role="status"></span>
   </form>
-  {% else %}<p class="section-note">You have the maximum of {{ max_sets }} screeners.</p>{% endif %}
+  {% else %}<p class="rl-lead">You have the maximum of {{ max_sets }} screeners. Delete one to make another.</p>{% endif %}
+
+  {% if sets %}
+  <div class="rl-cards">
+    {% for x in sets %}
+    <article class="rl-card {{ 'on' if edit_set and edit_set.id == x.id else '' }}">
+      <h3><a href="/rules?set={{ x.id }}#screeners">{{ x.name }}</a></h3>
+      <p class="rl-card-meta">{% if x.differs %}{{ x.differs }} rule{{ ' differs' if x.differs == 1 else 's differ' }} from yours{% else %}Same as your rules{% endif %} · {{ x.assigned }} tracked stock{{ '' if x.assigned == 1 else 's' }}</p>
+      <div class="rl-card-actions">
+        <a class="btn btn-sm btn-primary" href="/analytics?screen=rs-{{ x.id }}">Screen stocks</a>
+        <a class="btn btn-sm" href="/rules?set={{ x.id }}#screeners">{{ 'Editing' if edit_set and edit_set.id == x.id else 'Edit rules' }}</a>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="rl-empty"><b>No screeners yet.</b><span>Try "Quality compounders" with a stricter ROCE and debt limit, or "Cheap banks" with a lower price-to-book.</span></div>
+  {% endif %}
+
   {% if edit_set %}
-  <div class="section-head" style="margin-top:1.6rem"><div><h3 class="section-title">{{ edit_set.name }}</h3><span class="section-note">changes here affect only this screener · Reset puts a rule back to your rules as they are now</span></div>
-    <button type="button" class="btn btn-sm" id="reset-all-set">↺ Reset all to my rules</button></div>
-  {{ rule_table(set_rows, 'set') }}
+  <div class="rl-editor" id="editor">
+    <div class="rl-editor-head">
+      <div><span class="rl-eyebrow">Editing screener</span><h2>{{ edit_set.name }}</h2></div>
+      <div class="rl-editor-tools">
+        <a class="btn btn-sm" href="/rules#screeners">← All screeners</a>
+        <button type="button" class="btn btn-sm set-rename" data-set="{{ edit_set.id }}" data-name="{{ edit_set.name }}">Rename</button>
+        <button type="button" class="btn btn-sm" id="reset-all-set" data-set="{{ edit_set.id }}">↺ Reset all to my rules</button>
+        <button type="button" class="btn btn-sm btn-outline-danger set-delete" data-set="{{ edit_set.id }}" data-name="{{ edit_set.name }}">Delete</button>
+      </div>
+    </div>
+    <div id="set-editor" data-set="{{ edit_set.id }}">{{ rule_groups(set_rows, 'set', groups, by_key) }}</div>
+  </div>
   {% endif %}
 </section>
 
-<section class="section">
-  <div class="section-head">
-    <div><h2 class="section-title">Daily story</h2><span class="section-note">which of your tracked stocks get an AI story every morning · you can also switch one stock on or off from its own story page</span></div>
-  </div>
-  {{ story_table(story_mine, 'user', story_defs) }}
+{# ------------------------------------------------------------------ Portfolio & daily story #}
+<section class="rl-panel" id="tab-portfolio" role="tabpanel" hidden>
+  <div class="rl-panel-head"><p class="rl-lead">How big a position may get, when to trim, and which of your stocks get an AI story each morning. The AI analysis uses exactly these numbers.</p></div>
+  <h3 class="rl-block-title">Position sizing &amp; discipline</h3>
+  {{ setting_rows(story_mine, 'user', sizing_defs) }}
+  <h3 class="rl-block-title">Daily story</h3>
+  {{ setting_rows(story_mine, 'user', story_defs) }}
 </section>
 
-<section class="section" id="sizing">
-  <div class="section-head">
-    <div><h2 class="section-title">Portfolio sizing &amp; discipline</h2><span class="section-note">how big a position may get, when to trim, and the habits the story checks your journal against · the AI analysis uses exactly these numbers</span></div>
-  </div>
-  {{ story_table(story_mine, 'user', sizing_defs) }}
-</section>
-
-{% if start %}
-<section class="section rules-done">
-  <a class="btn btn-primary" href="/analytics?screen=rules">Show me stocks that pass my rules</a>
-  <a class="btn" href="/management">Go to my positions</a>
-</section>
-{% endif %}
-
-<section class="section">
-  <div class="section-head"><div><h2 class="section-title">Stocks with their own rules</h2><span class="section-note">edit these from the stock's story page (Fundamentals scan → pencil)</span></div></div>
+{# ------------------------------------------------------------------ Stock overrides #}
+<section class="rl-panel" id="tab-stocks" role="tabpanel" hidden>
+  <div class="rl-panel-head"><p class="rl-lead">A stock can have its own rules. Edit them from the stock's story page (Fundamentals scan, then the pencil). Everything else follows My rules.</p></div>
   {% if stocks %}
   <div class="table-wrap"><table class="fin"><thead><tr><th>Stock</th><th>Own rules</th><th></th></tr></thead><tbody>
     {% for s in stocks %}<tr><td><span class="row-ticker">{{ s.symbol }}</span> <span class="row-sub">{{ s.name or '' }}</span></td><td>{{ s.n }} changed</td><td><a class="btn btn-sm" href="/management">Open Management</a></td></tr>{% endfor %}
   </tbody></table></div>
-  {% else %}<p class="prose">None yet — every stock follows your defaults.</p>{% endif %}
+  {% else %}<div class="rl-empty"><b>None yet.</b><span>Every stock follows My rules.</span></div>{% endif %}
 </section>
 
 {% if request.state.is_admin %}
-<p class="section-note">Platform defaults (what every user inherits) now live in <a href="/admin?tab=rules">Platform admin → Platform rules</a>.</p>
+<p class="section-note">Platform defaults (what every user inherits) live in <a href="/admin?tab=rules">Platform admin → Platform rules</a>.</p>
 {% endif %}
 
-<script src="/static/js/rules-page.js?v={{ asset_version('js/rules-page.js') }}" defer></script>
+<div class="rl-bar" id="rl-bar" role="region" aria-label="Unsaved changes" hidden>
+  <span><b id="rl-count">0</b> unsaved change<span id="rl-plural">s</span></span>
+  <span class="rl-bar-actions"><button type="button" class="btn btn-sm" id="rl-discard">Discard</button><button type="button" class="btn btn-sm btn-primary" id="rl-save">Save changes</button></span>
+</div>
+
+<script src="/static/js/rules2.js?v={{ asset_version('js/rules2.js') }}" defer></script>
 {% endblock %}

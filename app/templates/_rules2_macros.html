@@ -1,0 +1,33 @@
+{# One row per rule: what it is, the control, and a quiet "changed" state with a reset. Saving is done for all rows at once from the bar at the foot of the page. #}
+{% macro rule_row(d, r, scope, kind) %}
+<div class="rl-row {{ 'changed' if r.customised else '' }}" data-key="{{ d.key }}" data-scope="{{ scope }}" data-kind="{{ kind }}">
+  <div class="rl-main"><b>{{ d.label }}</b><span class="rl-note">{{ d.note }}</span></div>
+  <div class="rl-ctl">
+    {% if kind == 'rule' %}
+      <span class="rl-op">{{ d.op }}</span><input type="number" class="form-input rule-val" step="any" value="{{ '%g' % r.value }}" aria-label="{{ d.label }} threshold"><span class="rl-unit">{{ d.unit }}</span>
+      <label class="switch" title="Use this rule"><input type="checkbox" class="rule-on" {{ 'checked' if r.enabled else '' }} aria-label="Use {{ d.label }}"><span></span></label>
+    {% elif d.kind == 'choice' %}
+      <select class="form-input rule-val" aria-label="{{ d.label }}">{% for v, lbl in d.choices %}<option value="{{ v }}" {{ 'selected' if v == r.value|int else '' }}>{{ lbl }}</option>{% endfor %}</select>
+    {% else %}
+      <input type="number" class="form-input rule-val" step="1" value="{{ '%g' % r.value }}" aria-label="{{ d.label }}"><span class="rl-unit">{{ d.unit }}</span>
+    {% endif %}
+  </div>
+  <div class="rl-state">
+    <span class="rl-pill" {% if scope == 'set' %}title="Differs from my rules"{% endif %}>{{ 'Differs' if scope == 'set' else 'Changed' }}</span>
+    <button type="button" class="rl-reset" title="Back to {{ 'my rules' if scope == 'set' else 'the default' }}{% if kind == 'rule' %}: {{ d.op }} {{ '%g' % r.reset_value }}{{ d.unit }}{% endif %}" aria-label="Reset {{ d.label }}">↺</button>
+    <span class="rl-msg" role="status"></span>
+  </div>
+</div>
+{% endmacro %}
+
+{% macro rule_groups(rows, scope, groups, by_key) %}
+{% for title, keys in groups %}
+<div class="rl-group"><h3 class="rl-group-title">{{ title }}</h3>
+  {% for k in keys %}{{ rule_row(by_key[k], rows[k], scope, 'rule') }}{% endfor %}
+</div>
+{% endfor %}
+{% endmacro %}
+
+{% macro setting_rows(rows, scope, items) %}
+<div class="rl-group">{% for d in items %}{{ rule_row(d, rows[d.key], scope, 'story') }}{% endfor %}</div>
+{% endmacro %}

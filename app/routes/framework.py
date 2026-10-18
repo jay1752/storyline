@@ -23,6 +23,8 @@ def rules_page(request: Request, start: int = 0, set: int = 0):
         sets = fw.list_sets(u, user_id)
         edit_set = fw.owned_set(u, user_id, set) if set else None
         set_rows = fw.set_layers(u, user_id, edit_set["id"]) if edit_set else None
+        for x in sets:   # how many rules each screener changes from your own, for its card
+            x["differs"] = sum(1 for v in fw.set_layers(u, user_id, x["id"]).values() if v["customised"])
         mine = fw.layers(u, user_id)
         platform = fw.platform_layers(u) if request.state.is_admin else None
         stocks = fw.stocks_with_overrides(u, user_id)
@@ -31,7 +33,8 @@ def rules_page(request: Request, start: int = 0, set: int = 0):
     return templates.TemplateResponse("rules.html", {"start": bool(start),
         "request": request, "active_nav": "rules", "defs": fw.DEFS, "mine": mine, "platform": platform, "stocks": stocks,
         "story_defs": fw.STORY_DEFS, "sizing_defs": fw.SIZING_DEFS, "story_mine": story_mine, "story_platform": story_platform,
-        "sets": sets, "edit_set": edit_set, "set_rows": set_rows, "max_sets": fw.MAX_SETS})
+        "sets": sets, "edit_set": edit_set, "set_rows": set_rows, "max_sets": fw.MAX_SETS,
+        "groups": fw.GROUPS, "by_key": fw.BY_KEY, "story_by_key": fw.STORY_BY_KEY})
 
 
 async def _payload(request: Request) -> dict:

@@ -41,6 +41,14 @@ DEFS = [
      "note": "over the last 5 quarters, in percentage points"},
 ]
 BY_KEY = {d["key"]: d for d in DEFS}
+# How the rules are grouped on the Investment rules page (every key in DEFS appears once).
+GROUPS = [
+    ("Returns and profitability", ["roce", "roe", "opm"]),
+    ("Balance-sheet safety", ["de", "interest_cover", "current_ratio", "quick_ratio", "equity_assets", "pledge"]),
+    ("Growth", ["sales_growth", "profit_growth"]),
+    ("Cash and valuation", ["cfo_pat", "pb", "roa"]),
+    ("Ownership", ["promoter"]),
+]
 SCOPES = ("platform", "user", "stock")
 
 # Daily story settings: same layering and storage as the scan rules (framework_overrides), kept in their own list so the Fundamentals
