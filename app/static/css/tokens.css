@@ -1977,3 +1977,9 @@ button.vlink { background: none; border: 0; padding: 0; cursor: pointer; color: 
 .vsel { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.78rem; margin-left: 0.6rem; color: var(--muted); } .vsel select { font-size: 0.78rem; padding: 0.15rem 0.4rem; }
 .rs2-rs { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: var(--muted); } .rs2-rs select { font-size: 0.82rem; }
 .rs2-rs { white-space: nowrap; }
+.sec-toggle { vertical-align: middle; margin: -0.15rem 0.55rem 0 0; width: 1.6rem; height: 1.6rem; display: inline-grid; place-items: center; border: 1px solid var(--border-strong); border-radius: 50%; background: var(--card); color: var(--muted); cursor: pointer; }
+.sec-toggle:hover { color: var(--ink); background: var(--hover); }
+.sec-toggle svg { transition: transform 0.15s; }
+.section.collapsed .sec-toggle svg { transform: rotate(-90deg); }
+.section.collapsed > :not(.section-head) { display: none; }
+@media (prefers-reduced-motion: reduce) { .sec-toggle svg { transition: none; } }

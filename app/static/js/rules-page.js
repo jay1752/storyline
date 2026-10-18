@@ -66,4 +66,29 @@
     if (!confirm("Put every rule in this screener back to your own rules as they are now?")) return;
     try { await post("/rules/set/reset", { set_id: Number(tbl.dataset.set) }); location.reload(); } catch (err) { alert(err.message); }
   });
+
+  // every section folds and unfolds; the choice is remembered. A section that a link points at (#screeners, ?set=) always opens.
+  const KEY = "tenetfolio.rules.fold";
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { /* private mode */ }
+  document.querySelectorAll("section.section").forEach((sec) => {
+    const head = sec.querySelector(":scope > .section-head"), title = head && head.querySelector(".section-title");
+    if (!head || !title) return;
+    const key = title.textContent.trim();
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "sec-toggle";
+    btn.innerHTML = '<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M5 8l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const set = (collapsed, remember) => {
+      sec.classList.toggle("collapsed", collapsed);
+      btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      btn.setAttribute("aria-label", (collapsed ? "Expand " : "Collapse ") + key);
+      if (remember) { saved[key] = collapsed ? 1 : 0; try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) { /* ignore */ } }
+    };
+    const targeted = (sec.id && location.hash === "#" + sec.id) || (sec.id === "screeners" && new URLSearchParams(location.search).has("set"));
+    set(!targeted && saved[key] === 1, false);
+    btn.addEventListener("click", (e) => { e.stopPropagation(); set(!sec.classList.contains("collapsed"), true); });
+    title.style.cursor = "pointer";
+    title.addEventListener("click", () => set(!sec.classList.contains("collapsed"), true));
+    title.insertBefore(btn, title.firstChild);  // inside the heading, so it sits on the same line as the title
+  });
 })();
