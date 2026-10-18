@@ -1,4 +1,4 @@
-# Rename stocktale -> tenetfolio on the VM (do this with the next deploy)
+# Rename stocktale -> tenetfolio on the VM (DONE 2026-10-18, kept as a record)
 
 The code in the repo is already renamed (localStorage keys keep a fallback to the old names, so no user loses saved views).
 The VM still runs a folder `~/stocktale` and a container `stocktale`; Caddy reaches it by that name. Rename in this order:
