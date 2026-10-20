@@ -50,9 +50,12 @@ def _fetch_bse_day(d: date) -> list[dict] | None:
 
 
 class DailyPriceSource(DataSource):
-    def __init__(self, market: str):
+    def __init__(self, market: str, tracked_only: bool = False):
+        """`tracked_only` (US): top up just the stocks someone tracks, a second pass later in the day so a held stock's last session is
+        never a day behind the India holdings next to it, whatever the morning bulk run managed to get from Yahoo."""
         self.market = market
-        self.name = f"daily_prices_{market.lower()}"
+        self.tracked_only = tracked_only
+        self.name = f"daily_prices_{market.lower()}" + ("_held" if tracked_only else "")
 
     def ingest_quarterly(self, conn, limit=None, symbol=None, progress=None) -> int:
         raise NotImplementedError("daily_prices is prices-only.")
@@ -167,16 +170,21 @@ class DailyPriceSource(DataSource):
         return written
 
     # ------------------------------------------------------------------ US
-    def _us(self, conn, progress, limit=None) -> int:
+    def _us(self, conn, progress, limit=None, only: list[str] | None = None, first: list[str] | None = None) -> int:
         import yfinance as yf
 
         deadline = time.monotonic() + US_MAX_RUN_SECONDS
-        symbols = [r[0] for r in conn.execute(
-            "SELECT symbol FROM stocks s WHERE market = 'US' AND EXISTS (SELECT 1 FROM quarterly_data q WHERE q.symbol = s.symbol)")]
+        if only is not None:
+            known = {r[0] for r in conn.execute("SELECT symbol FROM stocks WHERE market = 'US'")}
+            symbols = [s for s in only if s in known]
+        else:
+            symbols = [r[0] for r in conn.execute(
+                "SELECT symbol FROM stocks s WHERE market = 'US' AND EXISTS (SELECT 1 FROM quarterly_data q WHERE q.symbol = s.symbol)")]
         # Stalest first: if a run is cut short (slow host, provider hiccup) the next run starts with whatever it missed,
         # so every stock gets refreshed within a couple of days instead of the same alphabetical slice each time.
         newest = {s: (conn.execute("SELECT MAX(date) FROM price_history WHERE symbol = ?", (s,)).fetchone()[0] or "") for s in symbols}
-        symbols.sort(key=lambda s: newest[s])
+        mine = set(first or [])
+        symbols.sort(key=lambda s: (s not in mine, newest[s]))   # held stocks first, then stalest first
         if limit:
             symbols = symbols[:limit]
         written, jumped = 0, []
@@ -226,10 +234,12 @@ class DailyPriceSource(DataSource):
         with get_users_conn() as u:
             tracked = [r[0] for r in u.execute("SELECT DISTINCT symbol FROM tracked_positions WHERE status = 'active'")
                        if r[0].startswith("NSE:") == (self.market == "IN")]
+        if self.tracked_only:
+            return self._us(conn, progress, only=tracked)
         written, deadline = 0, time.monotonic() + 120
         for sym in tracked:
             written += ensure_prices(sym, deadline).get("fetched", 0)
-        return written + (self._india(conn, progress) if self.market == "IN" else self._us(conn, progress, limit))
+        return written + (self._india(conn, progress) if self.market == "IN" else self._us(conn, progress, limit, first=tracked))
 
 
 def _has_table(conn, name: str) -> bool:

@@ -117,12 +117,14 @@ def portfolio_screen(request: Request):
             pnl = value - invested if invested is not None else None
             day = qty * (ltp - prev) if prev else None
             as_of = max(as_of, ltp_date) if as_of else ltp_date
+            back = lambda n: (round((ltp / closes[n]["close"] - 1) * 100, 2) if len(closes) > n and closes[n]["close"] else None)   # n sessions back
+            chg = {"1D": back(1), "1W": back(5), "1M": back(21)}
             places = 2 if ltp < 1000 else 0
             holdings.append({
                 "symbol": r["symbol"], "ticker": r["symbol"].split(":")[1], "name": r["company_name"], "market": r["market"],
                 "sector": r["sector"] or "Unclassified", "cur": cur, "qty": qty, "avg": avg, "ltp": ltp, "prev": prev,
                 "value": value, "invested": invested, "pnl": pnl, "pnl_pct": (pnl / invested * 100) if invested else None,
-                "day": day, "day_pct": ((ltp / prev - 1) * 100) if prev else None, "anchor_date": r["anchor_date"],
+                "day": day, "day_pct": ((ltp / prev - 1) * 100) if prev else None, "anchor_date": r["anchor_date"], "chg": chg, "ltp_date": ltp_date,
                 "spark": _spark([c["close"] for c in reversed(closes)], w=72, h=24),
                 "qty_s": f"{qty:g}", "avg_s": _fmt_money(avg, cur, 2) if avg else "—", "ltp_s": _fmt_money(ltp, cur, places),
                 "value_s": _fmt_money(value, cur), "invested_s": _fmt_money(invested, cur) if invested is not None else "—",
@@ -160,11 +162,18 @@ def portfolio_screen(request: Request):
         return segs
     donuts = {k: donut_for(k) for k in ("class", "sector", "holding")}
 
-    with_day = [h for h in holdings if h["day_pct"] is not None]
-    movers = {
-        "up": sorted(with_day, key=lambda h: -h["day_pct"])[:3],
-        "down": sorted(with_day, key=lambda h: h["day_pct"])[:3],
-    }
+    # Movers over three windows, so the card does not look frozen between daily closes: the last session, five sessions, a month.
+    def _top(period, n=3):
+        have = [h for h in holdings if h["chg"][period] is not None]
+        up = sorted((h for h in have if h["chg"][period] > 0), key=lambda h: -h["chg"][period])[:n]
+        down = sorted((h for h in have if h["chg"][period] < 0), key=lambda h: h["chg"][period])[:n]
+        return {"up": [{**h, "pct": h["chg"][period], "pct_s": _fmt_pct(h["chg"][period]), "stale": h["ltp_date"] != as_of} for h in up],
+                "down": [{**h, "pct": h["chg"][period], "pct_s": _fmt_pct(h["chg"][period]), "stale": h["ltp_date"] != as_of} for h in down]}
+    movers = {"1D": _top("1D"), "1W": _top("1W"), "1M": _top("1M")}
+    dates = {}
+    for h in holdings:
+        dates[h["market"]] = max(dates.get(h["market"], ""), h["ltp_date"])
+    movers_asof = {"IN": dates.get("IN"), "US": dates.get("US")}
 
     # --- Risk & diversification: concentration and attribution ---
     attribution_all = sorted(
@@ -182,7 +191,7 @@ def portfolio_screen(request: Request):
             "holdings": holdings,
             "summaries": summaries,
             "donuts": donuts,
-            "movers": movers,
+            "movers": movers, "movers_asof": movers_asof,
             "needs_details": needs_details,
             "as_of": as_of,
             "fx": FX, "fx_info": fx_info,

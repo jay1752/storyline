@@ -67,18 +67,34 @@
   </section>
 
   <section class="card pf-movers">
-    <div class="card-head"><h2 class="card-title">Today's movers</h2><span class="section-note">1-day change</span></div>
+    <div class="card-head"><div><h2 class="card-title">Movers</h2><span class="section-note">end-of-day prices{% if movers_asof.IN %} · India {{ movers_asof.IN }}{% endif %}{% if movers_asof.US %} · US {{ movers_asof.US }}{% endif %}</span></div>
+      <div class="seg" role="group" aria-label="Movers period" id="pf-mv-seg">{% for k, lbl in (('1D', '1 day'), ('1W', '1 week'), ('1M', '1 month')) %}<button type="button" class="{{ 'active' if k == '1D' else '' }}" data-p="{{ k }}">{{ lbl }}</button>{% endfor %}</div></div>
     <div class="card-body">
-      {% if movers.up %}
-      {% for label, group in (('Gainers', movers.up), ('Losers', movers.down)) %}
-      <div class="pf-mv-group"><span class="kpi-label">{{ label }}</span>
-        {% for h in group %}
-        <a class="pf-mv" href="/analytics/{{ h.symbol }}"><span class="row-ticker">{{ h.ticker }}</span><span class="sr-name muted">{{ h.name }}</span><b class="{{ h.day_tone }}">{{ h.day_pct_s }}</b></a>
+      {% for k in ('1D', '1W', '1M') %}
+      <div class="pf-mv-pane" data-p="{{ k }}" {{ '' if k == '1D' else 'hidden' }}>
+        {% set m = movers[k] %}
+        {% if m.up or m.down %}
+        {% for label, group in (('Gainers', m.up), ('Losers', m.down)) %}
+        <div class="pf-mv-group"><span class="kpi-label">{{ label }}</span>
+          {% for h in group %}
+          <a class="pf-mv" href="/analytics/{{ h.symbol }}"><span class="row-ticker">{{ h.ticker }}</span><span class="sr-name muted">{{ h.name }}{% if h.stale %} · to {{ h.ltp_date[5:] }}{% endif %}</span><b class="{{ 'pos' if h.pct > 0 else 'neg' }}">{{ h.pct_s }}</b></a>
+          {% else %}<span class="muted" style="font-size:0.82rem">None</span>{% endfor %}
+        </div>
         {% endfor %}
+        {% else %}<p class="prose">Not enough price history for this window yet.</p>{% endif %}
       </div>
       {% endfor %}
-      {% else %}<p class="prose">Not enough price history to show a daily change yet.</p>{% endif %}
     </div>
+    <script>
+    (function () {
+      var seg = document.getElementById("pf-mv-seg"); if (!seg) return;
+      seg.addEventListener("click", function (e) {
+        var b = e.target.closest("button[data-p]"); if (!b) return;
+        seg.querySelectorAll("button").forEach(function (x) { x.classList.toggle("active", x === b); });
+        document.querySelectorAll(".pf-mv-pane").forEach(function (p) { p.hidden = p.dataset.p !== b.dataset.p; });
+      });
+    })();
+    </script>
   </section>
 </div>
 

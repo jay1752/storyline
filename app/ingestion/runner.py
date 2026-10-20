@@ -69,6 +69,7 @@ SOURCES = {
     "bse_ratios": BseRatioInputsSource(),
     "daily_prices_in": DailyPriceSource("IN"),
     "daily_prices_us": DailyPriceSource("US"),
+    "daily_prices_us_held": DailyPriceSource("US", tracked_only=True),
     "tiingo": TiingoSource(),
     "yfinance": YFinanceSource(),
     "nse_bhavcopy": NseBhavcopySource(),

@@ -36,6 +36,10 @@ JOBS = {
         "label": "US end-of-day prices", "source": "daily_prices_us", "hm": 5 * 60 + 30, "days": (1, 2, 3, 4, 5),
         "desc": "Yahoo prices in batches for every US stock with fundamentals, stalest first. After the 16:00 ET close (early morning IST, so Tue–Sat).",
     },
+    "daily_prices_us_held": {
+        "label": "US prices for tracked stocks", "source": "daily_prices_us_held", "hm": 12 * 60, "days": (1, 2, 3, 4, 5),
+        "desc": "A second pass over just the US stocks people track, later in the day, so a held stock is never a session behind the rest of the portfolio. Only adds sessions it does not have yet.",
+    },
     "community_briefing": {
         "label": "Community briefing", "source": "community_briefing", "hm": 7 * 60 + 30, "days": ALL_DAYS,
         "desc": "The AI-written market briefing at the top of Community. After the US close, before India opens.",
@@ -290,7 +294,7 @@ def _tick_prices() -> None:
     from app.ingestion.runner import enqueue_ingestion
 
     now = datetime.now(IST)
-    for key in ("daily_prices_in", "daily_prices_us", "results_calendar", "results_refresh"):
+    for key in ("daily_prices_in", "daily_prices_us", "daily_prices_us_held", "results_calendar", "results_refresh"):
         if not _due(key, now):
             continue
         cfg = job_config(key)
