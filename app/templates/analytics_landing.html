@@ -24,8 +24,8 @@
   {% if guide %}
   <aside class="gd-card" aria-label="Quick start">
     <div class="gd-card-text">
-      <strong>New here? Seven steps from your rules to your first position.</strong>
-      <span>Set your rules, find stocks that pass, track one and keep its story.</span>
+      <strong>New here? Ten short steps from your rules to your first position.</strong>
+      <span>Add your AI key, set your rules, find stocks that pass, read one in depth, track it and keep its story.</span>
       <div class="gd-card-prog"><b>{{ guide.count }} of {{ guide.total }}</b> done<span class="gd-bar"><i style="width: {{ (guide.count * 100 / guide.total)|round|int }}%"></i></span></div>
     </div>
     <a class="btn btn-primary" href="/guide">{{ 'Continue' if guide.count > 1 else 'Start the quick start' }}</a>
