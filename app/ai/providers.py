@@ -32,6 +32,9 @@ def _models(*pairs):
     return [{"id": i, "label": l} for i, l in pairs]
 
 
+# Everything that runs on the platform's own Gemini key uses this one model, whatever a user's saved settings say.
+PLATFORM_GEMINI_MODEL = "gemini-3.1-flash-lite"
+
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://host.docker.internal:11434/v1")
 
 PROVIDERS: dict[str, dict] = {
@@ -44,7 +47,7 @@ PROVIDERS: dict[str, dict] = {
         "key_url": "https://aistudio.google.com/apikey",
         "files": True,  # reads PDFs / images natively
         "free": "Free tier: about 20 requests/day per model on a new key (each model has its own allowance).",
-        "default_model": os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview"),
+        "default_model": PLATFORM_GEMINI_MODEL,
         "models": _models(
             ("gemini-3-flash-preview", "Gemini 3 Flash (preview)"),
             ("gemini-3.8-flash", "Gemini 3.8 Flash"),
@@ -311,6 +314,17 @@ def make_model(provider: str, model_name: str, api_key: str):
     raise ValueError(f"unsupported provider kind: {kind}")
 
 
+def uses_platform_key(provider: str, key: str | None) -> bool:
+    """True when `key` is the shared server key for `provider` (not one the user pasted)."""
+    info = PROVIDERS.get(provider) or {}
+    return bool(key and info.get("platform") and info.get("needs_key") and key == os.environ.get(info.get("env_var") or ""))
+
+
+def pinned_model(provider: str, model_name: str, key: str | None) -> str:
+    """Platform Gemini key -> always PLATFORM_GEMINI_MODEL. Anyone's own key keeps the model they chose."""
+    return PLATFORM_GEMINI_MODEL if provider == "gemini" and uses_platform_key(provider, key) else model_name
+
+
 def build_model(user_id: int, provider: str, model_name: str, role: str = "primary"):
     """The configured model, or None if no key is available (callers raise their own 'not configured')."""
     if provider not in PROVIDERS:
@@ -318,7 +332,7 @@ def build_model(user_id: int, provider: str, model_name: str, role: str = "prima
     key = resolve_api_key(user_id, provider, role)
     if not key:
         return None
-    return make_model(provider, model_name, key)
+    return make_model(provider, pinned_model(provider, model_name, key), key)
 
 
 def build_chain(user_id: int) -> list[dict]:
@@ -330,7 +344,9 @@ def build_chain(user_id: int) -> list[dict]:
                             ("fallback", s.get("fallback_provider"), s.get("fallback_model"))):
         if not prov or not mod or prov not in PROVIDERS:
             continue
-        if role == "fallback" and prov == s["provider"] and mod == s["model_name"]:
+        key = resolve_api_key(user_id, prov, role)
+        mod = pinned_model(prov, mod, key)
+        if role == "fallback" and chain and prov == chain[0]["provider"] and mod == chain[0]["model_name"]:
             continue
         m = build_model(user_id, prov, mod, role)
         if m is not None:
@@ -407,18 +423,10 @@ async def test_connection(provider: str, model_name: str, api_key: str) -> str:
 
 
 def platform_chain() -> list[dict]:
-    """Models for SYSTEM jobs (no user involved, e.g. the daily community briefing): shared platform keys only.
-    Override with COMMUNITY_AI_MODELS="gemini:gemini-3-flash-preview,gemini:gemini-3.1-flash-lite". The default
-    spreads over several Gemini models because each has its own free-tier daily allowance, and the job needs
-    only one request a day."""
-    spec = os.environ.get("COMMUNITY_AI_MODELS") or "gemini:gemini-3-flash-preview,gemini:gemini-3.8-flash,gemini:gemini-3.1-flash-lite"
-    chain = []
-    for item in spec.split(","):
-        prov, _, mod = item.strip().partition(":")
-        info = PROVIDERS.get(prov)
-        if not info or not mod or not info["needs_key"] or not platform_available(prov):
-            continue
-        chain.append({"provider": prov, "model_name": mod, "role": "system",
-                      "label": f"{info['label'].split(' (')[0]} · {model_label(prov, mod)}",
-                      "model": make_model(prov, mod, os.environ[info["env_var"]])})
-    return chain
+    """Models for SYSTEM jobs (no user involved, e.g. the daily community briefing): the shared Gemini key with
+    PLATFORM_GEMINI_MODEL only."""
+    if not platform_available("gemini"):
+        return []
+    return [{"provider": "gemini", "model_name": PLATFORM_GEMINI_MODEL, "role": "system",
+             "label": f"Google Gemini · {model_label('gemini', PLATFORM_GEMINI_MODEL)}",
+             "model": make_model("gemini", PLATFORM_GEMINI_MODEL, os.environ["GEMINI_API_KEY"])}]

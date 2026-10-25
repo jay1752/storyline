@@ -21,6 +21,8 @@ from app.ai.providers import (
     platform_available,
     public_registry,
     resolve_api_key,
+    PLATFORM_GEMINI_MODEL,
+    pinned_model,
     saved_key_providers,
     set_user_key,
     test_connection,
@@ -89,6 +91,8 @@ async def settings_save(request: Request):
 
     # "Use the shared server key" only makes sense where one exists, and never when a key was just pasted.
     use_shared = bool(form.get("use_platform_default")) and platform_available(provider) and not api_key
+    if use_shared and provider == "gemini":
+        model = PLATFORM_GEMINI_MODEL   # the shared key only ever runs this model
 
     with get_users_conn() as u:
         u.execute(
@@ -146,6 +150,7 @@ async def settings_test(request: Request, provider: str = Form(...), model: str 
     if not _MODEL_ID.match(model):
         return {"ok": False, "message": "Model name is missing or has unusual characters."}
     key = _key_for(request.state.user_id, provider, api_key)
+    model = pinned_model(provider, model, key)
     label = PROVIDERS[provider]["label"].split(" (")[0]
     if not key:
         return {"ok": False, "message": f"No API key for {label} yet — paste one first."}
