@@ -5,8 +5,9 @@ EPS), BSE/NSE filing values are literal. Where IndianAPI has a quarter it replac
 tagged source='indianapi'; originals are archived in quarterly_data_original first (rollback = copy them back).
 
 Per stock: only status 'loaded' / 'unchecked' in indianapi.db (the 'held_out' ones disagreed with BSE revenue - identity doubtful).
-Bank/NBFC layout: only net profit, PBT, tax % and EPS are taken (IndianAPI's bank 'Revenue'/'Financing Profit' are not our
-InterestEarned/pre-provision profit, so those stay as filed).
+Bank/NBFC layout: net profit, PBT, tax % and EPS are taken. IndianAPI's bank 'Revenue' is taken too, but only to FILL quarters that have
+no revenue, and only for a stock whose already-filed quarters match IndianAPI's Revenue (>= 2 overlapping quarters, all within 2%), so
+one stock never mixes two definitions. 'Financing Profit' is never taken (not our pre-provision profit).
 Never touched: March ANNUAL rows (MoneyControl, quarter_label '... annual') - a quarter that would land on one is skipped, the same
 key-collision that once overwrote March quarters with annual figures.
 
@@ -27,6 +28,18 @@ from app.ingestion.base import safe_growth_pct
 STD = {"Sales": "revenue_cr", "Operating Profit": "operating_profit_cr", "OPM %": "opm_pct", "Other Income": "other_income_cr",
        "Interest": "finance_cost_cr", "Profit before tax": "pbt_cr", "Tax %": "tax_pct", "Net Profit": "net_profit_cr", "EPS in Rs": "eps"}
 BANK = {"Profit before tax": "pbt_cr", "Tax %": "tax_pct", "Net Profit": "net_profit_cr", "EPS in Rs": "eps"}
+BANK_REV = {**BANK, "Revenue": "revenue_cr"}
+
+
+def bank_revenue_matches(ia, m, sym: str, metric: str = "Revenue", col: str = "revenue_cr") -> bool:
+    """True when the figure we already hold for this bank/NBFC (from the filings) agrees with IndianAPI's `metric` on every quarter both
+    have (at least two, each within 2%), i.e. IndianAPI uses the same definition, so it can fill the quarters that have none."""
+    iav = {r["period_end"]: r["value"] for r in ia.execute(
+        "SELECT period_end, value FROM ia_fact WHERE symbol=? AND freq='Q' AND statement='PL' AND metric=? AND value IS NOT NULL", (sym, metric))}
+    pairs = [(r[col], iav[r["period_end_date"]]) for r in m.execute(
+        f"SELECT period_end_date, {col} FROM quarterly_data WHERE symbol=? AND {col} IS NOT NULL AND quarter_label NOT LIKE '%annual%'", (sym,))
+        if r["period_end_date"] in iav]
+    return len(pairs) >= 2 and all(abs(a - b) <= 0.02 * max(abs(b), 1e-9) for a, b in pairs)
 
 
 def main() -> None:
@@ -35,6 +48,7 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--symbols", default="", help="comma-separated, e.g. NSE:TCS,NSE:INFY (default: every stock)")
     ap.add_argument("--period", default="", help="only this quarter end (YYYY-MM-DD)")
+    ap.add_argument("--revenue-only", action="store_true", help="banks/NBFCs only: fill empty revenue (and its growth) and other income from IndianAPI where the definition is verified per stock; touch nothing else")
     a = ap.parse_args()
     only = {("NSE:" + x if ":" not in x else x) for x in a.symbols.split(",") if x.strip()} if getattr(a, "symbols", "") else None
     ia = sqlite3.connect(f"file:{DATA_DIR}/indianapi.db?mode=ro", uri=True)
@@ -57,8 +71,40 @@ def main() -> None:
     if a.limit:
         stocks = stocks[:a.limit]
     tally = collections.Counter()
+    filled: list[list] = []   # --revenue-only rollback list: [symbol, quarter end, column] of every value written
+    if a.revenue_only:
+        stocks = [s for s in stocks if s["layout"] == "bank"]
     for i, s in enumerate(stocks, 1):
         sym, cols = s["symbol"], (BANK if s["layout"] == "bank" else STD)
+        if a.revenue_only:
+            existing = {r["period_end_date"]: r for r in m.execute("SELECT * FROM quarterly_data WHERE symbol=?", (sym,))}
+            for metric, col, label in (("Revenue", "revenue_cr", "revenue"), ("Other Income", "other_income_cr", "other income")):
+                if not bank_revenue_matches(ia, m, sym, metric, col):
+                    tally[f"bank: {label} skipped, definition not verified"] += 1
+                    continue
+                vals_by_p = {r["period_end"]: r["value"] for r in ia.execute(
+                    "SELECT period_end, value FROM ia_fact WHERE symbol=? AND freq='Q' AND statement='PL' AND metric=? AND value IS NOT NULL", (sym, metric))}
+                for p, v in sorted(vals_by_p.items()):
+                    ex = existing.get(p)
+                    if ex is None or "annual" in (ex["quarter_label"] or "").lower() or ex[col] is not None or (a.period and p != a.period):
+                        continue
+                    g = None
+                    if col == "revenue_cr":
+                        prior = next((x for k, x in vals_by_p.items() if abs((date.fromisoformat(k) - (date.fromisoformat(p) - timedelta(days=365))).days) <= 10), None)
+                        g = safe_growth_pct(v, prior) if prior else None
+                    tally[f"{label} filled"] += 1
+                    if a.apply:
+                        if col == "revenue_cr":
+                            m.execute("UPDATE quarterly_data SET revenue_cr=?, revenue_growth_pct=COALESCE(revenue_growth_pct, ?) WHERE symbol=? AND period_end_date=?", (v, g, sym, p))
+                        else:
+                            m.execute(f"UPDATE quarterly_data SET {col}=? WHERE symbol=? AND period_end_date=?", (v, sym, p))
+                        filled.append([sym, p, col])
+            continue
+        if s["layout"] == "bank":
+            if bank_revenue_matches(ia, m, sym):
+                cols = BANK_REV
+            else:
+                tally["bank: revenue not taken (no matching filed quarters to verify the definition)"] += 1
         per: dict[str, dict] = collections.defaultdict(dict)
         for r in ia.execute("SELECT period_end, metric, value FROM ia_fact WHERE symbol=? AND freq='Q' AND statement='PL'", (sym,)):
             if r["metric"] in cols and r["value"] is not None:
@@ -69,6 +115,8 @@ def main() -> None:
             if not vals or (a.period and p != a.period):
                 continue
             ex = existing.get(p)
+            if cols is BANK_REV and ex is not None and ex["revenue_cr"] is not None:
+                vals.pop("revenue_cr", None)   # banks: IndianAPI revenue only fills a gap, never replaces a filed value
             if ex is not None and "annual" in (ex["quarter_label"] or "").lower():
                 tally["skipped: key held by an annual row"] += 1
                 continue
@@ -99,6 +147,11 @@ def main() -> None:
             print(f"{i}/{len(stocks)}", flush=True)
     if a.apply:
         m.commit()
+        if filled:   # rollback = set the listed column back to NULL for each [symbol, quarter end, column] (they were empty before)
+            import json
+            path = f"{DATA_DIR}/revenue_fill_{date.today().isoformat()}.json"
+            json.dump(filled, open(path, "w"))
+            print("rollback list:", path)
     print(("APPLIED" if a.apply else "DRY RUN"), len(stocks), "stocks")
     for k, v in tally.most_common():
         print(f"  {k:40}{v:8}")

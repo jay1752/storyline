@@ -372,8 +372,8 @@ def _pl_table(period_rows, peers, money_unit, eps_unit, with_qoq, bank=False):
         _row("Revenue", rev, _money, money_unit, bold=True),
         _row("Revenue growth YoY", [_yoy(r, by_end) for r in period_rows], _signed_pct, "%", tone="sign"),
         _row("Revenue growth QoQ", [qoq(r) for r in period_rows], _signed_pct, "%", tone="sign") if with_qoq else None,
-        _row("Operating profit", col("operating_profit_cr"), _money, money_unit),
-        _row("Operating margin", col("opm_pct"), _pct1, "%"),
+        None if bank else _row("Operating profit", col("operating_profit_cr"), _money, money_unit),   # a lender's interest is its business: no comparable operating profit
+        None if bank else _row("Operating margin", col("opm_pct"), _pct1, "%"),
         _row("Other income", col("other_income_cr"), _money, money_unit),
         _row("Profit before tax", col("pbt_cr"), _money, money_unit),
         _row("Finance costs", fc, _money, money_unit),
@@ -991,10 +991,11 @@ def _stock_context(symbol: str, span: str):
     other_income_raw = series("other_income_cr")
     net_profit_raw = series("net_profit_cr")
 
+    from app.ai.checklist import is_bank_or_financial as _fin
     pnl_rows = [
         ("Revenue (₹ Cr / $ M)", [_num(v, places=0) for v in revenue_raw], True),
-        ("Operating profit", [_num(v, places=0) for v in op_profit_raw], False),
-        ("OPM %", [_num(v, suffix="%", places=1) for v in opm_raw], False),
+        *([] if _fin(stock["sector"]) else [("Operating profit", [_num(v, places=0) for v in op_profit_raw], False),
+                                            ("OPM %", [_num(v, suffix="%", places=1) for v in opm_raw], False)]),
         ("Other income", [_num(v, places=0) for v in other_income_raw], False),
         ("Net profit", [_num(v, places=0) for v in net_profit_raw], True),
     ]
@@ -1101,7 +1102,7 @@ def _stock_context(symbol: str, span: str):
     if g_val is not None:
         kpis.append({"label": "Revenue growth", "value": f"{g_val:+g}%", "tone": "pos" if g_val >= 0 else "neg", "sub": f"{g_tag} · latest quarter"})
     m_val = _last_non_null(margin)
-    if m_val is not None:
+    if m_val is not None and not _fin(stock["sector"]):
         kpis.append({"label": "Operating margin", "value": f"{m_val:g}%", "tone": "", "sub": "latest quarter"})
     for label in ("ROCE", "ROE"):
         v = dict(ratio_stats).get(label)

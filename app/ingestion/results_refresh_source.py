@@ -123,7 +123,7 @@ class ResultsRefreshSource(DataSource):
             return 0
         fetcher = _fetcher()
         client = fetcher.Client(key, 10 ** 9)  # our own monthly cap (ia_usage) governs; the client adds pacing and the outage breaker
-        done, notes, ia_stopped = 0, [], None
+        done, notes, ia_stopped, net_fails = 0, [], None, 0
         for r in rows:
             sym, ev = r["symbol"], r["event_date"]
             qend, note = expected_quarter_end(ev), []
@@ -142,8 +142,15 @@ class ResultsRefreshSource(DataSource):
                 if p.exists() and datetime.now().timestamp() - p.stat().st_mtime < 20 * 3600:
                     body, err = json.loads(p.read_text()), None  # fetched earlier today (a failed apply is retried without a new call)
                 else:
-                    _bump(conn)
                     body, err = client.get("historical_stats", {"stock_name": sym.split(":")[-1], "stats": "all"})
+                    if err and err.startswith("net:"):   # the request never reached IndianAPI: no call spent, no check used up, try again next run
+                        net_fails += 1
+                        if net_fails >= 5:
+                            ia_stopped = "IndianAPI unreachable (5 network errors in a row)"
+                            break
+                        continue
+                    net_fails = 0
+                    _bump(conn)
                     if isinstance(body, dict) and "error" not in body and body:
                         p.write_text(json.dumps(body))
                 if isinstance(body, dict) and "error" not in body and body:
