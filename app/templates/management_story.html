@@ -2,7 +2,7 @@
 {% block title %}{{ pos.symbol }} story · Management · Tenetfolio{% endblock %}
 
 {% macro verdict_badge(v) -%}
-<span class="badge {{ {'BUY': 'pos', 'HOLD': 'pos', 'TRIM': 'accent', 'EXIT': 'neg', 'WATCH': 'neutral'}[v] }} badge-dot">{{ {'BUY': 'Buy / add', 'HOLD': 'Hold', 'TRIM': 'Trim', 'EXIT': 'Exit', 'WATCH': 'Watch'}[v] }}</span>
+<span class="badge {{ {'BUY': 'pos', 'HOLD': 'pos', 'TRIM': 'accent', 'EXIT': 'neg', 'WATCH': 'neutral'}[v] }} badge-dot">{{ {'BUY': 'Add rules met', 'HOLD': 'Within your rules', 'TRIM': 'Trim rule triggered', 'EXIT': 'Exit rule triggered', 'WATCH': 'Not yet meeting your rules'}[v] }}</span>
 {%- endmacro %}
 {% macro status_chip(s) -%}
 {%- set tone = {'clear': 'pos', 'monitor': 'accent', 'one_quarter_warning': 'accent', 'triggered': 'neg', 'two_quarter_confirmed': 'neg', 'confirming': 'neg'}[s] -%}
@@ -89,7 +89,7 @@
   </div>
 
   <div class="an-block">
-    <h3>Verdict reasoning</h3><p>{{ a.verdict_reasoning }}</p>
+    <h3>Why this status</h3><p>{{ a.verdict_reasoning }}</p>
     {% if a.news_takeaways %}<h4>From the news</h4><ul class="plain">{% for t in a.news_takeaways %}<li>{{ t }}</li>{% endfor %}</ul>{% endif %}
     {% if a.news %}<details class="mini"><summary>Headlines used ({{ a.news|length }})</summary>
       <ol class="news">{% for n in a.news %}<li value="{{ n.n }}"><a href="{{ n.url }}" target="_blank" rel="noopener noreferrer nofollow">{{ n.title }}</a> <span class="muted">— {{ n.source }}</span></li>{% endfor %}</ol></details>{% endif %}
@@ -97,7 +97,7 @@
     {% if a.data_gaps %}<p class="section-note">Not in our data: {{ a.data_gaps|join(', ') }}</p>{% endif %}
     {% if a.checks and a.checks.figures_not_in_sources %}<p class="section-note">Figures in this entry that are not a source figure (usually the writer's own arithmetic), worth a look: {{ a.checks.figures_not_in_sources|join(', ') }}</p>{% endif %}
   </div>
-  <p class="section-note an-disc">⚠ {{ a.disclaimer }} · {{ a.model }}</p>
+  <p class="section-note an-disc">⚠ {{ story_disclaimer }} · {{ a.model }}</p>
   {% endif %}
 </div>
 {%- endmacro %}
@@ -130,7 +130,7 @@
 {% set attn = live_size + stored %}
 <div class="answer tone-{{ tone }}">
   <div class="answer-top">
-    <div class="answer-verdict"><span class="vdot"></span><span class="vword">{{ {'BUY': 'Buy / add', 'HOLD': 'Hold', 'TRIM': 'Trim', 'EXIT': 'Exit', 'WATCH': 'Watch'}[a.verdict] }}</span></div>
+    <div class="answer-verdict"><span class="vdot"></span><span class="vword">{{ {'BUY': 'Add rules met', 'HOLD': 'Within your rules', 'TRIM': 'Trim rule triggered', 'EXIT': 'Exit rule triggered', 'WATCH': 'Not yet meeting your rules'}[a.verdict] }}</span></div>
     <div class="answer-meta">
       <span>{{ a.bucket }}</span>
       {% if a.target_weight_pct is not none %}<span>Target weight {{ "%g"|format(a.target_weight_pct) }}%</span>{% endif %}
@@ -138,11 +138,11 @@
     </div>
   </div>
   <p class="answer-do">
-    {% if a.verdict == 'TRIM' %}{% if size.weight %}Bring it from {{ "%.1f"|format(size.weight) }}% toward {{ "%g"|format(size.target) }}% of your book.{% else %}Trim part of the position.{% endif %}
-    {% elif a.verdict == 'EXIT' %}Exit the position{% if a.speed2.status == 'two_quarter_confirmed' %} — within {{ "%g"|format(size.exit_days) }} days of the confirmation{% endif %}.
-    {% elif a.verdict == 'HOLD' %}No action needed — keep holding.
-    {% elif a.verdict == 'BUY' %}Consider adding, within your sizing limits.
-    {% else %}Not actionable yet — keep watching.{% endif %}
+    {% if a.verdict == 'TRIM' %}{% if size.weight %}This is {{ "%.1f"|format(size.weight) }}% of your book; your rule targets {{ "%g"|format(size.target) }}%.{% else %}One of your trim rules is triggered.{% endif %}
+    {% elif a.verdict == 'EXIT' %}One of your exit rules is triggered{% if a.speed2.status == 'two_quarter_confirmed' %}; confirmed over two quarters, and your rule sets {{ "%g"|format(size.exit_days) }} days{% endif %}.
+    {% elif a.verdict == 'HOLD' %}None of your rules is triggered.
+    {% elif a.verdict == 'BUY' %}Your add rules are met, within your sizing limits.
+    {% else %}This stock does not yet meet your rules.{% endif %}
   </p>
   <p class="answer-line">{{ a.what_changed }}</p>
 </div>
@@ -215,7 +215,7 @@
       {% if a.downgrade_if %}<div><dt>The read weakens if</dt><dd>{{ a.downgrade_if|join(' · ') }}</dd></div>{% endif %}
       {% if a.trigger_check %}<div><dt>Triggers since the last entry</dt><dd>{% for c in a.trigger_check %}{{ c.trigger }}: <b>{{ c.status|replace('_', ' ') }}</b>{% if c.note %} ({{ c.note }}){% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</dd></div>{% endif %}
       </dl></div></details>
-  <details class="det"><summary>Why this verdict{% if a.news %} · {{ a.news|length }} headlines{% endif %}</summary>
+  <details class="det"><summary>Why this status{% if a.news %} · {{ a.news|length }} headlines{% endif %}</summary>
     <div class="det-body"><p>{{ a.verdict_reasoning }}</p>
       {% if a.user_story %}<h4>Your story</h4><p>{{ a.user_story }}</p>{% endif %}
       {% if a.news_takeaways %}<h4>From the news</h4><ul class="plain">{% for t in a.news_takeaways %}<li>{{ t }}</li>{% endfor %}</ul>{% endif %}
@@ -224,7 +224,7 @@
       {% if a.data_gaps %}<p class="section-note">Not in our data: {{ a.data_gaps|join(', ') }}</p>{% endif %}
     {% if a.checks and a.checks.figures_not_in_sources %}<p class="section-note">Figures in this entry that are not a source figure (usually the writer's own arithmetic), worth a look: {{ a.checks.figures_not_in_sources|join(', ') }}</p>{% endif %}</div></details>
 </div>
-<p class="section-note an-disc">⚠ {{ a.disclaimer }} · {{ a.model }}</p>
+<p class="section-note an-disc">⚠ {{ story_disclaimer }} · {{ a.model }}</p>
 {%- endmacro %}
 
 {% block content %}
@@ -302,7 +302,7 @@
   <div class="card"><div class="empty">
     <svg class="icon"><use href="#i-analytics"/></svg>
     <h3>No analysis yet</h3>
-    <p>Run it once to get this stock's verdict in your framework. After that it updates itself every morning and builds the story.</p>
+    <p>Run it once to see where this stock stands against your rules. After that it updates itself every morning and builds the story.</p>
   </div></div>
   {% endif %}
 </section>

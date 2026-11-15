@@ -32,7 +32,7 @@
     {% if b.ratings %}{% set rt = b.ratings %}
     <div class="vz-ratings" role="img" aria-label="Analyst ratings">{% for sgm in rt.segments %}<i class="r{{ sgm.v }}" style="width: {{ '%.1f'|format(sgm.pct) }}%">{{ sgm.n }}</i>{% endfor %}</div>
     <div class="vz-legend"><span><i class="r1"></i>Strong Buy</span><span><i class="r2"></i>Buy</span><span><i class="r3"></i>Hold</span><span><i class="r4"></i>Sell</span><span><i class="r5"></i>Strong Sell</span></div>
-    <p class="rs2-read">{{ rt.buy_now }}% rate it Buy or Strong Buy{% if rt.buy_3m is not none %}, against {{ rt.buy_3m }}% three months ago{% endif %}.</p>{% endif %}</figure>
+    <p class="rs2-read">{{ rt.buy_now }}% rate it Buy or Strong Buy{% if rt.buy_3m is not none %}, against {{ rt.buy_3m }}% three months ago{% endif %}. These are the analysts' ratings, not ours.</p>{% endif %}</figure>
   {% endif %}
 {% endmacro %}
 

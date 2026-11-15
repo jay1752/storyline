@@ -35,7 +35,7 @@
   <div class="kpi"><span class="kpi-label">Tracked</span><span class="kpi-value">{{ counts.all }}</span><span class="kpi-sub">stocks in total</span></div>
   <div class="kpi"><span class="kpi-label">Positions</span><span class="kpi-value">{{ counts.positions }}</span><span class="kpi-sub">actually bought</span></div>
   <div class="kpi"><span class="kpi-label">Watchlist</span><span class="kpi-value">{{ counts.watchlist }}</span><span class="kpi-sub">tracking only</span></div>
-  <div class="kpi"><span class="kpi-label">Need a look</span><span class="kpi-value {{ 'neg' if attention else '' }}">{{ attention }}</span><span class="kpi-sub">trim / exit verdicts</span></div>
+  <div class="kpi"><span class="kpi-label">Rule triggers</span><span class="kpi-value {{ 'neg' if attention else '' }}">{{ attention }}</span><span class="kpi-sub">trim or exit rules triggered</span></div>
   <div class="kpi"><span class="kpi-label">Journal flags</span><span class="kpi-value {{ 'neg' if flagged else '' }}">{{ flagged }}</span><span class="kpi-sub">stocks where your actions break a rule</span></div>
 </div>
 

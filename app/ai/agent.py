@@ -194,7 +194,13 @@ def get_portfolio_or_watchlist(anchor_type: str | None = None) -> list[dict]:
 
     with get_users_conn() as u:
         rows = u.execute(query, params).fetchall()
-    return [dict(r) for r in rows]
+    from app.ai.insights_engine import SIGNAL_STATUS
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["status_vs_your_rules"] = SIGNAL_STATUS.get(d.pop("signal", None), "-")   # a status against the user's rules, not a buy/sell code
+        out.append(d)
+    return out
 
 
 @agent.tool_plain

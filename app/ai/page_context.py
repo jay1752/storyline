@@ -24,6 +24,12 @@ def _n(v, places=1, suffix=""):
     return f"{v:,.{places}f}{suffix}"
 
 
+def _status(verdict, signal) -> str:
+    """The story's stored verdict/signal code as a status against the user's own rules (never BUY/TRIM/EXIT wording, so the chat does not repeat it as advice)."""
+    from app.ai.insights_engine import VERDICT_STATUS, SIGNAL_STATUS
+    return VERDICT_STATUS.get(verdict) or SIGNAL_STATUS.get(signal) or "-"
+
+
 def _is_annual(r) -> bool:
     return "annual" in (r["quarter_label"] or "").lower()
 
@@ -261,7 +267,7 @@ def management_digest(user_id: int) -> str | None:
                 a = None
             if a:
                 flags = [f"{f.get('level')}: {f.get('text') or f.get('title') or f.get('label')}" for f in (a.get("story_flags") or []) if f.get("level") in ("warning", "alert")][:3]
-                line += f" · story: {a.get('verdict') or r['signal'] or '-'} ({a.get('bucket') or '-'}, {(a.get('generated_at') or r['checked_at'] or '')[:10]})"
+                line += f" · story status vs the user's rules: {_status(a.get('verdict'), r['signal'])} ({a.get('bucket') or '-'}, {(a.get('generated_at') or r['checked_at'] or '')[:10]})"
                 if a.get("what_changed"):
                     line += f" — {a['what_changed'][:220]}"
                 if flags:

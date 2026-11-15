@@ -47,7 +47,7 @@
   <p class="why" style="margin-top:1.2rem">How the {{ rt.total }} analysts rate it now.</p>
   <div class="vz-ratings" role="img" aria-label="Analyst ratings">{% for sgm in rt.segments %}<i class="r{{ sgm.v }}" style="width: {{ '%.1f'|format(sgm.pct) }}%" title="{{ sgm.name }}: {{ sgm.n }}">{{ sgm.n }}</i>{% endfor %}</div>
   <div class="vz-legend"><span><i class="r1"></i>Strong Buy</span><span><i class="r2"></i>Buy</span><span><i class="r3"></i>Hold</span><span><i class="r4"></i>Sell</span><span><i class="r5"></i>Strong Sell</span></div>
-  <p class="read"><b>{{ rt.buy_now }}%</b> say Buy or Strong Buy{% if rt.buy_3m is not none %}, against <b>{{ rt.buy_3m }}%</b> three months ago{% endif %}.</p>
+  <p class="read"><b>{{ rt.buy_now }}%</b> say Buy or Strong Buy{% if rt.buy_3m is not none %}, against <b>{{ rt.buy_3m }}%</b> three months ago{% endif %}. These are the analysts' ratings, not ours.</p>
   {% endif %}
   {% if v.read %}<p class="read">{{ v.read|safe }} A good business and a good price are separate questions.</p>{% endif %}
 </div>

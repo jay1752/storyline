@@ -2039,3 +2039,7 @@ button.vlink { background: none; border: 0; padding: 0; cursor: pointer; color: 
 .rl-ctl { justify-content: flex-end; }
 .rl-row[data-kind="story"] .rl-unit { min-width: 6.8rem; }
 @media (max-width: 720px) { .rl-row { grid-template-columns: 1fr auto; } }
+
+/* Standing disclaimer at the foot of every signed-in page (base.html) */
+.app-disclaimer{margin:40px 0 16px;padding-top:14px;border-top:1px solid var(--border);font-size:12px;line-height:1.5;color:var(--muted);max-width:72ch}
+.app-disclaimer a{color:inherit;text-decoration:underline}

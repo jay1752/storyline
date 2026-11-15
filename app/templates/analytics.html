@@ -225,21 +225,21 @@
 {% set A = ia_analyst %}
 {% set cur = price_summary.currency if price_summary else '₹' %}
 <section class="section" id="analysts">
-  <div class="section-head"><div><h2 class="section-title">Analyst view</h2><span class="section-note">Analyst consensus · figures exclude one-offs · indicative, not filed results</span></div></div>
+  <div class="section-head"><div><h2 class="section-title">Analyst view</h2><span class="section-note">Brokerage analysts' own opinions, as reported by our data provider. Not our view and not a recommendation · figures exclude one-offs · indicative, not filed results</span></div></div>
   <div class="kpi-grid">
     {% if A.target %}
-    <div class="kpi"><span class="kpi-label">Mean target</span><span class="kpi-value">{{ cur }}{{ "{:,.0f}".format(A.target.mean) }}</span><span class="kpi-sub">{{ A.target.n }} analysts · {{ "{:,.0f}".format(A.target.low) }}–{{ "{:,.0f}".format(A.target.high) }}</span></div>
-    {% if A.target.upside is not none %}<div class="kpi"><span class="kpi-label">Upside to mean</span><span class="kpi-value {{ 'pos' if A.target.upside >= 0 else 'neg' }}">{{ "%+.1f"|format(A.target.upside) }}%</span><span class="kpi-sub">vs last price</span></div>{% endif %}
+    <div class="kpi"><span class="kpi-label">Analysts' mean target</span><span class="kpi-value">{{ cur }}{{ "{:,.0f}".format(A.target.mean) }}</span><span class="kpi-sub">{{ A.target.n }} analysts · {{ "{:,.0f}".format(A.target.low) }}–{{ "{:,.0f}".format(A.target.high) }}</span></div>
+    {% if A.target.upside is not none %}<div class="kpi"><span class="kpi-label">Gap to analysts' mean</span><span class="kpi-value {{ 'pos' if A.target.upside >= 0 else 'neg' }}">{{ "%+.1f"|format(A.target.upside) }}%</span><span class="kpi-sub">vs last price</span></div>{% endif %}
     {% if A.target.drift is not none %}<div class="kpi"><span class="kpi-label">Target drift</span><span class="kpi-value {{ 'pos' if A.target.drift >= 0 else 'neg' }}">{{ "%+.1f"|format(A.target.drift) }}%</span><span class="kpi-sub">since {{ A.target.trend[0].label }}</span></div>{% endif %}
     {% endif %}
-    {% if A.recos %}<div class="kpi"><span class="kpi-label">Consensus rating</span><span class="kpi-value">{{ A.recos.label }}</span><span class="kpi-sub">{{ A.recos.n }} analysts · {{ A.recos.avg }} (1 = Strong Buy, 5 = Strong Sell)</span></div>{% endif %}
+    {% if A.recos %}<div class="kpi"><span class="kpi-label">Analysts' ratings</span><span class="kpi-value">{{ A.recos.label }}</span><span class="kpi-sub">{{ A.recos.n }} analysts · {{ A.recos.avg }} (1 = Strong Buy, 5 = Strong Sell)</span></div>{% endif %}
     {% if A.risk %}<div class="kpi"><span class="kpi-label">Risk profile</span><span class="kpi-value" style="font-size:1.15rem">{{ A.risk.label }}</span><span class="kpi-sub">std dev {{ A.risk.std }}</span></div>{% endif %}
   </div>
 
   <div class="ia-grid">
     {% if A.target or A.recos %}
     <div class="card">
-      <div class="card-head"><h3 class="card-title">Target range &amp; ratings</h3></div>
+      <div class="card-head"><h3 class="card-title">Analysts' target range &amp; ratings <span class="section-note">their opinions, not ours</span></h3></div>
       <div class="card-body">
         {% if A.target %}
         <div class="ia-range" aria-label="Analyst target range">

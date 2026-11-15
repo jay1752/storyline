@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app import journal as journal_mod
 from app import framework as fw
-from app.ai.insights_engine import live_scan, queue_run
+from app.ai.insights_engine import live_scan, queue_run, DISCLAIMER as STORY_DISCLAIMER
 from app.db import get_market_conn, get_users_conn
 from app.ingestion.runner import enqueue_insights, enqueue_position_analysis, enqueue_research
 from app.templates_config import templates
@@ -184,7 +184,7 @@ def management_story(request: Request, position_id: int, all: int = 0):
             "scan": scan, "rule_layers": rule_layers,
             "size": size, "story_over": story_over, "rule_sets": rule_sets, "assigned_set_id": assigned_set_id, "story_default": dict(fw.STORY_BY_KEY["story_scope"]["choices"]).get(int(story_scope["value"]), ""),
             "run": run, "running": bool(run and run["status"] in ("queued", "running")),
-            "total_entries": total, "more": more,
+            "total_entries": total, "more": more, "story_disclaimer": STORY_DISCLAIMER,   # always the current wording, not the one saved inside an older story
         },
     )
 
