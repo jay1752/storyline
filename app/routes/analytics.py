@@ -1296,8 +1296,11 @@ def _cached_stock_context(symbol: str, span: str):
 @router.get("/analytics/{symbol:path}", response_class=HTMLResponse)
 def analytics_screen(request: Request, symbol: str, span: str = _DEFAULT_RANGE):
     ctx = _cached_stock_context(symbol, span)
-    if ctx is None:
-        return HTMLResponse(f"<p>Unknown symbol {symbol}</p>", status_code=404)
+    if ctx is None:  # an unknown symbol, or a listed company with no reported quarters: a real page, and the typed text is escaped by the template
+        with get_market_conn() as conn:
+            known = conn.execute("SELECT name FROM stocks WHERE symbol = ?", (symbol,)).fetchone()
+        return templates.TemplateResponse("stock_not_found.html", {"request": request, "active_nav": "analytics", "symbol": symbol[:80],
+                                                                   "known_name": known["name"] if known else None}, status_code=404)
     page = {k: v for k, v in ctx.items() if k != "_verdict_inputs"}
     page["request"] = request
     page["verdict"] = _verdict(request, *ctx["_verdict_inputs"])

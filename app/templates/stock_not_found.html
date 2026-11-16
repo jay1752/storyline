@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Stock not found · Tenetfolio{% endblock %}
+{% block content %}
+<section class="card"><div class="empty">
+  <svg class="icon"><use href="#i-analytics"/></svg>
+  {% if known_name %}
+  <h3>No reported results for {{ known_name }} yet</h3>
+  <p>We list this company but hold no quarterly results for it, so there is no stock page to show yet.</p>
+  {% else %}
+  <h3>We couldn't find that stock</h3>
+  <p>Nothing in our data matches &ldquo;{{ symbol }}&rdquo;. Check the spelling, or search by company name or symbol.</p>
+  {% endif %}
+  <div style="width:100%;max-width:28rem;margin:.5rem auto 0;text-align:left;">
+    <input class="form-input" type="search" name="q" placeholder="Search by company, symbol or sector…" autocomplete="off" aria-label="Search stocks"
+           hx-get="/search-stocks" hx-trigger="keyup changed delay:250ms, search" hx-target="#nf-results" hx-swap="innerHTML">
+    <div id="nf-results"></div>
+  </div>
+  <div class="inline-controls" style="justify-content:center;margin-top:.8rem;"><a class="btn btn-primary" href="/analytics">Back to Analytics</a></div>
+</div></section>
+{% endblock %}
