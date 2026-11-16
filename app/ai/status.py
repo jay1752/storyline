@@ -272,8 +272,17 @@ def compute_for_position(u, pos, book: dict | None = None) -> dict:
         sector_pct = book["by_sector"].get(sec)
         sector_pct = None if sector_pct is None else round(sector_pct, 1)
     lots = [e["event_date"] for e in journal_entries(u, pos["id"]) if e["event_type"] in ("open", "add")]
-    return compute_status(now["filters"], before["filters"], now["facts"], before["facts"], owned=owned, weight_pct=weight,
-                          sector_pct=sector_pct, sector=stock["sector"], sz=sz, last_lot_date=max(lots) if lots else None)
+    result = compute_status(now["filters"], before["filters"], now["facts"], before["facts"], owned=owned, weight_pct=weight,
+                            sector_pct=sector_pct, sector=stock["sector"], sz=sz, last_lot_date=max(lots) if lots else None)
+    result["rules_hash"] = _rules_hash(th, sz)
+    return result
+
+
+def _rules_hash(th: dict, sz: dict) -> str:
+    """A short fingerprint of the user's rule settings, so a change of status can be told apart: new data, or the user edited a rule."""
+    import hashlib
+    items = sorted((k, v["value"], bool(v["enabled"])) for k, v in th.items()) + sorted(sz.items())
+    return hashlib.md5(json.dumps(items, default=str).encode()).hexdigest()[:10]
 
 
 # ---------------------------------------------------------------------------------------------------- stored history
@@ -291,7 +300,8 @@ def record(u, position_id: int, user_id: int, result: dict) -> bool:
     refreshed in place (its reasons and when it was last confirmed). Returns True when a new row was added. Commit is the caller's."""
     detail = {k: result[k] for k in ("rules", "speed1", "speed2", "weight_pct", "sector_pct", "enough_data")}
     detail["basis"] = _basis(result)
-    last = u.execute("SELECT id, detail_json FROM position_status_history WHERE position_id = ? ORDER BY id DESC LIMIT 1", (position_id,)).fetchone()
+    detail["rules_hash"] = result.get("rules_hash")
+    last = u.execute("SELECT id, code, label, detail_json FROM position_status_history WHERE position_id = ? ORDER BY id DESC LIMIT 1", (position_id,)).fetchone()
     same = False
     if last:
         try:
@@ -302,8 +312,18 @@ def record(u, position_id: int, user_id: int, result: dict) -> bool:
         u.execute("UPDATE position_status_history SET reasons_json = ?, detail_json = ?, checked_at = CURRENT_TIMESTAMP WHERE id = ?",
                   (json.dumps(result["reasons"]), json.dumps(detail), last["id"]))
         return False
-    u.execute("INSERT INTO position_status_history (position_id, user_id, code, label, reasons_json, detail_json) VALUES (?,?,?,?,?,?)",
-              (position_id, user_id, result["code"], result["label"], json.dumps(result["reasons"]), json.dumps(detail)))
+    cur = u.execute("INSERT INTO position_status_history (position_id, user_id, code, label, reasons_json, detail_json) VALUES (?,?,?,?,?,?)",
+                    (position_id, user_id, result["code"], result["label"], json.dumps(result["reasons"]), json.dumps(detail)))
+    if last:  # an earlier status existed: tell the user it changed (never from the very first status, and never so it can break the status itself)
+        try:
+            from app import alerts
+            try:
+                prev_detail = json.loads(last["detail_json"] or "{}")
+            except ValueError:
+                prev_detail = {}
+            alerts.on_status_change(u, user_id, position_id, {"code": last["code"], "label": last["label"], "detail": prev_detail}, cur.lastrowid, result, detail)
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).exception("could not create the alert for position %s", position_id)
     return True
 
 

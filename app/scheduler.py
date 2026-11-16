@@ -278,10 +278,25 @@ def _tick_status() -> None:
     try:
         users, changes = status.refresh_all()
         logger.info("scheduler: rule status refreshed for %d users, %d changes", users, changes)
+        from app import alerts
+        logger.info("scheduler: %d result-date alerts created", alerts.nightly())
         if now.hour * 60 + now.minute >= STATUS_AFTER_HM:
             _last_status_day = today
     except Exception:  # noqa: BLE001 - never stop the other jobs
         logger.exception("rule status refresh failed")
+
+
+def _tick_alerts() -> None:
+    """Send the alert emails that are due (opt-in only: an immediate email for an Exit status, a weekly digest). Cheap when nothing is due, and
+    sends nothing at all while no email key is set."""
+    from app import alerts
+
+    try:
+        sent = alerts.deliver()
+        if sent["immediate"] or sent["digests"]:
+            logger.info("scheduler: alert emails sent %s", sent)
+    except Exception:  # noqa: BLE001 - never stop the other jobs
+        logger.exception("alert delivery failed")
 
 
 def _tick() -> None:
@@ -291,6 +306,7 @@ def _tick() -> None:
     _tick_briefing()
     _tick_insights()
     _tick_status()
+    _tick_alerts()
     _tick_metrics()
 
 

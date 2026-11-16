@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app import journal as journal_mod
 from app import framework as fw
+from app import alerts as alerts_mod
 from app import backtest
 from app.ai import status as rule_status
 from app.ai.insights_engine import VERDICT_STATUS, expire_stale_runs, live_scan, queue_run, DISCLAIMER as STORY_DISCLAIMER
@@ -62,6 +63,8 @@ def management_screen(request: Request, focus: int | None = None, imported: int 
         ).fetchall()
         settings = u.execute("SELECT auto_insights FROM user_settings WHERE user_id = ?", (user_id,)).fetchone()
         closed = u.execute("SELECT * FROM tracked_positions WHERE user_id = ? AND status = 'exited' ORDER BY closed_at DESC", (user_id,)).fetchall()
+        unread_alerts = alerts_mod.recent(u, user_id, 5, unread_only=True)
+        unread_total = alerts_mod.unread_count(u, user_id)
         stored = rule_status.stored_many(u, user_id)
         missing = [r for r in positions if r["id"] not in stored]
         if missing:  # a stock added since the last nightly run: work its status out now (no AI), a handful per page view at most
@@ -117,6 +120,7 @@ def management_screen(request: Request, focus: int | None = None, imported: int 
             "request": request,
             "active_nav": "management",
             "positions": positions,
+            "unread_alerts": unread_alerts, "unread_total": unread_total,
             "closed": closed,
             "counts": counts,
             "imported": imported,

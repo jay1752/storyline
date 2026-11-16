@@ -21,6 +21,20 @@
   </div>
 </div>
 
+{% if unread_alerts %}
+<section class="card" style="padding:.9rem 1.1rem;margin-bottom:1rem;" aria-label="What changed">
+  <div class="chip-row" style="align-items:center;justify-content:space-between;">
+    <b>What changed</b>
+    <span><a class="btn btn-sm" href="/alerts">See all{% if unread_total > unread_alerts|length %} ({{ unread_total }} new){% endif %}</a>
+      <form method="post" action="/alerts/read" style="display:inline;margin:0;"><button class="btn btn-sm" type="submit">Mark as read</button></form></span>
+  </div>
+  <ul class="flag-list" style="margin:.5rem 0 0;">
+    {% for a in unread_alerts %}<li class="flag lvl-{{ 'alert' if a.code_to == 'EXIT' else ('watch' if a.code_to == 'TRIM' else 'ok') }}"><span><b>{{ a.title }}</b> {{ a.body|truncate(150) }}
+      {% if a.position_id %}<a href="/management/{{ a.position_id }}">Open</a>{% endif %}</span></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+
 {% if imported is not none %}
 <div class="chip-row">
   <span class="badge pos">{{ imported }} tracked</span>

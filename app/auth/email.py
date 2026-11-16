@@ -35,6 +35,28 @@ def _send(to: str, subject: str, html: str, fallback_log_label: str) -> None:
         logger.warning("Resend send failed (%s) — %s for %s:\n%s", e, fallback_log_label, to, html)
 
 
+def send_message(to: str, subject: str, html: str, text: str | None = None, headers: dict | None = None) -> bool:
+    """Send one email through Resend and say whether it was accepted. Used by alerts (app/alerts.py). Unlike _send it never logs the body (alerts
+    carry a user's data), and with no key it sends nothing and returns False."""
+    if not RESEND_API_KEY:
+        logger.warning("RESEND_API_KEY not set - not sending '%s'", subject)
+        return False
+    payload = {"from": RESEND_FROM, "to": [to], "subject": subject, "html": html}
+    if text:
+        payload["text"] = text
+    if headers:
+        payload["headers"] = headers
+    try:
+        resp = requests.post("https://api.resend.com/emails", headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+                             json=payload, timeout=15)
+        resp.raise_for_status()
+        return True
+    except requests.RequestException as e:
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        logger.warning("Resend did not accept '%s' (%s)", subject, status or type(e).__name__)
+        return False
+
+
 def send_verification_email(email: str, token: str) -> None:
     url = f"{APP_BASE_URL}/verify-email?token={token}"
     _send(
