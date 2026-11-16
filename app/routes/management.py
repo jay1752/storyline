@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import timedelta, date
 
 from fastapi import APIRouter, Request
@@ -6,11 +7,16 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app import journal as journal_mod
 from app import framework as fw
-from app.ai.insights_engine import live_scan, queue_run, DISCLAIMER as STORY_DISCLAIMER
+from app import alerts as alerts_mod
+from app import backtest
+from app.ai import status as rule_status
+from app.ai.insights_engine import VERDICT_STATUS, expire_stale_runs, live_scan, queue_run, DISCLAIMER as STORY_DISCLAIMER
 from app.db import get_market_conn, get_users_conn
 from app.ingestion.runner import enqueue_insights, enqueue_position_analysis, enqueue_research
 from app.templates_config import templates
 from app.tracking import already_tracked, create_tracked_position, nearest_price_on_or_before
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -34,6 +40,7 @@ def _sparkline_points(prices, width=400, height=140, pad=20):
 @router.get("/management", response_class=HTMLResponse)
 def management_screen(request: Request, focus: int | None = None, imported: int | None = None, skipped: int | None = None, analyzing: int | None = None):
     user_id = request.state.user_id
+    expire_stale_runs()  # a run left "running" by a crash must not keep this page polling for ever
     if focus:  # the old inline detail panel moved to the stock's own story page
         return RedirectResponse(f"/management/{focus}", status_code=303)
     with get_users_conn() as u:
@@ -56,6 +63,19 @@ def management_screen(request: Request, focus: int | None = None, imported: int 
         ).fetchall()
         settings = u.execute("SELECT auto_insights FROM user_settings WHERE user_id = ?", (user_id,)).fetchone()
         closed = u.execute("SELECT * FROM tracked_positions WHERE user_id = ? AND status = 'exited' ORDER BY closed_at DESC", (user_id,)).fetchall()
+        unread_alerts = alerts_mod.recent(u, user_id, 5, unread_only=True)
+        unread_total = alerts_mod.unread_count(u, user_id)
+        stored = rule_status.stored_many(u, user_id)
+        missing = [r for r in positions if r["id"] not in stored]
+        if missing:  # a stock added since the last nightly run: work its status out now (no AI), a handful per page view at most
+            book = rule_status.book_weights(u, user_id)
+            for r in missing[:12]:
+                try:
+                    rule_status.record(u, r["id"], user_id, rule_status.compute_for_position(u, r, book))
+                except Exception:  # noqa: BLE001 - one stock with odd data must not break the page
+                    logger.exception("status for %s could not be computed", r["symbol"])
+            u.commit()
+            stored = rule_status.stored_many(u, user_id)
 
     # Returns come from live prices, not the stored snapshot: a freshly imported/added stock only has the placeholder
     # snapshot (0.0% / 0%) until its first analysis runs, which made every new row read "+0.0%".
@@ -81,6 +101,7 @@ def management_screen(request: Request, focus: int | None = None, imported: int 
     for r in positions:
         d = dict(r)
         d.update(live.get(r["id"], {}))
+        d["rule_status"] = stored.get(r["id"])
         a = json.loads(d.pop("analysis_json")) if r["analysis_json"] else None
         flags = (a or {}).get("story_flags") or []
         d["bad_flags"] = sum(1 for f in flags if f["level"] in ("warning", "alert"))
@@ -99,6 +120,7 @@ def management_screen(request: Request, focus: int | None = None, imported: int 
             "request": request,
             "active_nav": "management",
             "positions": positions,
+            "unread_alerts": unread_alerts, "unread_total": unread_total,
             "closed": closed,
             "counts": counts,
             "imported": imported,
@@ -116,7 +138,7 @@ def _entry(snap, older_analysis):
     changed = []
     if a and older_analysis:
         if a["verdict"] != older_analysis["verdict"]:
-            changed.append(f"Verdict {older_analysis['verdict']} → {a['verdict']}")
+            changed.append(f"Status {VERDICT_STATUS.get(older_analysis['verdict'], older_analysis['verdict'])} → {VERDICT_STATUS.get(a['verdict'], a['verdict'])}")
         if a["bucket"] != older_analysis["bucket"]:
             changed.append(f"Bucket {older_analysis['bucket']} → {a['bucket']}")
         if a["speed2"]["status"] != older_analysis["speed2"]["status"]:
@@ -150,6 +172,15 @@ def management_story(request: Request, position_id: int, all: int = 0):
         assigned_set_id = fw.assigned_set(u, user_id, pos["symbol"])
         sizing = fw.sizing_plan(u, user_id)
         story_scope = fw.story_layers(u, user_id)["story_scope"]
+        rule_state = status_hist = None
+        if pos["status"] == "active":  # the status against the user's CURRENT rules, no AI: it is there before any story has run
+            try:
+                rule_state = rule_status.compute_for_position(u, pos)
+                rule_status.record(u, position_id, user_id, rule_state)
+                u.commit()
+                status_hist = rule_status.history(u, position_id, 8)
+            except Exception:  # noqa: BLE001 - the story page must still open
+                logger.exception("status for %s could not be computed", pos["symbol"])
     more = len(snaps) > limit
     snaps = snaps[:limit]
     entries, analysed = [], []
@@ -181,12 +212,28 @@ def management_story(request: Request, position_id: int, all: int = 0):
             "today": journal_mod.today_ist().isoformat(), "default_price": default_price, "error": request.query_params.get("error"),
             "saved": request.query_params.get("saved"),
             "latest": latest, "history": [e for e in entries if e is not latest and (e["analysis"] or (e["legacy"] and not e["legacy"][0].startswith("Just added")))],
-            "scan": scan, "rule_layers": rule_layers,
+            "scan": scan, "rule_layers": rule_layers, "rule_state": rule_state, "status_hist": status_hist,
             "size": size, "story_over": story_over, "rule_sets": rule_sets, "assigned_set_id": assigned_set_id, "story_default": dict(fw.STORY_BY_KEY["story_scope"]["choices"]).get(int(story_scope["value"]), ""),
             "run": run, "running": bool(run and run["status"] in ("queued", "running")),
             "total_entries": total, "more": more, "story_disclaimer": STORY_DISCLAIMER,   # always the current wording, not the one saved inside an older story
         },
     )
+
+
+@router.get("/management/{position_id:int}/timeline", response_class=HTMLResponse)
+def management_timeline(request: Request, position_id: int):
+    """The 'Rules over time' tab: the user's current rules replayed at each past result date (app/backtest.py). Loaded on demand."""
+    user_id = request.state.user_id
+    with get_users_conn() as u:
+        pos = u.execute("SELECT * FROM tracked_positions WHERE id = ? AND user_id = ? AND status IN ('active', 'exited')", (position_id, user_id)).fetchone()
+        if not pos:
+            return HTMLResponse("<p>That stock is not in your list.</p>", status_code=404)
+        try:
+            tl = backtest.timeline_for_position(u, pos)
+        except Exception:  # noqa: BLE001 - say so plainly rather than break the tab
+            logger.exception("rules over time failed for %s", pos["symbol"])
+            return HTMLResponse('<div class="card"><div class="empty"><h3>Could not replay this stock</h3><p>Try again in a moment.</p></div></div>', status_code=500)
+    return templates.TemplateResponse("_rules_timeline.html", {"request": request, "tl": tl, "chart": backtest.chart_svg(tl)})
 
 
 def analysed_after(snaps, current):

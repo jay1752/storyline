@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Alerts · Tenetfolio{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="page-head-main">
+    <span class="eyebrow">Tracking</span>
+    <h1 class="page-title">Alerts</h1>
+    <p class="page-sub">What changed in your own rules and data: a status moved, or results are coming. Nothing here is about price moves.</p>
+  </div>
+  <div class="page-actions"><a class="btn" href="/profile#alerts">Email settings</a></div>
+</div>
+
+{% if items %}
+<div class="table-wrap"><table class="positions">
+  <thead><tr><th>When</th><th>Stock</th><th>What changed</th><th></th></tr></thead>
+  <tbody>
+  {% for a in items %}
+  <tr>
+    <td data-label="When"><time data-utc="{{ a.created_at }}" data-fmt="date">{{ a.created_at[:10] }}</time>{% if a.id in unread %} <span class="badge accent">new</span>{% endif %}</td>
+    <td data-label="Stock"><span class="row-ticker">{{ a.symbol }}</span></td>
+    <td data-label="What changed"><b>{{ a.title }}</b><span class="row-sub">{{ a.body }}</span></td>
+    <td>{% if a.position_id %}<a class="btn btn-sm" href="/management/{{ a.position_id }}">Open the story</a>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody></table></div>
+{% else %}
+<div class="card"><div class="empty"><h3>No alerts yet</h3>
+  <p>You'll see one here when a tracked stock's status against your rules changes, or when results are announced for it. The status is checked every night.</p></div></div>
+{% endif %}
+<p class="muted" style="font-size:.8rem;margin-top:1rem;">{{ line }}</p>
+{% endblock %}

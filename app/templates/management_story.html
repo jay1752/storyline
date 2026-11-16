@@ -130,7 +130,7 @@
 {% set attn = live_size + stored %}
 <div class="answer tone-{{ tone }}">
   <div class="answer-top">
-    <div class="answer-verdict"><span class="vdot"></span><span class="vword">{{ {'BUY': 'Add rules met', 'HOLD': 'Within your rules', 'TRIM': 'Trim rule triggered', 'EXIT': 'Exit rule triggered', 'WATCH': 'Not yet meeting your rules'}[a.verdict] }}</span></div>
+    <div class="answer-verdict"><span class="vdot"></span><span class="vword">{{ a.status.label if a.status else {'BUY': 'Add rules met', 'HOLD': 'Within your rules', 'TRIM': 'Trim rule triggered', 'EXIT': 'Exit rule triggered', 'WATCH': 'Not yet meeting your rules'}[a.verdict] }}</span></div>
     <div class="answer-meta">
       <span>{{ a.bucket }}</span>
       {% if a.target_weight_pct is not none %}<span>Target weight {{ "%g"|format(a.target_weight_pct) }}%</span>{% endif %}
@@ -289,6 +289,7 @@
   <button type="button" role="tab" data-tab="analysis" class="on">Today</button>
   <button type="button" role="tab" data-tab="journal">Journal{% if events %} <span class="count">{{ events|length }}</span>{% endif %}</button>
   {% if history %}<button type="button" role="tab" data-tab="story">History <span class="count">{{ total_entries }}</span></button>{% endif %}
+  <button type="button" role="tab" data-tab="timeline">Rules over time</button>
 </div>
 
 <section class="section tabpanel on" id="analysis" data-panel="analysis">
@@ -296,15 +297,44 @@
     <div><h2 class="section-title">Latest analysis</h2>
       <span class="section-note">{% if latest %}<time data-utc="{{ latest.at }}">{{ latest.at }}</time> · {{ 'daily run' if latest.trigger == 'interval' else 'run on demand' }}{% else %}not run yet{% endif %}</span></div>
   </div>
+  {% if rule_state %}
+  {% set tone = {'BUY': 'pos', 'HOLD': 'pos', 'TRIM': 'accent', 'EXIT': 'neg'}.get(rule_state.code, 'neutral') if rule_state.label != 'Not enough data' else 'neutral' %}
+  <div class="card status-card" id="rule-status" style="padding:1rem 1.1rem;margin-bottom:1rem;">
+    <div class="chip-row" style="align-items:center;gap:.6rem;">
+      <span class="badge {{ tone }} badge-dot" style="font-size:.95rem;">{{ rule_state.label }}</span>
+      <span class="muted" style="font-size:.85rem;">against your rules, worked out from your thresholds and your own sizing limits{% if status_hist %}, since <time data-utc="{{ status_hist[0].since }}" data-fmt="date">{{ status_hist[0].since[:10] }}</time>{% endif %}</span>
+    </div>
+    <ul class="flag-list" style="margin:.7rem 0 .2rem;">
+      {% for x in rule_state.reasons %}<li class="flag lvl-{{ 'alert' if x.kind in ('speed1', 'speed2') and rule_state.code == 'EXIT' else ('watch' if x.kind in ('speed2', 'size', 'sector') else 'ok') }}"><span>{{ x.text }}</span></li>{% endfor %}
+    </ul>
+    <p class="muted" style="font-size:.82rem;margin:.4rem 0 0;">
+      {{ rule_state.rules.judged }} of your rules could be judged: {{ rule_state.rules.passing }} met{% if rule_state.rules.failing %}, {{ rule_state.rules.failing|length }} not met{% endif %}{% if rule_state.rules.unknown %}; {{ rule_state.rules.unknown|length }} could not be judged for lack of data{% endif %}.
+      This status needs no AI. Headlines are not part of it.
+    </p>
+    {% if latest and latest.analysis.verdict != rule_state.code %}<p class="muted" style="font-size:.82rem;margin:.4rem 0 0;">The written analysis below was made when the status read {{ latest.analysis.status.label if latest.analysis.status else {'BUY': 'Add rules met', 'HOLD': 'Within your rules', 'TRIM': 'Trim rule triggered', 'EXIT': 'Exit rule triggered', 'WATCH': 'Not yet meeting your rules'}[latest.analysis.verdict] }}. Run the analysis again to bring the story up to date.</p>{% endif %}
+    {% if status_hist and status_hist|length > 1 %}
+    <details style="margin-top:.5rem;"><summary class="muted" style="font-size:.82rem;cursor:pointer;">Earlier statuses</summary>
+      <ul class="flag-list" style="margin-top:.4rem;">{% for h in status_hist[1:] %}<li class="flag lvl-ok"><span><time data-utc="{{ h.since }}" data-fmt="date">{{ h.since[:10] }}</time>: {{ h.label }}</span></li>{% endfor %}</ul>
+    </details>{% endif %}
+  </div>
+  {% endif %}
   {% if latest %}
   {{ answer_view(latest.analysis) }}
   {% else %}
   <div class="card"><div class="empty">
     <svg class="icon"><use href="#i-analytics"/></svg>
     <h3>No analysis yet</h3>
-    <p>Run it once to see where this stock stands against your rules. After that it updates itself every morning and builds the story.</p>
+    <p>The status above is already worked out from your rules. Run the analysis once to add the written story. After that it updates itself every morning and builds the story.</p>
   </div></div>
   {% endif %}
+</section>
+
+<section class="section tabpanel" id="timeline" data-panel="timeline" data-id="{{ pos.id }}">
+  <div class="section-head">
+    <div><h2 class="section-title">Rules over time</h2>
+      <span class="section-note">Your rules as they are set today, replayed at each past result date. No AI.</span></div>
+  </div>
+  <div id="timeline-body"><p class="muted">Open this tab to replay your rules.</p></div>
 </section>
 
 <section class="section tabpanel" id="journal" data-panel="journal">

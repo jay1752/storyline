@@ -21,6 +21,20 @@
   </div>
 </div>
 
+{% if unread_alerts %}
+<section class="card" style="padding:.9rem 1.1rem;margin-bottom:1rem;" aria-label="What changed">
+  <div class="chip-row" style="align-items:center;justify-content:space-between;">
+    <b>What changed</b>
+    <span><a class="btn btn-sm" href="/alerts">See all{% if unread_total > unread_alerts|length %} ({{ unread_total }} new){% endif %}</a>
+      <form method="post" action="/alerts/read" style="display:inline;margin:0;"><button class="btn btn-sm" type="submit">Mark as read</button></form></span>
+  </div>
+  <ul class="flag-list" style="margin:.5rem 0 0;">
+    {% for a in unread_alerts %}<li class="flag lvl-{{ 'alert' if a.code_to == 'EXIT' else ('watch' if a.code_to == 'TRIM' else 'ok') }}"><span><b>{{ a.title }}</b> {{ a.body|truncate(150) }}
+      {% if a.position_id %}<a href="/management/{{ a.position_id }}">Open</a>{% endif %}</span></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+
 {% if imported is not none %}
 <div class="chip-row">
   <span class="badge pos">{{ imported }} tracked</span>
@@ -29,7 +43,7 @@
 {% endif %}
 {% if analyzing or any_running %}<div class="alert" role="status"><svg class="icon icon-sm"><use href="#i-refresh"/></svg> Analysing your stocks — this page refreshes itself as results arrive.</div>{% endif %}
 
-{% set attention = positions|selectattr('signal', 'in', ['trim_consider', 'exit_consider'])|list|length %}
+{% set attention = positions|selectattr('rule_status')|selectattr('rule_status.code', 'in', ['TRIM', 'EXIT'])|list|length %}
 {% set flagged = positions|selectattr('bad_flags')|list|length %}
 <div class="kpi-grid">
   <div class="kpi"><span class="kpi-label">Tracked</span><span class="kpi-value">{{ counts.all }}</span><span class="kpi-sub">stocks in total</span></div>
@@ -63,7 +77,7 @@
   <div class="table-wrap">
     <table class="positions">
       <thead>
-        <tr><th>Stock</th><th>Type</th><th>Anchor</th><th>Since anchor</th><th>1-yr</th><th>Latest story</th><th></th></tr>
+        <tr><th>Stock</th><th>Type</th><th>Anchor</th><th>Since anchor</th><th>1-yr</th><th>Status against your rules</th><th>Latest story</th><th></th></tr>
       </thead>
       <tbody>
         {% for p in positions %}
@@ -76,6 +90,13 @@
           <td data-label="Anchor">{{ p.anchor_date }}{% if p.buy_price %}<span class="row-sub">{{ "%g"|format(p.buy_price) }} avg{% if p.quantity %} · {{ "%g"|format(p.quantity) }} sh{% endif %}</span>{% else %}<span class="row-sub">added</span>{% endif %}</td>
           <td data-label="Since anchor">{% if p.since_anchor_pct is not none %}<span class="{{ 'val-pos' if p.since_anchor_pct >= 0 else 'val-neg' }}">{{ "%+.1f"|format(p.since_anchor_pct) }}%</span>{% else %}<span class="stub">—</span>{% endif %}</td>
           <td data-label="1 year">{% if p.one_yr_pct is not none %}<span class="{{ 'val-pos' if p.one_yr_pct >= 0 else 'val-neg' }}">{{ "%+.0f"|format(p.one_yr_pct) }}%</span>{% else %}<span class="stub">—</span>{% endif %}</td>
+          <td data-label="Status">
+            {% set rs = p.rule_status %}
+            {% if rs %}<span class="badge {{ {'BUY': 'pos', 'HOLD': 'pos', 'TRIM': 'accent', 'EXIT': 'neg'}.get(rs.code, 'neutral') if rs.label != 'Not enough data' else 'neutral' }} badge-dot"
+              title="{% for x in rs.reasons %}{{ x.text }} {% endfor %}">{{ rs.label }}</span>
+            {% if rs.reasons %}<span class="row-sub">{{ rs.reasons[0].text|truncate(88) }}</span>{% endif %}
+            {% else %}<span class="stub">—</span>{% endif %}
+          </td>
           <td data-label="Latest story">
             {% if p.run_status in ('queued', 'running') %}<span class="badge accent">Analysing…</span>
             {% elif p.run_status == 'failed' %}<span class="badge neg" title="{{ p.run_error }}">Last run failed</span>

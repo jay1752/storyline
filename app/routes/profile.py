@@ -8,6 +8,7 @@ import urllib.parse
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from app import alerts
 from app.account import CannotDelete, delete_account
 from app.auth.middleware import SESSION_COOKIE
 from app.db import get_users_conn
@@ -27,8 +28,11 @@ def _load(request: Request):
 
 @router.get("/profile", response_class=HTMLResponse)
 def profile_page(request: Request, saved: str | None = None, error: str | None = None):
+    with get_users_conn() as u:
+        prefs = alerts.get_prefs(u, request.state.user_id)
     return templates.TemplateResponse("profile.html", {
-        "request": request, "active_nav": "profile", "me": _load(request), "countries": COUNTRIES, "saved": saved, "error": error})
+        "request": request, "active_nav": "profile", "me": _load(request), "countries": COUNTRIES, "saved": saved, "error": error,
+        "prefs": prefs, "days": alerts.DAYS})
 
 
 @router.post("/profile")

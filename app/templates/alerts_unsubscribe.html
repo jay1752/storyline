@@ -1,0 +1,13 @@
+{% extends "base_auth.html" %}
+{% block title %}Unsubscribe · Tenetfolio{% endblock %}
+{% block content %}
+{% if done %}
+  <h1 class="auth-title">{{ "You're unsubscribed" if ok else "That link did not work" }}</h1>
+  <p class="auth-sub">{% if ok %}You will not get alert emails from Tenetfolio any more. Alerts still appear inside the app, and you can turn email back on in your profile.{% else %}The link is incomplete or no longer valid. You can switch alert emails off in your profile under Email alerts.{% endif %}</p>
+  <p><a class="btn btn-primary" href="/profile#alerts">Open my profile</a></p>
+{% else %}
+  <h1 class="auth-title">Stop alert emails?</h1>
+  <p class="auth-sub">This turns off the weekly digest and the Exit email for the account that received this message. Alerts stay visible inside the app.</p>
+  <form method="post" action="/alerts/unsubscribe"><input type="hidden" name="token" value="{{ token }}"><button class="btn btn-primary" type="submit">Unsubscribe</button></form>
+{% endif %}
+{% endblock %}

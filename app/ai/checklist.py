@@ -149,13 +149,15 @@ def _financial_inputs(symbol: str, latest: dict) -> dict:
     return out
 
 
-def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None, annual: list | None = None) -> dict:
+def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None, annual: list | None = None, fin_inputs: dict | None = None) -> dict:
     """`q_rows`: quarterly (non-annual) quarterly_data rows, oldest first, latest last. `th`: the resolved rules from
     app.framework.resolve() (built-in defaults when omitted). Returns {"filters": [...], "facts": {...}, "bucket_guess",
     "not_available"}. Each filter: {key, label, value, threshold, status: pass|fail|unknown|off, note, ...}. A filter whose data
     we don't hold is 'unknown' (never guessed, never counted against the stock); one the user switched off is 'off'.
     `annual`: optional fiscal-year rows (app.annual.annual_rows), oldest first - the operating-cash-flow rule falls back to the
-    latest year that has both cash flow and a positive profit when the quarters carry no cash flow (India reports it yearly)."""
+    latest year that has both cash flow and a positive profit when the quarters carry no cash flow (India reports it yearly).
+    `fin_inputs`: the balance-sheet pieces the financials rules read ({assets, equity, as_of, pb}); None reads today's from the database. A replay of
+    the past (app/backtest.py) passes the figures that were public then, so no rule looks at what was not yet known."""
     from app import framework
 
     th = th or framework.builtin()
@@ -223,11 +225,22 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
     # Promoter pledge — the exact % where we hold it (India shareholding filings), else the pledged / no-pledge flag
     pl_thr = th["pledge"]["value"]
     pct, flag = _f(latest.get("promoter_pledge_pct")), latest.get("promoter_pledge")
+    carried = None
+    if pct is None and not flag and latest.get("promoter_pct") is None and len(rows) >= 2:
+        # The newest quarter has results but its shareholding pattern is not filed yet (it comes a few weeks after the results): the last pledge
+        # figure we hold, from the quarter before, still stands. Said so in the note, and only ever one quarter back.
+        prev = rows[-2]
+        ppct, pflag = _f(prev.get("promoter_pledge_pct")), prev.get("promoter_pledge")
+        if ppct is not None or pflag:
+            pct, flag = ppct, pflag
+            carried = (f"carried from the quarter to {prev['period_end_date']}: the quarter to {latest.get('period_end_date')} has no "
+                       f"shareholding filing yet")
     if pct is not None:
-        add("pledge", "Promoter pledge", f"{pct:.1f}%", f"< {pl_thr:g}%", "pass" if pct < pl_thr else "fail", raw=pct)
+        add("pledge", "Promoter pledge", f"{pct:.1f}%", f"< {pl_thr:g}%", "pass" if pct < pl_thr else "fail", carried, raw=pct)
     else:
+        flag_note = "only 'pledged / no pledge' is stored, not the exact %" if flag == "Pledged" else None
         add("pledge", "Promoter pledge", flag if flag else None, f"< {pl_thr:g}%", "unknown" if not flag else ("fail" if flag == "Pledged" else "pass"),
-            "only 'pledged / no pledge' is stored, not the exact %" if flag == "Pledged" else None,
+            "; ".join(x for x in (flag_note, carried) if x) or None,
             raw=(100.0 if flag == "Pledged" else (0.0 if flag else None)))
     # Sales growth, last 4 quarters
     sg = th["sales_growth"]["value"]
@@ -331,7 +344,7 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
     # ---- Financials pack: banks, lenders, insurers, brokers. Their balance sheet IS the business, so the ordinary rules above mostly do not
     # apply; these four use what we hold (latest annual assets and net worth, the last 4 quarters' profit, price against book value).
     if bank:
-        fin = _financial_inputs(str(latest.get("symbol") or ""), latest)
+        fin = fin_inputs if fin_inputs is not None else _financial_inputs(str(latest.get("symbol") or ""), latest)
         npq = [_f(r.get("net_profit_cr")) for r in rows[-4:]]
         ttm_np = sum(npq) if len(npq) == 4 and all(x is not None for x in npq) else None
         roa_thr, ea_thr, pb_thr, pg_thr = (th[k]["value"] for k in ("roa", "equity_assets", "pb", "profit_growth"))

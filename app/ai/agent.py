@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from pydantic_ai import Agent
 
 from app import positions as positions_mod
+from app.ai import status as rule_status
 from app.price_fetch import ensure_prices
 from app.auth.middleware import current_user_id
 from app.db import get_market_conn, get_users_conn
@@ -73,7 +74,10 @@ titles only).
 - You do not tell the user to buy, sell, add or trim, and you give no price target. If asked "should I buy or sell", say you cannot decide that for them, then give a \
 valuation-versus-price read from THEIR rules, the stock's own history and its peers, plus the measurable things that would change that read. Analyst targets and ratings are \
 other people's opinions: attribute them, and never present an analyst's upside as an expected gain.
-- A foreign-listed stock: explain the business, financials, risks and valuation context only, with no verdict language.
+- A foreign-listed stock: explain the business, financials, risks and valuation context. You may quote its status against the user's rules, noting that the framework was written for Indian equities and US companies report differently.
+- A stock's STATUS against the user's rules (Add rules met, Within your rules, Trim rule triggered, Exit rule triggered, Not yet meeting your rules, or Not enough data) is decided by code \
+from the user's own rules and sizing limits. It is not your judgement and you never change or soften it. Quote it with its reasons as what the rules show, never as an instruction. \
+"Not enough data" means too few of their rules could be judged with the data we hold. Headlines are not part of the status; if the user asks about news, keep it separate.
 - "Summarise this stock": one sentence on the business and the picture, then exactly 3 takeaways, each covering ONE thing in two short sentences with figures: (1) the business and \
 growth (the drivers that fit its model, the latest quarters), (2) cash and the balance sheet (profit against cash, debt, your rules that fail), (3) valuation and ownership (P/E against \
 its own range and peers, who holds it and which way). Work what would change the view into the third takeaway or a closing sentence, then one line on what the data does not show.
@@ -173,7 +177,7 @@ def get_portfolio_or_watchlist(anchor_type: str | None = None) -> list[dict]:
     tracking" — never guess what the user holds."""
     _note_tool("get_portfolio_or_watchlist", anchor_type)
     query = """
-        SELECT tp.symbol, tp.company_name, tp.anchor_type, tp.anchor_date, tp.buy_price, tp.quantity,
+        SELECT tp.id AS position_id, tp.symbol, tp.company_name, tp.anchor_type, tp.anchor_date, tp.buy_price, tp.quantity,
                ps.signal, ps.valuation_label, ps.since_anchor_pct, ps.checked_at
         FROM tracked_positions tp
         JOIN position_snapshots ps ON ps.position_id = tp.id
@@ -194,11 +198,16 @@ def get_portfolio_or_watchlist(anchor_type: str | None = None) -> list[dict]:
 
     with get_users_conn() as u:
         rows = u.execute(query, params).fetchall()
+        stored = rule_status.stored_many(u, user_id)
     from app.ai.insights_engine import SIGNAL_STATUS
     out = []
     for r in rows:
         d = dict(r)
-        d["status_vs_your_rules"] = SIGNAL_STATUS.get(d.pop("signal", None), "-")   # a status against the user's rules, not a buy/sell code
+        s = stored.get(d.pop("position_id"))
+        old = SIGNAL_STATUS.get(d.pop("signal", None), "-")
+        # the status is decided in code from the user's own rules (app/ai/status.py); the story's stored signal is only the fallback before the first computation
+        d["status_vs_your_rules"] = s["label"] if s else old
+        d["status_detail"] = rule_status.one_line(s) if s else None
         out.append(d)
     return out
 

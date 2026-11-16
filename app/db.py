@@ -315,6 +315,60 @@ CREATE TABLE IF NOT EXISTS ledger_trades (
 );
 CREATE INDEX IF NOT EXISTS idx_ledger_user ON ledger_trades(user_id, symbol, date);
 
+-- The status of each tracked stock against the user's OWN rules, decided in code (app/ai/status.py), no AI. A row is added when the
+-- status or its basis changes; otherwise the latest row is refreshed in place. computed_at = when this status began, checked_at = last confirmed.
+CREATE TABLE IF NOT EXISTS position_status_history (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    position_id  INTEGER NOT NULL,
+    user_id      INTEGER NOT NULL,
+    computed_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    checked_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    code         TEXT NOT NULL,                 -- BUY | HOLD | TRIM | EXIT | WATCH (stored codes; the words shown are in app/ai/status.py CODE_LABEL)
+    label        TEXT NOT NULL,                 -- the words shown, e.g. "Within your rules" / "Not enough data"
+    reasons_json TEXT NOT NULL,                 -- [{kind, text}]
+    detail_json  TEXT                           -- rules judged / failing / unknown, speed 1 and 2, weights, basis
+);
+CREATE INDEX IF NOT EXISTS idx_position_status_pos ON position_status_history(position_id, id);
+
+-- Alerts (app/alerts.py): what changed in the user's own rules or data. In-app always; email only if the user opted in (alert_prefs).
+CREATE TABLE IF NOT EXISTS alerts (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL,
+    position_id  INTEGER,
+    symbol       TEXT,
+    kind         TEXT NOT NULL,                 -- status_change | results_due
+    ref          TEXT NOT NULL,                 -- what makes it unique: the status history row id, or the result date
+    title        TEXT NOT NULL,
+    body         TEXT,
+    code_from    TEXT,
+    code_to      TEXT,
+    cause        TEXT,                          -- rules (the user changed a rule setting) | data
+    created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    read_at      TEXT,
+    emailed_at   TEXT,                          -- sent as an immediate email
+    digested_at  TEXT,                          -- included in a weekly digest email
+    UNIQUE (user_id, position_id, kind, ref)
+);
+CREATE INDEX IF NOT EXISTS idx_alerts_user ON alerts(user_id, id);
+CREATE TABLE IF NOT EXISTS alert_prefs (
+    user_id         INTEGER PRIMARY KEY,
+    digest_email    INTEGER NOT NULL DEFAULT 0,    -- opt-in: a weekly email, only in weeks that had a change
+    digest_day      INTEGER NOT NULL DEFAULT 6,    -- IST weekday, Mon=0 .. Sun=6
+    exit_email      INTEGER NOT NULL DEFAULT 0,    -- opt-in: one email when a stock reaches "Exit rule triggered"
+    results_alerts  INTEGER NOT NULL DEFAULT 1,    -- in-app alert when results are announced for a tracked stock
+    token           TEXT NOT NULL,                 -- unguessable: the unsubscribe link needs no sign-in
+    consent_at      TEXT,                          -- when they first turned an email on
+    last_digest_at  TEXT,
+    updated_at      TEXT
+);
+CREATE TABLE IF NOT EXISTS email_log (               -- every alert email attempt: audit and the daily cap on the sender's free allowance
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id  INTEGER NOT NULL,
+    kind     TEXT NOT NULL,                      -- exit | digest
+    sent_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ok       INTEGER NOT NULL
+);
+
 -- The user's OWN journal for a tracked stock — fully optional. Each entry changes the position when it is made
 -- (add: weighted-average cost; trim: fewer shares; exit: closed) and records `before_json` so the most recent entry
 -- can be undone exactly. The daily analysis reads these entries and judges them against the user's framework.

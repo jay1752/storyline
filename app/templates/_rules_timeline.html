@@ -1,0 +1,40 @@
+{# The replay of the user's current rules at each past result date (app/backtest.py). Loaded into the story page's "Rules over time" tab. #}
+{% set tone = {'BUY': 'pos', 'HOLD': 'pos', 'TRIM': 'accent', 'EXIT': 'neg'} %}
+{% if not tl.points %}
+<div class="card"><div class="empty"><h3>Nothing to replay yet</h3><p>{{ tl.notes[0] }}</p></div></div>
+{% else %}
+<p class="muted" style="font-size:.9rem;margin:0 0 .8rem;">How your rules, as they are set today, would have read at each of the last {{ tl.points|length }} result dates, using only what was public then.
+  {% set n = tl.points|selectattr('changed')|list|length %}{% if n %}The reading changed {{ n }} time{{ '' if n == 1 else 's' }}.{% else %}The reading did not change.{% endif %}</p>
+<div class="card" style="padding:.8rem 1rem;margin-bottom:1rem;">{{ chart|safe }}
+  <p class="muted" style="font-size:.78rem;margin:.4rem 0 0;">Line: the price. Strip under it: green is Add rules met or Within your rules, amber Trim rule triggered, red Exit rule triggered, grey Not enough data.</p></div>
+
+<div class="table-wrap"><table class="fin">
+  <thead><tr><th>Public from</th><th>Reading</th><th class="num">Rules met</th><th>Why</th><th class="num">Price then</th><th class="num">After 3 mo</th><th class="num">After 6 mo</th><th class="num">After 12 mo</th></tr></thead>
+  <tbody>
+  {% for p in tl.points|reverse %}
+  <tr>
+    <td data-label="Public from">{{ p.asof }}<span class="row-sub">quarter to {{ p.period_end }}</span></td>
+    <td data-label="Reading"><span class="badge {{ tone.get(p.code, 'neutral') if p.label != 'Not enough data' else 'neutral' }} badge-dot">{{ p.label }}</span>{% if p.changed %}<span class="row-sub">changed</span>{% endif %}</td>
+    <td class="num" data-label="Rules met">{{ p.passing }} of {{ p.judged }}{% if p.unknown %}<span class="row-sub">{{ p.unknown }} not judged</span>{% endif %}</td>
+    <td data-label="Why">{% if p.reasons %}{{ p.reasons[0]|truncate(120) }}{% elif p.failing %}Not met: {{ p.failing[:3]|join(', ') }}{% else %}<span class="stub">—</span>{% endif %}</td>
+    <td class="num" data-label="Price then">{{ "{:,.2f}".format(p.price) if p.price else '—' }}</td>
+    {% for h in ['3 months', '6 months', '12 months'] %}<td class="num" data-label="After {{ h }}">{% if p.after[h] is not none %}<span class="{{ 'val-pos' if p.after[h] >= 0 else 'val-neg' }}">{{ "%+.1f"|format(p.after[h]) }}%</span>{% else %}<span class="stub">—</span>{% endif %}</td>{% endfor %}
+  </tr>
+  {% endfor %}
+  </tbody></table></div>
+
+<details style="margin-top:1rem;"><summary style="cursor:pointer;font-weight:600;">Rule by rule, at each date</summary>
+  <div class="table-wrap" style="margin-top:.6rem;"><table class="fin">
+    <thead><tr><th>Rule (today's setting)</th>{% for p in tl.points %}<th class="num">{{ p.asof[2:7] }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for r in tl.rules %}
+    <tr><td>{{ r.label }} <span class="row-sub">{{ r.threshold }}</span></td>
+      {% for p in tl.points %}{% set f = (p.filters|selectattr('key', 'equalto', r.key)|list|first) %}
+      <td class="num" title="{{ f.value if f and f.value else 'not judged' }}">{% if not f %}<span class="stub">·</span>{% elif f.status == 'pass' %}<span class="val-pos">✓</span>{% elif f.status == 'fail' %}<span class="val-neg">✗</span>{% elif f.status == 'off' %}<span class="stub">off</span>{% else %}<span class="stub">·</span>{% endif %}</td>{% endfor %}
+    </tr>
+    {% endfor %}
+    </tbody></table></div>
+  <p class="muted" style="font-size:.8rem;margin:.4rem 0 0;">✓ met, ✗ not met, · not judged (the figure was not held for that date), off = switched off. Hover a cell for the figure.</p>
+</details>
+{% endif %}
+<ul class="muted" style="font-size:.8rem;margin:1rem 0 0;padding-left:1.1rem;">{% for n in tl.notes %}{% if loop.index > 1 or tl.points %}<li>{{ n }}</li>{% endif %}{% endfor %}</ul>
