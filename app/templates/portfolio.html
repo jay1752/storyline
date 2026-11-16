@@ -9,6 +9,7 @@
     <p class="page-sub">{% if holdings %}{{ holdings|length }} holding{{ '' if holdings|length == 1 else 's' }} · prices as of {{ as_of }}{% else %}Your holdings, value and returns in one place.{% endif %}</p>
   </div>
   <div class="page-actions">
+    <a class="btn" href="/portfolio/returns">Returns &amp; ledger</a>
     <button class="btn" type="button" onclick="openChatForImport()"><svg class="icon icon-sm"><use href="#i-sparkle"/></svg>Import statement</button>
     <a class="btn btn-primary" href="/management/add"><svg class="icon icon-sm"><use href="#i-plus"/></svg>Add holding</a>
   </div>

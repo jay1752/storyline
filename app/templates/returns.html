@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Returns and ledger · Tenetfolio{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="page-head-main">
+    <span class="eyebrow">Tracking</span>
+    <h1 class="page-title">Returns and ledger</h1>
+    <p class="page-sub">What your money actually earned, worked out from your own trades: the annualised return, what you have realised, and the same money in the index for comparison.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="/portfolio">Back to Portfolio</a>
+    <a class="btn" href="/portfolio/returns/export/trades.csv">Trades (CSV)</a>
+    <a class="btn" href="/portfolio/returns/export/realised.csv">Realised gains (CSV)</a>
+  </div>
+</div>
+
+{% if saved %}<div class="alert" role="status"><svg class="icon icon-sm"><use href="#i-check"/></svg> Saved.</div>{% endif %}
+{% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+
+{% if not a.books %}
+<div class="card"><div class="empty"><h3>No holdings with a cost yet</h3>
+  <p>Returns need what you paid and when. Import a broker statement, or add a holding with its average cost and date, and they appear here.</p>
+  <div class="inline-controls" style="justify-content:center;"><a class="btn btn-primary" href="/management/add">Add a holding</a></div></div></div>
+{% endif %}
+
+{% for mkt, b in a.books.items() %}
+<section class="section" aria-labelledby="bk-{{ mkt }}">
+  <div class="section-head"><div><h2 class="section-title" id="bk-{{ mkt }}">{{ 'India holdings (₹)' if mkt == 'IN' else 'US holdings ($)' }}</h2>
+    <span class="section-note">{{ b.open_count }} held{% if b.count > b.open_count %} · {{ b.count - b.open_count }} sold out{% endif %} · prices as of {{ b.as_of }}</span></div></div>
+
+  <div class="kpi-grid">
+    <div class="kpi"><span class="kpi-label">Invested</span><span class="kpi-value">{{ money(b.invested, b.cur) }}</span><span class="kpi-sub">every purchase, before fees</span></div>
+    <div class="kpi"><span class="kpi-label">Value now</span><span class="kpi-value">{{ money(b.value, b.cur) }}</span><span class="kpi-sub">what you still hold</span></div>
+    <div class="kpi"><span class="kpi-label">Not yet sold</span><span class="kpi-value {{ 'pos' if b.unrealised >= 0 else 'neg' }}">{{ money(b.unrealised, b.cur, signed=True) }}</span><span class="kpi-sub">gain or loss on shares held</span></div>
+    <div class="kpi"><span class="kpi-label">Realised</span><span class="kpi-value {{ 'pos' if b.realised >= 0 else 'neg' }}">{{ money(b.realised, b.cur, signed=True) }}</span><span class="kpi-sub">gain or loss on shares sold</span></div>
+    <div class="kpi"><span class="kpi-label">Total gain</span><span class="kpi-value {{ 'pos' if b.total_gain >= 0 else 'neg' }}">{{ money(b.total_gain, b.cur, signed=True) }}</span><span class="kpi-sub">{{ pct(b.gain_on_cost_pct) if b.gain_on_cost_pct is not none else '—' }} on what you invested</span></div>
+    <div class="kpi"><span class="kpi-label">Annualised return (XIRR)</span>
+      {% if b.xirr is not none %}<span class="kpi-value {{ 'pos' if b.xirr >= 0 else 'neg' }}">{{ pct(b.xirr * 100) }}</span><span class="kpi-sub">a year, weighted by when each rupee went in</span>
+      {% else %}<span class="kpi-value">Not yet</span><span class="kpi-sub">your money has been in {{ b.span_days }} days; an annual rate needs a year or more</span>{% endif %}</div>
+  </div>
+
+  {% if b.benchmark %}
+  <p class="section-note" style="margin:.4rem 0 0;">
+    The same dated money in the {{ b.benchmark.name }} would be worth <b>{{ money(b.benchmark.bench_value, b.cur) }}</b> against your <b>{{ money(b.benchmark.own_value, b.cur) }}</b>
+    {% if b.benchmark.bench_xirr is not none and b.benchmark.own_xirr is not none %}(annualised {{ pct(b.benchmark.bench_xirr * 100) }} against {{ pct(b.benchmark.own_xirr * 100) }}){% endif %},
+    measured to {{ b.benchmark.as_of }}, the latest index data we hold.{% if b.benchmark.stale %} <b>That is more than 10 days old, so the comparison is behind your prices.</b>{% endif %}
+    It is a comparison of what happened, not a view on what to do next.
+  </p>
+  {% endif %}
+  {% if b.has_estimated %}<p class="section-note" style="margin:.3rem 0 0;">Some of your shares come from an imported holdings figure or a recorded average cost, so their purchase date is the date on the record. Returns for those are an estimate until the real trades are added.</p>{% endif %}
+  {% if b.unpriced %}<p class="section-note" style="margin:.3rem 0 0;">No price for {{ b.unpriced|join(', ') }}, so they are left out of the value and the gain.</p>{% endif %}
+
+  <div class="table-wrap" style="margin-top:.8rem;"><table class="positions">
+    <thead><tr><th>Stock</th><th class="num">Held</th><th class="num">Average cost</th><th class="num">Invested</th><th class="num">Value now</th><th class="num">Realised</th><th class="num">Not yet sold</th><th class="num">Gain on cost</th><th class="num">XIRR</th></tr></thead>
+    <tbody>
+    {% for h in a.holdings if h.market == mkt %}{% set s = h.summary %}
+    <tr>
+      <td data-label="Stock"><span class="row-ticker">{{ h.symbol }}</span><span class="row-sub">{{ h.name }}{% if h.closed %} · sold out{% elif not h.tracked %} · not tracked{% endif %}{% if s.has_estimated %} · estimated dates{% endif %}</span>
+        {% for n in h.notes %}<span class="row-sub">{{ n }}</span>{% endfor %}
+        {% if h.split_hint %}<span class="row-sub"><b>Check:</b> {{ h.split_hint }}</span>{% endif %}
+        {% if s.unmatched_sell_qty > 0 %}<span class="row-sub"><b>Check:</b> {{ "%g"|format(s.unmatched_sell_qty) }} shares were sold with no earlier purchase on record.</span>{% endif %}</td>
+      <td class="num" data-label="Held">{{ "%g"|format(s.open_qty) if not h.closed else '—' }}</td>
+      <td class="num" data-label="Average cost">{{ money(s.avg_cost, b.cur, 2) if s.avg_cost else '—' }}</td>
+      <td class="num" data-label="Invested">{{ money(s.invested, b.cur) }}</td>
+      <td class="num" data-label="Value now">{{ money(s.value, b.cur) if s.value is not none and not h.closed else '—' }}</td>
+      <td class="num" data-label="Realised">{% if s.realised %}<span class="{{ 'val-pos' if s.realised >= 0 else 'val-neg' }}">{{ money(s.realised, b.cur, signed=True) }}</span>{% else %}<span class="stub">—</span>{% endif %}</td>
+      <td class="num" data-label="Not yet sold">{% if s.unrealised is not none and not h.closed %}<span class="{{ 'val-pos' if s.unrealised >= 0 else 'val-neg' }}">{{ money(s.unrealised, b.cur, signed=True) }}</span>{% else %}<span class="stub">—</span>{% endif %}</td>
+      <td class="num" data-label="Gain on cost">{{ pct(s.gain_on_cost_pct) if s.gain_on_cost_pct is not none else '—' }}</td>
+      <td class="num" data-label="XIRR">{{ pct(s.xirr * 100) if s.xirr is not none else '—' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody></table></div>
+
+  {% if b.by_year %}
+  <h3 style="margin:1.2rem 0 .3rem;font-size:1rem;">Realised gains by financial year</h3>
+  <div class="table-wrap"><table class="fin">
+    <thead><tr><th>Financial year</th><th class="num">Short term</th><th class="num">Long term</th><th class="num">Total</th><th class="num">Sales</th></tr></thead>
+    <tbody>{% for y in b.by_year %}<tr><td>{{ y.fy }}</td>
+      <td class="num">{{ money(y.short, b.cur, signed=True) }}</td><td class="num">{{ money(y.long, b.cur, signed=True) }}</td>
+      <td class="num"><b>{{ money(y.total, b.cur, signed=True) }}</b></td><td class="num">{{ y.legs }}</td></tr>{% endfor %}</tbody></table></div>
+  <p class="section-note">Short and long term use {{ 'more than 12 months' if mkt == 'IN' else 'more than 24 months' }} held{{ ' for listed Indian shares' if mkt == 'IN' else ' for shares of US companies' }}, matched oldest shares first. This is a summary of your trades, not tax advice and not a tax calculation; check the rules and your own position with your tax adviser.</p>
+  {% endif %}
+</section>
+{% endfor %}
+
+<section class="section" aria-labelledby="trades-h">
+  <div class="section-head"><div><h2 class="section-title" id="trades-h">Your trades</h2>
+    <span class="section-note">{{ total_trades }} stored{% if total_trades > trades|length %} · latest {{ trades|length }} shown (the CSV has all){% endif %}. They come from statement imports and your journal.</span></div></div>
+  {% if trades %}
+  <div class="table-wrap"><table class="fin">
+    <thead><tr><th>Date</th><th>Stock</th><th>Side</th><th class="num">Quantity</th><th class="num">Price</th><th>Source</th><th></th></tr></thead>
+    <tbody>{% for t in trades %}<tr>
+      <td>{{ t.date }}</td><td>{{ t.symbol }}</td><td>{{ 'Bought' if t.side == 'buy' else 'Sold' }}</td><td class="num">{{ "%g"|format(t.qty) }}</td><td class="num">{{ "%g"|format(t.price) }}</td>
+      <td>{{ {'import': 'Statement', 'journal': 'Journal', 'manual': 'Entered here', 'opening': 'Holdings figure'}.get(t.source, t.source) }}{% if t.estimated %} <span class="badge neutral" title="Its real purchase date and price are not known">estimated</span>{% endif %}</td>
+      <td>{% if t.source != 'journal' %}<form method="post" action="/portfolio/returns/trade/delete" style="margin:0;" onsubmit="return confirm('Delete this trade from your ledger?');"><input type="hidden" name="trade_id" value="{{ t.id }}"><button class="icon-btn" type="submit" title="Delete this trade" aria-label="Delete this trade"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button></form>{% else %}<span class="stub" title="Undo the journal entry on the stock's page">via journal</span>{% endif %}</td>
+    </tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="muted">No trades stored yet. They appear when you import a statement with dated trades or write an entry in a stock's journal. Holdings you added by hand count from their recorded cost and date.</p>{% endif %}
+
+  <details style="margin-top:1rem;"><summary style="cursor:pointer;font-weight:600;">Record a past trade of a stock you no longer hold</summary>
+    <form method="post" action="/portfolio/returns/trade" class="form-card" style="margin-top:.6rem;">
+      <div class="form-grid">
+        <div class="form-field"><label for="t-symbol">Stock</label><input class="form-input" id="t-symbol" name="symbol" placeholder="NSE:TCS" required><span class="hint">A stock you still hold takes buys and sales through its journal instead.</span></div>
+        <div class="form-field"><label for="t-side">Bought or sold</label><select class="form-input" id="t-side" name="side"><option value="buy">Bought</option><option value="sell">Sold</option></select></div>
+        <div class="form-field"><label for="t-when">Date</label><input class="form-input" type="date" id="t-when" name="when" max="{{ today }}" required></div>
+        <div class="form-field"><label for="t-qty">Quantity</label><input class="form-input" id="t-qty" name="qty" inputmode="decimal" required></div>
+        <div class="form-field"><label for="t-price">Price per share</label><input class="form-input" id="t-price" name="price" inputmode="decimal" required><span class="hint">Before brokerage and taxes.</span></div>
+      </div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Add to my ledger</button></div>
+    </form>
+  </details>
+</section>
+
+<ul class="muted" style="font-size:.8rem;margin:1.2rem 0 0;padding-left:1.1rem;">
+  <li>Returns use price times quantity for every trade. Brokerage, taxes and dividends are not included, so real returns differ.</li>
+  <li>Prices are split-adjusted. If a stock split or had a bonus after you bought, the quantity and price you entered may need adjusting; stocks where a trade price looks that way are marked "Check".</li>
+  <li>An annualised return needs a year of history; before that you see the gain on cost. Past returns do not predict future returns.</li>
+  <li>Tenetfolio is not an investment adviser or a tax adviser. This page reports what happened to your own money.</li>
+</ul>
+{% endblock %}

@@ -9,10 +9,6 @@ from app.templates_config import templates
 router = APIRouter()
 
 
-BENCHMARKS = {"nifty50": 4.2, "sp500": 5.8}  # still illustrative — no real index-level
-# price feed sourced yet, separate task from wiring this page to real positions
-
-
 def _group_inr(n: int) -> str:
     """Indian digit grouping: 1234567 -> 12,34,567."""
     s = str(n)
