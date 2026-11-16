@@ -88,6 +88,17 @@ def stock_digest(user_id: int | None, symbol: str) -> str | None:
     except Exception as e:  # noqa: BLE001
         logger.info("stock_digest verdict skipped: %s", e)
 
+    if user_id:  # a tracked stock also carries its status against the user's rules, decided in code (app/ai/status.py)
+        try:
+            from app.ai import status as rule_status
+            with get_users_conn() as u:
+                tp = u.execute("SELECT id FROM tracked_positions WHERE user_id = ? AND symbol = ? AND status = 'active' ORDER BY id DESC LIMIT 1", (user_id, symbol)).fetchone()
+                line = rule_status.one_line(rule_status.stored(u, tp["id"])) if tp else None
+            if line:
+                out.append("STATUS AGAINST THE USER'S RULES (decided by code from their rules, tracked stock): " + line)
+        except Exception as e:  # noqa: BLE001
+            logger.info("stock_digest status skipped: %s", e)
+
     if rows:
         out.append(f"QUARTERLY ({cur} {unit}; oldest first): period | revenue | YoY% | OPM% | net profit | EPS | promoter% | pledge% | FII% | DII%")
         by_end = {r["period_end_date"]: r for r in rows}
@@ -249,7 +260,11 @@ def management_digest(user_id: int) -> str | None:
                WHERE tp.user_id = ? AND tp.status = 'active' ORDER BY tp.anchor_type, tp.symbol""", (user_id,)).fetchall()
     if not rows:
         return "The user tracks no stocks yet (Management page is empty)."
-    out = [f"USER'S TRACKED STOCKS ({len(rows)}): positions first, then watchlist. Each: symbol, name, held qty @ avg, return since tracking / last price, latest story"]
+    from app.ai import status as rule_status
+    with get_users_conn() as u2:
+        stored = rule_status.stored_many(u2, user_id)
+    out = [f"USER'S TRACKED STOCKS ({len(rows)}): positions first, then watchlist. Each: symbol, name, held qty @ avg, return since tracking / last price, "
+           "status against the user's rules (decided by code from their rules; the primary answer to 'how is it doing against my rules'), latest written story"]
     with get_market_conn() as m:
         for r in rows:
             price, _ = _last_price(m, r["symbol"])
@@ -260,20 +275,24 @@ def management_digest(user_id: int) -> str | None:
                 line += f" · {r['quantity']:g} @ {_n(base, 2)}"
             line += f" · return {ret}" + (f" · last {_n(price, 2)}" if price else "")
             if r["valuation_label"]:
-                line += f" · valuation {r['valuation_label']}"
+                line += f" · bucket in the written story: {r['valuation_label']}"   # the column holds the story's bucket (Core, Steady...), not a valuation
+            st = stored.get(r["id"])
+            if st:
+                line += f" · STATUS: {rule_status.one_line(st)}"
             try:
                 a = json.loads(r["analysis_json"]) if r["analysis_json"] else None
             except ValueError:
                 a = None
             if a:
                 flags = [f"{f.get('level')}: {f.get('text') or f.get('title') or f.get('label')}" for f in (a.get("story_flags") or []) if f.get("level") in ("warning", "alert")][:3]
-                line += f" · story status vs the user's rules: {_status(a.get('verdict'), r['signal'])} ({a.get('bucket') or '-'}, {(a.get('generated_at') or r['checked_at'] or '')[:10]})"
+                line += (f" · written story ({a.get('bucket') or '-'}, {(a.get('generated_at') or r['checked_at'] or '')[:10]})" if st else
+                         f" · story status vs the user's rules: {_status(a.get('verdict'), r['signal'])} ({a.get('bucket') or '-'}, {(a.get('generated_at') or r['checked_at'] or '')[:10]})")
                 if a.get("what_changed"):
                     line += f" — {a['what_changed'][:220]}"
                 if flags:
                     line += " · FLAGS " + "; ".join(str(f)[:120] for f in flags)
             else:
-                line += " · no story yet"
+                line += " · no written story yet" if st else " · no story yet"
             out.append(line)
     return "\n".join(out)
 

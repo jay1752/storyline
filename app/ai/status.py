@@ -348,6 +348,16 @@ def stored_many(u, user_id: int) -> dict:
     return {r["position_id"]: _row(r) for r in rows}
 
 
+def one_line(s: dict | None, limit: int = 240) -> str | None:
+    """A stored status as one plain sentence for the assistant and other readers: 'Within your rules (since 2026-11-16): Not met: ROCE ...'.
+    Notes about annual figures are left out; None when there is no stored status."""
+    if not s:
+        return None
+    why = " ".join(x["text"] for x in s["reasons"] if x["kind"] != "note")
+    text = f"{s['label']} (since {str(s['since'])[:10]})" + (f": {why}" if why else "")
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
 def history(u, position_id: int, limit: int = 20) -> list[dict]:
     """The changes of status, newest first: [{code, label, since, reasons}]."""
     return [{"code": r["code"], "label": r["label"], "since": r["computed_at"], "reasons": json.loads(r["reasons_json"] or "[]")}
