@@ -1145,6 +1145,9 @@ def _stock_context(symbol: str, span: str):
     last_px = price_summary["last"] if price_summary else None
     ia_analyst = analyst_panel(stock["symbol"], last_px) if stock["market"] == "IN" else None
     ia_company = company_panel(stock["symbol"]) if stock["market"] == "IN" else None
+    from app import glance as _glance
+    with get_market_conn() as _gc:   # growth and returns at a glance (app/glance.py): IndianAPI's figures where held, the rest worked out from our own data
+        glance_data = _glance.for_stock(_gc, stock["symbol"], stock["market"], ia_company["growth"] if ia_company else None)
     next_result = _next_result(stock["symbol"], ia_company) if stock["market"] == "IN" else None
     cf_labels = {"Operating cash flow", "Cash flow ÷ profit", "Investing cash flow", "Financing cash flow", "Free cash flow"}
     if raw["annual"] and stock["market"] == "IN":  # India reports cash flow yearly: its own table under Financial health
@@ -1220,7 +1223,7 @@ def _stock_context(symbol: str, span: str):
             "viz": viz,
             "view_groups": [{"key": k, "label": l, "icon": i} for k, l, i, _ in view_groups],
             "perf_panes": perf_panes,
-            "ia_company": ia_company, "next_result": next_result, "delivery": delivery,
+            "ia_company": ia_company, "next_result": next_result, "delivery": delivery, "glance": glance_data,
             "explorer": explorer,
             "n_quarters": len([r for r in all_rows if not _is_annual(r)]),
             "n_annual": len(annual_all),

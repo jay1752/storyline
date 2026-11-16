@@ -1,0 +1,13 @@
+{# Growth and returns at a glance (app/glance.py): four small cards under the KPI tiles. #}
+<section class="gr" aria-label="Growth and returns at a glance">
+  <div class="gr-grid">
+    {% for c in glance.cards %}
+    <div class="gr-card">
+      <h3 class="gr-title">{{ c.title }}</h3>
+      {% if c.empty %}<p class="gr-none">Not enough history yet.</p>
+      {% else %}<dl class="gr-list">{% for r in c.rows %}<div class="gr-row"><dt>{{ r.label }}:</dt><dd>{% if r.value is none %}<span class="stub" title="{{ 'Not shown: above 100% a year for 5 years or more is almost always a tiny or wrong base year' if r.suspect else 'No figure: too little history, or no profit in the base year' }}">—</span>{% else %}{{ r.value }}%{% endif %}</dd></div>{% endfor %}</dl>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  <p class="section-note gr-note">Compounded annual rates. Return on equity is the average over the period. Price CAGR is split-adjusted and leaves out dividends. A dash means too little history, or no profit in the base year.</p>
+</section>

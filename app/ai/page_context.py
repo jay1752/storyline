@@ -107,6 +107,25 @@ def stock_digest(user_id: int | None, symbol: str) -> str | None:
             g = lambda k: r.get(k) if hasattr(r, "get") else r[k]
             out.append(f"  FY{g('period_end_date')[:4]} | {_n(g('revenue_cr'), 0)} | {_n(g('opm_pct'))} | {_n(g('net_profit_cr'), 0)} | {_n(g('eps'), 2)} | "
                        f"{_n(g('cfo_cr'), 0)} | {_n(g('fcf_cr'), 0)} | {_n(g('borrowings_cr'), 0)} | {_n(g('roce_pct'))}")
+    try:  # the four cards on the stock page (app/glance.py), so the assistant and the page agree
+        from app import glance as _glance
+        from app.indianapi_db import get_indianapi_conn
+        ia_g = None
+        if stock["market"] == "IN":
+            ic = get_indianapi_conn()
+            try:
+                ia_g = {}
+                for r in ic.execute("SELECT metric, horizon, pct FROM ia_growth WHERE symbol = ?", (symbol,)):
+                    ia_g.setdefault(r["metric"], {})[r["horizon"]] = r["pct"]
+            finally:
+                ic.close()
+        with get_market_conn() as gm:
+            gl = _glance.for_stock(gm, symbol, stock["market"], ia_g)
+        if gl:
+            out.append("GROWTH AND RETURNS (compounded annual %; ROE is the period average; price CAGR excludes dividends): " + "; ".join(
+                f"{c['title']}: " + ", ".join(f"{r['label']} {r['value']}%" for r in c["rows"] if r["value"] is not None) for c in gl["cards"] if not c["empty"]))
+    except Exception as e:  # noqa: BLE001
+        logger.info("stock_digest glance skipped: %s", e)
     if met:
         extra = [f"{lbl} {_n(met[k], 1, suf)}" for lbl, k, suf in (("sales CAGR 3y", "sales_cagr_3y", "%"), ("avg ROCE 3y", "roce_3y", "%"), ("dividend payout", "div_payout", "%")) if met[k] is not None]
         if extra:

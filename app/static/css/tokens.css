@@ -2043,3 +2043,15 @@ button.vlink { background: none; border: 0; padding: 0; cursor: pointer; color: 
 /* Standing disclaimer at the foot of every signed-in page (base.html) */
 .app-disclaimer{margin:40px 0 16px;padding-top:14px;border-top:1px solid var(--border);font-size:12px;line-height:1.5;color:var(--muted);max-width:72ch}
 .app-disclaimer a{color:inherit;text-decoration:underline}
+
+/* Growth and returns at a glance (templates/_glance.html) */
+.gr { margin: 1rem 0 .4rem; }
+.gr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: .8rem; }
+.gr-card { border: 1px solid var(--border); border-radius: .75rem; padding: .85rem 1rem .75rem; background: var(--surface, transparent); }
+.gr-title { font-size: .98rem; font-weight: 600; margin: 0 0 .45rem; }
+.gr-list { margin: 0; }
+.gr-row { display: flex; justify-content: space-between; gap: 1rem; padding: .12rem 0; font-size: .92rem; }
+.gr-row dt { color: var(--muted); }
+.gr-row dd { margin: 0; font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-weight: 500; }
+.gr-none { margin: 0; color: var(--muted); font-size: .88rem; }
+.gr-note { margin: .5rem 0 0; font-size: .78rem; }

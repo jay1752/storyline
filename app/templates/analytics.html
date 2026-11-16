@@ -40,6 +40,8 @@
 </div>
 {% endif %}
 
+{% if glance %}{% include "_glance.html" %}{% endif %}
+
 {% if verdict or next_result %}
 <div class="verdict" id="verdict">
   {% if verdict %}
@@ -340,9 +342,6 @@
     <div class="stat-row">
       {% if C.industry %}<div class="stat-cell"><div class="stat-label">Industry</div><div class="stat-val" style="font-size:1.05rem">{{ C.industry }}</div></div>{% endif %}
       {% if C.isin %}<div class="stat-cell"><div class="stat-label">ISIN</div><div class="stat-val" style="font-size:1.05rem">{{ C.isin }}</div></div>{% endif %}
-      {% for metric, hz in C.growth.items() %}{% if metric in ('Compounded Sales Growth', 'Compounded Profit Growth', 'Stock Price CAGR') %}
-      <div class="stat-cell"><div class="stat-label">{{ metric }}</div><div class="stat-val" style="font-size:1.05rem">{% for k in ('10Y','5Y','3Y','TTM') %}{% if hz.get(k) is not none %}<span class="ia-hz">{{ k }} <b>{{ "%g"|format(hz[k]) }}%</b></span>{% endif %}{% endfor %}</div></div>
-      {% endif %}{% endfor %}
     </div>
     {% if C.ma %}<div class="ia-ma"><span class="section-note">Moving averages</span>{% for m in C.ma %}<span><em>{{ m.days }}d</em> {{ "{:,.1f}".format(m.price) }}</span>{% endfor %}</div>{% endif %}
   </div></div>
