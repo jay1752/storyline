@@ -138,12 +138,8 @@ async def _stream(user_id: int, message: str, history_json: str | None, page: st
         yield _sse("error", "Not logged in — please log in and try again.")
         return
 
-    chain = build_chain(user_id)  # [primary, fallback?] — a link whose provider has no key is already dropped
-    if not chain:
-        s = get_user_settings(user_id)
-        label = PROVIDERS.get(s["provider"], {}).get("label", s["provider"])
-        yield _sse("error", f"No API key for {label}. Add one in AI settings (or pick a provider that has one).")
-        return
+    chain = build_chain(user_id)  # [primary, fallback?] — a link whose provider has no key is already dropped. Checked just before the AI is first
+    # needed (below): a spreadsheet statement is read column by column with no AI, so it must work for someone who has not set a key.
 
     message_history = ModelMessagesTypeAdapter.validate_json(history_json) if history_json else None
 
@@ -231,6 +227,11 @@ async def _stream(user_id: int, message: str, history_json: str | None, page: st
                 yield _sse(None, {"type": "proposal", "proposal": proposal})
                 yield "data: [DONE]\n\n"
                 return
+    if not chain:  # from here on the AI is needed
+        s = get_user_settings(user_id)
+        label = PROVIDERS.get(s["provider"], {}).get("label", s["provider"])
+        yield _sse("error", f"No API key for {label}. Add one in AI settings (or pick a provider that has one).")
+        return
     if upload is not None:
         filename, data = upload
         try:
