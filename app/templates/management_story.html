@@ -289,6 +289,7 @@
   <button type="button" role="tab" data-tab="analysis" class="on">Today</button>
   <button type="button" role="tab" data-tab="journal">Journal{% if events %} <span class="count">{{ events|length }}</span>{% endif %}</button>
   {% if history %}<button type="button" role="tab" data-tab="story">History <span class="count">{{ total_entries }}</span></button>{% endif %}
+  <button type="button" role="tab" data-tab="timeline">Rules over time</button>
 </div>
 
 <section class="section tabpanel on" id="analysis" data-panel="analysis">
@@ -326,6 +327,14 @@
     <p>The status above is already worked out from your rules. Run the analysis once to add the written story. After that it updates itself every morning and builds the story.</p>
   </div></div>
   {% endif %}
+</section>
+
+<section class="section tabpanel" id="timeline" data-panel="timeline" data-id="{{ pos.id }}">
+  <div class="section-head">
+    <div><h2 class="section-title">Rules over time</h2>
+      <span class="section-note">Your rules as they are set today, replayed at each past result date. No AI.</span></div>
+  </div>
+  <div id="timeline-body"><p class="muted">Open this tab to replay your rules.</p></div>
 </section>
 
 <section class="section tabpanel" id="journal" data-panel="journal">

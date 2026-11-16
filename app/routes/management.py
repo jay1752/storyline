@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app import journal as journal_mod
 from app import framework as fw
+from app import backtest
 from app.ai import status as rule_status
 from app.ai.insights_engine import VERDICT_STATUS, expire_stale_runs, live_scan, queue_run, DISCLAIMER as STORY_DISCLAIMER
 from app.db import get_market_conn, get_users_conn
@@ -213,6 +214,22 @@ def management_story(request: Request, position_id: int, all: int = 0):
             "total_entries": total, "more": more, "story_disclaimer": STORY_DISCLAIMER,   # always the current wording, not the one saved inside an older story
         },
     )
+
+
+@router.get("/management/{position_id:int}/timeline", response_class=HTMLResponse)
+def management_timeline(request: Request, position_id: int):
+    """The 'Rules over time' tab: the user's current rules replayed at each past result date (app/backtest.py). Loaded on demand."""
+    user_id = request.state.user_id
+    with get_users_conn() as u:
+        pos = u.execute("SELECT * FROM tracked_positions WHERE id = ? AND user_id = ? AND status IN ('active', 'exited')", (position_id, user_id)).fetchone()
+        if not pos:
+            return HTMLResponse("<p>That stock is not in your list.</p>", status_code=404)
+        try:
+            tl = backtest.timeline_for_position(u, pos)
+        except Exception:  # noqa: BLE001 - say so plainly rather than break the tab
+            logger.exception("rules over time failed for %s", pos["symbol"])
+            return HTMLResponse('<div class="card"><div class="empty"><h3>Could not replay this stock</h3><p>Try again in a moment.</p></div></div>', status_code=500)
+    return templates.TemplateResponse("_rules_timeline.html", {"request": request, "tl": tl, "chart": backtest.chart_svg(tl)})
 
 
 def analysed_after(snaps, current):

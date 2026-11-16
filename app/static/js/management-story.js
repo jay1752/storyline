@@ -144,6 +144,19 @@
     panels.forEach((p) => p.classList.toggle("on", p.dataset.panel === name));
     tabs.forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
     if (push) history.replaceState(null, "", "#" + name);
+    if (name === "timeline") loadTimeline();
+  }
+  // "Rules over time": fetched the first time its tab opens (it replays the rules, so it is not part of the page load)
+  let timelineLoaded = false;
+  function loadTimeline() {
+    const panel = document.getElementById("timeline"), body = document.getElementById("timeline-body");
+    if (timelineLoaded || !panel || !body) return;
+    timelineLoaded = true;
+    body.innerHTML = '<p class="muted">Replaying your rules\u2026</p>';
+    fetch("/management/" + panel.dataset.id + "/timeline", { credentials: "same-origin" })
+      .then((r) => r.text().then((t) => ({ ok: r.ok, t })))
+      .then((x) => { body.innerHTML = x.t; if (!x.ok) timelineLoaded = false; })
+      .catch(() => { timelineLoaded = false; body.innerHTML = '<p class="form-error">Could not load this. Open the tab again to retry.</p>'; });
   }
   tabs.forEach((b) => b.addEventListener("click", () => show(b.dataset.tab, true)));
   const fromHash = () => { const h = location.hash.slice(1); if (h) show(h, false); };
