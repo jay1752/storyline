@@ -37,7 +37,7 @@ def _refresh_metrics_if_stale() -> None:
 
 def _why(key: str, r: dict, custom: dict | None = None) -> str:
     fmt = lambda v, s="%": f"{v:.0f}{s}" if v is not None else None
-    if key in ("rules", "browse"):
+    if key in ("rules", "near", "browse"):
         j = r["judge"]
         return f"{j['passed']} of {j['total']} rules" + (f" · misses {j['failing'][0]}" if j["failing"] else "")
     if key == "custom":
