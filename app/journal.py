@@ -102,6 +102,9 @@ def add_entry(u, user_id: int, position_id: int, etype: str, event_date: str, qu
     cur = u.execute(
         "INSERT INTO position_events (position_id, user_id, event_type, event_date, quantity, price, note, before_json) VALUES (?,?,?,?,?,?,?,?)",
         (position_id, user_id, etype, event_date, qty, price_v, note, before))
+    if etype in ("add", "trim", "exit") and qty and price_v:   # the journal is also the ledger: an add is a buy, a trim or an exit is a sale (app/ledger.py)
+        from app import ledger
+        ledger.add_trade(u, user_id, pos["symbol"], "buy" if etype == "add" else "sell", qty, price_v, event_date, "journal", ref=str(cur.lastrowid), position_id=position_id)
     return cur.lastrowid
 
 
@@ -118,6 +121,7 @@ def undo_last(u, user_id: int, position_id: int) -> dict | None:
         sets = ", ".join(f"{c} = ?" for c in before)
         u.execute(f"UPDATE tracked_positions SET {sets} WHERE id = ?", (*before.values(), position_id))
     u.execute("DELETE FROM position_events WHERE id = ?", (last["id"],))
+    u.execute("DELETE FROM ledger_trades WHERE user_id = ? AND source = 'journal' AND ref = ?", (user_id, str(last["id"])))   # its trade goes with it
     if not u.execute("SELECT 1 FROM position_events WHERE position_id = ? AND event_type != 'open' LIMIT 1", (position_id,)).fetchone():
         u.execute("DELETE FROM position_events WHERE position_id = ? AND event_type = 'open'", (position_id,))
     return dict(last)

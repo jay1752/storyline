@@ -121,6 +121,31 @@ FETCH_BUDGET_SECONDS = 25.0
 _SPLIT_FACTORS = (1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 10.0, 20.0)
 
 
+def _ledger_for(group: list, statement_date: Optional[str]) -> list[dict]:
+    """The trades behind one stock's rows, for the portfolio ledger (app/ledger.py): a holdings snapshot becomes one estimated opening lot, and the dated
+    trades after it (or all of them, when there is no snapshot) become buys and sells. Mirrors _aggregate_symbol's choice of what counts. A row with no
+    date, price or quantity cannot be placed in time and is left out."""
+    holdings = [r for r in group if r.side == "holding" and r.quantity is not None]
+    txns = [r for r in group if r.side in ("buy", "sell")]
+    out: list[dict] = []
+    if holdings:
+        snap = max(holdings, key=lambda r: r.date or statement_date or "")
+        when = snap.date or statement_date
+        if when and snap.price and snap.quantity and snap.quantity > 0:
+            out.append({"side": "buy", "qty": snap.quantity, "price": snap.price, "date": when, "source": "opening", "estimated": True})
+        txns = [t for t in txns if when and t.date and t.date > when]
+    for t in txns:
+        if t.date and t.price and t.quantity and t.quantity > 0:
+            out.append({"side": t.side, "qty": t.quantity, "price": t.price, "date": t.date, "source": "import", "estimated": False})
+    return out
+
+
+def _strip_ledger(payload: dict) -> dict:
+    """The proposal as the browser sees it: the trades stay on the server (they are applied at commit, never taken from the client)."""
+    return {**payload, "rows": [{k: v for k, v in r.items() if k != "ledger"} for r in payload.get("rows", [])],
+            "skipped": [{k: v for k, v in s.items() if k != "ledger"} for s in payload.get("skipped", [])]}
+
+
 def _price_check(conn, sym: str, group: list) -> dict:
     """Do this statement's prices fit THIS stock? Transactions are compared with the close on their trade date; a
     'holding' row carries an average COST (not a market price), so it is checked against the stock's whole price range."""
@@ -345,7 +370,8 @@ def propose(user_id: int, transactions: list[Txn], statement_date: Optional[str]
                 skipped.append({"label": names[sym] + f" ({sym})", "reason": error, "symbol": sym, "draft": _draft(group, statement_date), "kind": "history"})
                 continue
             if qty <= EPS:
-                skipped.append({"label": names[sym] + f" ({sym})", "reason": "Fully sold within this file — nothing left to track.", "kind": "sold"})
+                skipped.append({"label": names[sym] + f" ({sym})", "reason": "Fully sold within this file — nothing left to track.", "kind": "sold",
+                                "symbol": sym, "ledger": _ledger_for(group, statement_date)})  # not tracked, but its trades still count toward realised gains
                 continue
             warnings = warnings + info["notes"]
             ensure_prices(sym, deadline)
@@ -366,6 +392,7 @@ def propose(user_id: int, transactions: list[Txn], statement_date: Optional[str]
                 "action": action,
                 "existing": {k: prior[k] for k in ("quantity", "buy_price", "anchor_date", "anchor_type")} if prior else None,
                 "txn_count": len(group),
+                "ledger": _ledger_for(group, statement_date),
                 "warnings": warnings,
                 "match": match,
                 "price_check": {"status": chk["status"], "text": chk["text"]} if chk else None,
@@ -387,10 +414,11 @@ def propose(user_id: int, transactions: list[Txn], statement_date: Optional[str]
         )
         proposal_id = cur.lastrowid
         u.commit()
-    return {"proposal_id": proposal_id, **payload}
+    return {"proposal_id": proposal_id, **_strip_ledger(payload)}
 
 
-def get_proposal(user_id: int, proposal_id: int) -> Optional[dict]:
+def get_proposal(user_id: int, proposal_id: int, internal: bool = False) -> Optional[dict]:
+    """A stored proposal. `internal=True` keeps the trades for the ledger (commit); the default is what may be shown to the user."""
     with get_users_conn() as u:
         row = u.execute(
             "SELECT id, status, payload_json FROM pending_imports WHERE id = ? AND user_id = ?",
@@ -398,7 +426,8 @@ def get_proposal(user_id: int, proposal_id: int) -> Optional[dict]:
         ).fetchone()
     if not row:
         return None
-    return {"proposal_id": row["id"], "status": row["status"], **json.loads(row["payload_json"])}
+    payload = json.loads(row["payload_json"])
+    return {"proposal_id": row["id"], "status": row["status"], **(payload if internal else _strip_ledger(payload))}
 
 
 def cancel(user_id: int, proposal_id: int) -> bool:
@@ -494,13 +523,31 @@ def apply_edits(proposal: dict, edits: Optional[dict]) -> list[dict]:
     return list(merged.values())
 
 
+def _write_ledger(u, user_id: int, position_id: int, row: dict, original: Optional[dict]) -> None:
+    """Store the trades behind an imported row, unless the user changed its quantity, cost or date on the review card (then the trades no longer describe
+    what they confirmed, and the position record stands in as an estimated opening lot). A new holdings snapshot replaces the earlier opening lot."""
+    from app import ledger as ledger_mod
+    if not original or not original.get("ledger"):
+        return
+    same = (abs((row["quantity"] or 0) - (original["quantity"] or 0)) < 1e-6 and row["anchor_date"] == original["anchor_date"]
+            and ((row["avg_price"] is None and original["avg_price"] is None)
+                 or (row["avg_price"] is not None and original["avg_price"] is not None and abs(row["avg_price"] - original["avg_price"]) < 1e-6)))
+    if not same:
+        return
+    if any(t["source"] == "opening" for t in original["ledger"]):
+        u.execute("DELETE FROM ledger_trades WHERE user_id = ? AND symbol = ? AND source = 'opening'", (user_id, row["symbol"]))
+    for t in original["ledger"]:
+        ledger_mod.add_trade(u, user_id, row["symbol"], t["side"], t["qty"], t["price"], t["date"], t["source"], estimated=t["estimated"], position_id=position_id)
+
+
 def commit(user_id: int, proposal_id: int, edits: Optional[dict] = None) -> Optional[dict]:
     """Applies a pending proposal (with the user's corrections, if any). Returns counts, or None if it isn't pending/owned. Raises EditError
     for a correction that is invalid (nothing is written then)."""
-    proposal = get_proposal(user_id, proposal_id)
+    proposal = get_proposal(user_id, proposal_id, internal=True)
     if not proposal or proposal["status"] != "pending":
         return None
     rows = apply_edits(proposal, edits)
+    orig = {r["symbol"]: r for r in proposal["rows"]}
     if not rows:
         raise EditError("Nothing selected to import.")
 
@@ -519,8 +566,9 @@ def commit(user_id: int, proposal_id: int, edits: Optional[dict] = None) -> Opti
                 (user_id, r["symbol"]),
             ).fetchone()
             if pos is None:
-                create_tracked_position(u, user_id, r["symbol"], r["company_name"], "position", r["anchor_date"], r["avg_price"], r["quantity"])
+                pid = create_tracked_position(u, user_id, r["symbol"], r["company_name"], "position", r["anchor_date"], r["avg_price"], r["quantity"])
                 created += 1
+                _write_ledger(u, user_id, pid, r, orig.get(r["symbol"]))
                 continue
 
             qty, avg, anchor = r["quantity"], r["avg_price"], r["anchor_date"]
@@ -543,7 +591,13 @@ def commit(user_id: int, proposal_id: int, edits: Optional[dict] = None) -> Opti
                  json.dumps(["Position updated from an imported statement"]), "event"),
             )
             updated += 1
+            _write_ledger(u, user_id, pos["id"], r, orig.get(r["symbol"]))
 
+        from app import ledger as ledger_mod
+        for s in proposal.get("skipped", []):   # a stock sold out within the file: not tracked, but its trades count toward realised gains
+            if s.get("kind") == "sold" and s.get("symbol") and s.get("ledger"):
+                for t in s["ledger"]:
+                    ledger_mod.add_trade(u, user_id, s["symbol"], t["side"], t["qty"], t["price"], t["date"], t["source"], estimated=t["estimated"])
         u.execute("UPDATE pending_imports SET status = 'confirmed' WHERE id = ?", (proposal_id,))
         from app import activity
         activity.log(user_id, "step", "import_confirmed", detail=f"{created} new, {updated} updated", conn=u)
