@@ -296,6 +296,25 @@ CREATE TABLE IF NOT EXISTS position_snapshots (
     trigger_type     TEXT                      -- interval | event
 );
 
+-- The portfolio ledger (app/ledger.py): every trade the user made, kept apart from tracked_positions so a stock sold within a statement, or before the user
+-- started tracking it, still counts toward realised gains and returns. Feeds XIRR, realised gains by financial year and the benchmark comparison.
+CREATE TABLE IF NOT EXISTS ledger_trades (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL,
+    position_id  INTEGER,                        -- the tracked position it belongs to, when there is one
+    symbol       TEXT NOT NULL,
+    date         TEXT NOT NULL,                  -- the trade date (YYYY-MM-DD)
+    side         TEXT NOT NULL,                  -- buy | sell
+    qty          REAL NOT NULL,
+    price        REAL NOT NULL,                  -- per share, in the stock's own currency, before fees
+    source       TEXT NOT NULL,                  -- import | journal | manual | opening
+    ref          TEXT,                           -- the journal event id, so undoing the entry removes its trade
+    estimated    INTEGER NOT NULL DEFAULT 0,     -- an opening balance whose real purchase date and price are not known
+    created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, symbol, date, side, qty, price, source)
+);
+CREATE INDEX IF NOT EXISTS idx_ledger_user ON ledger_trades(user_id, symbol, date);
+
 -- The user's OWN journal for a tracked stock — fully optional. Each entry changes the position when it is made
 -- (add: weighted-average cost; trim: fewer shares; exit: closed) and records `before_json` so the most recent entry
 -- can be undone exactly. The daily analysis reads these entries and judges them against the user's framework.
