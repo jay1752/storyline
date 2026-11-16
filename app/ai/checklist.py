@@ -225,11 +225,22 @@ def evaluate_framework(q_rows: list, sector: str | None, th: dict | None = None,
     # Promoter pledge — the exact % where we hold it (India shareholding filings), else the pledged / no-pledge flag
     pl_thr = th["pledge"]["value"]
     pct, flag = _f(latest.get("promoter_pledge_pct")), latest.get("promoter_pledge")
+    carried = None
+    if pct is None and not flag and latest.get("promoter_pct") is None and len(rows) >= 2:
+        # The newest quarter has results but its shareholding pattern is not filed yet (it comes a few weeks after the results): the last pledge
+        # figure we hold, from the quarter before, still stands. Said so in the note, and only ever one quarter back.
+        prev = rows[-2]
+        ppct, pflag = _f(prev.get("promoter_pledge_pct")), prev.get("promoter_pledge")
+        if ppct is not None or pflag:
+            pct, flag = ppct, pflag
+            carried = (f"carried from the quarter to {prev['period_end_date']}: the quarter to {latest.get('period_end_date')} has no "
+                       f"shareholding filing yet")
     if pct is not None:
-        add("pledge", "Promoter pledge", f"{pct:.1f}%", f"< {pl_thr:g}%", "pass" if pct < pl_thr else "fail", raw=pct)
+        add("pledge", "Promoter pledge", f"{pct:.1f}%", f"< {pl_thr:g}%", "pass" if pct < pl_thr else "fail", carried, raw=pct)
     else:
+        flag_note = "only 'pledged / no pledge' is stored, not the exact %" if flag == "Pledged" else None
         add("pledge", "Promoter pledge", flag if flag else None, f"< {pl_thr:g}%", "unknown" if not flag else ("fail" if flag == "Pledged" else "pass"),
-            "only 'pledged / no pledge' is stored, not the exact %" if flag == "Pledged" else None,
+            "; ".join(x for x in (flag_note, carried) if x) or None,
             raw=(100.0 if flag == "Pledged" else (0.0 if flag else None)))
     # Sales growth, last 4 quarters
     sg = th["sales_growth"]["value"]

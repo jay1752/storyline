@@ -96,7 +96,8 @@ def speed_one(filters) -> dict:
     """Immediate-exit facts that are numbers. Only an exact pledge % counts: a stored 'pledged' flag alone is not a figure."""
     p = _by_key(filters).get("pledge")
     if p and p["status"] == "fail" and p.get("raw") is not None and not (p.get("note") or "").startswith(PLEDGE_FLAG_NOTE):
-        return {"status": "triggered", "note": f"promoter pledge is {p['value']}, not below your {p['limit']:g}% limit"}
+        age = f" ({p['note']})" if (p.get("note") or "").startswith("carried from") else ""
+        return {"status": "triggered", "note": f"promoter pledge is {p['value']}, not below your {p['limit']:g}% limit{age}"}
     return {"status": "clear", "note": None}
 
 

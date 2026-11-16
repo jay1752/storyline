@@ -206,3 +206,49 @@ class Wording(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CarriedPledge(unittest.TestCase):
+    """The newest quarter has results but no shareholding filing yet: the pledge from the quarter before still stands, labelled."""
+
+    def setUp(self):
+        from tests.test_backtest import quarters
+        self.rows = quarters(6, promoter=60.0)
+
+    def pledge(self, rows):
+        from app import framework
+        from app.ai.checklist import evaluate_framework
+        return next(f for f in evaluate_framework(rows, "Industrials", framework.builtin(), annual=[], fin_inputs={})["filters"] if f["key"] == "pledge")
+
+    def test_exact_pledge_from_the_quarter_before_is_carried_and_labelled(self):
+        self.rows[-2]["promoter_pledge_pct"] = 13.83
+        self.rows[-1]["promoter_pct"] = None
+        f = self.pledge(self.rows)
+        self.assertEqual((f["status"], f["raw"]), ("fail", 13.83))
+        self.assertIn("carried from the quarter to", f["note"])
+        self.assertIn("no shareholding filing yet", f["note"])
+
+    def test_carried_exact_pledge_still_triggers_the_immediate_exit_with_its_age(self):
+        self.rows[-2]["promoter_pledge_pct"] = 13.83
+        self.rows[-1]["promoter_pct"] = None
+        s1 = speed_one([self.pledge(self.rows)])
+        self.assertEqual(s1["status"], "triggered")
+        self.assertIn("carried from the quarter to", s1["note"])
+
+    def test_nothing_is_carried_when_the_newest_quarter_has_its_shareholding(self):
+        self.rows[-2]["promoter_pledge_pct"] = 13.83
+        f = self.pledge(self.rows)   # the newest quarter's promoter_pct is filled: no pledge info there means none was reported
+        self.assertEqual(f["status"], "unknown")
+
+    def test_only_one_quarter_back_never_two(self):
+        self.rows[-3]["promoter_pledge_pct"] = 13.83
+        self.rows[-1]["promoter_pct"] = None
+        self.assertEqual(self.pledge(self.rows)["status"], "unknown")
+
+    def test_a_pledged_flag_without_a_percentage_is_carried_but_never_an_exit(self):
+        self.rows[-2]["promoter_pledge"] = "Pledged"
+        self.rows[-1]["promoter_pct"] = None
+        f = self.pledge(self.rows)
+        self.assertEqual(f["status"], "fail")
+        self.assertIn("carried from", f["note"])
+        self.assertEqual(speed_one([f])["status"], "clear")
