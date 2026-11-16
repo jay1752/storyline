@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.ai import errors
 from app import framework as framework_rules
+from app.ai import status as rule_status
 from app.ai.checklist import evaluate_framework
 from app.ai.news import company_news
 from app.ai.providers import build_chain
@@ -94,11 +95,13 @@ user_story to an empty string and story_flags to an empty list — never invent 
 EVIDENCE, FRAMING AND STYLE
 - State every figure with its period and unit on first use (Rs 1,813 Cr for FY2026; 20.7% in Q1 FY27). Say which price date a valuation statement rests on.
 - Keep fact and inference apart: a view of yours reads "this suggests". Never present a paraphrase as a quote.
-- The verdict is a STATUS against the user's OWN rules, never an instruction. Its code maps to a status: BUY = add rules met, HOLD = within your rules, TRIM = a trim
-  rule triggered, EXIT = an exit rule triggered, WATCH = not yet meeting your rules. Write "your rule X is triggered because ..." or "your add rules are met because ...",
+- The verdict is a STATUS against the user's OWN rules, never an instruction, and it is DECIDED BY CODE from the user's rules, not by you. The data block gives it as
+  "STATUS AGAINST THE USER'S RULES" with the reasons: copy that verdict code exactly and explain it from those reasons and the figures. Never change it, argue with it or soften it. Its code maps to a
+  status: BUY = add rules met, HOLD = within your rules, TRIM = a trim rule triggered, EXIT = an exit rule triggered, WATCH = not yet meeting your rules (or, when the label says
+  "Not enough data", too few of the user's rules could be judged: say so plainly). Write "your rule X is triggered because ..." or "your add rules are met because ...",
   never "you should", "consider", "we suggest" or "it is time to". Never tell the user to buy, sell, add, trim, hold or exit. Analyst targets are other people's opinions: attribute them, never adopt them.
-- If the market is not IN (a foreign-listed stock) this Indian-equity framework does not apply: give a descriptive read only, set verdict WATCH and bucket
-  Reserve, and say in what_changed that it is descriptive.
+- If the market is not IN (a US stock) the same rules and thresholds were applied by code; the framework was written for Indian equities and US companies report differently, so mention
+  that once in data_gaps where it matters. Never change the given status for that reason.
 - Never use em dashes or en dashes. Do not use: it's important to note, in today's, deep dive, delve, landscape, robust, compelling, navigate, poised to,
   well-positioned, exciting, multifaceted, tapestry, in conclusion, overall, it remains to be seen, game-changer, unlock value.
 
@@ -124,9 +127,9 @@ TRIGGERS
 HOW TO WRITE THE ENTRY
 - what_changed: 2-4 sentences, a CONTINUATION of the prior entries (what is new since the last check, or "no material change").
   Only when ENTRY NUMBER is 1 say it is the first entry and summarise the starting picture; otherwise never call it the first.
-- verdict (a status code, not advice): BUY = the user's add rules are met (only with the evidence their rules require), HOLD = no rule of theirs is triggered,
-  TRIM = a trim rule of theirs is triggered, EXIT = an exit rule of theirs is triggered, WATCH = not yet meeting their rules.
-  A watchlist stock (not owned) can be BUY / WATCH; an owned position HOLD / TRIM / EXIT / BUY.
+- verdict (a status code, not advice): copy the code given in the data block. It is decided by code from the user's own rules; you only explain it.
+  speed1 and speed2: the data block gives their status as computed by code; copy it. speed1 is "triggered" only when the code says so. If a credible headline hints at an immediate-exit
+  event (auditor change, SEBI or RBI action, fraud) that the data does not show, set speed1 to "monitor" and cite the headline: it is shown to the user but never changes the status.
 - Cite news as [n] using only the numbered headlines supplied. Do not cite what you were not given.
 - Keep every text field concise and specific; no filler, no hype, no price targets."""
 
@@ -313,6 +316,7 @@ def _gather(u, pos, set_id: int | None = None) -> dict:
     th = framework_rules.resolve(u, pos["user_id"], sym, set_id=set_id)
     sz = framework_rules.sizing_plan(u, pos["user_id"])
     framework = evaluate_framework(q_dicts, stock["sector"], th, annual=annual)
+    rule_state = rule_status.compute_for_position(u, pos)  # the status, decided in code from the same rules (no AI)
 
     with get_market_conn() as m:
         closes = m.execute("SELECT date, close FROM price_history WHERE symbol = ? ORDER BY date DESC LIMIT 400", (sym,)).fetchall()
@@ -367,7 +371,7 @@ def _gather(u, pos, set_id: int | None = None) -> dict:
         "entry_no": entry_no,
         "journal": events, "rule_flags": flags, "system": build_system_prompt(th, sz),
         "symbol": sym, "name": stock["name"], "sector": stock["sector"], "market": stock["market"],
-        "position": position, "valuation": valuation, "framework": framework,
+        "position": position, "valuation": valuation, "framework": framework, "status": rule_state,
         "quarters": _quarter_table(q_dicts[-6:]),
         "annual": [{"fy": r["period_end_date"][:4], "revenue": _r(r["revenue_cr"]), "net_profit": _r(r["net_profit_cr"]), "opm_pct": _r(r["opm_pct"]),
                     "roce_pct": _r(r["roce_pct"]), "roe_pct": _r(r["roe_pct"]), "operating_cash_flow": _r(r.get("cfo_cr")), "free_cash_flow": _r(r.get("fcf_cr")),
@@ -449,6 +453,9 @@ def _prompt(ctx: dict, today: str) -> str:
     notes = "\n".join(f"- {x}" for x in ctx.get("data_notes") or []) or "none"
     pt = ctx.get("prior_triggers")
     triggers = ("upgrade_if: " + "; ".join(pt["upgrade_if"]) + "\ndowngrade_if: " + "; ".join(pt["downgrade_if"])) if pt else "none (this is the first entry with triggers)"
+    st = ctx["status"]
+    status_reasons = "\n".join(f"- {x['text']}" for x in st["reasons"]) or "- no reasons recorded"
+    s2_items = "".join(f"\n  - {i['rule']}: {i['state']}" + (f" ({i['note']})" if i.get("note") else "") for i in st["speed2"]["items"] if i["state"] != "clear")
     filters = "\n".join(
         f"- {f['label']}: {f['value'] if f['value'] is not None else 'UNKNOWN'} (needs {f['threshold']}) -> {f['status'].upper()}" + (f" [{f['note']}]" if f["note"] else "")
         for f in fw["filters"]
@@ -457,6 +464,12 @@ def _prompt(ctx: dict, today: str) -> str:
 ENTRY NUMBER: {ctx['entry_no']} for this stock ({'the first — say so' if ctx['entry_no'] == 1 else 'NOT the first: continue the story from the prior entries below and never call this the first entry'})
 STOCK: {ctx['symbol']} — {ctx['name']} · sector: {ctx['sector']} · market: {ctx['market']}
 USER'S POSITION: {json.dumps(ctx['position'])}
+
+STATUS AGAINST THE USER'S RULES (decided by code from their rules; copy the verdict code exactly):
+verdict code: {ctx['status']['code']}  (shown to the user as "{ctx['status']['label']}")
+{status_reasons}
+Speed 1 (code): {ctx['status']['speed1']['status']}{(' - ' + ctx['status']['speed1']['note']) if ctx['status']['speed1']['note'] else ''}
+Speed 2 (code): {ctx['status']['speed2']['status']}{s2_items}
 
 HARD-FILTER CHECK (computed by code from reported data):
 {filters}
@@ -568,10 +581,25 @@ def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
+STALE_RUN = timedelta(hours=3)  # a queued or running attempt older than this never finished (a crash or a restart): it is closed as failed
+
+
+def expire_stale_runs() -> int:
+    """Close runs left 'queued' or 'running' for longer than STALE_RUN as failed. Without this one crashed run blocks that user's daily
+    analysis for ever (the scheduler treats any queued/running row as in progress) and keeps their page polling. Returns how many."""
+    cut = (datetime.now(timezone.utc) - STALE_RUN).strftime("%Y-%m-%d %H:%M:%S")
+    with get_users_conn() as u:
+        cur = u.execute("UPDATE insight_runs SET status = 'failed', error = ?, finished_at = ? WHERE status IN ('queued','running') AND started_at < ?",
+                        ("This run did not finish and was stopped. It will be tried again.", _now(), cut))
+        u.commit()
+        return cur.rowcount
+
+
 def queue_run(user_id: int, position_id: int, trigger: str = "manual") -> tuple[int | None, bool]:
     """Create a queued run for one of the user's active positions. Returns (run_id, created): created is False when a run
     was already queued/running for that stock (its id is returned instead, so nothing is analysed twice). (None, False)
     if the position isn't theirs."""
+    expire_stale_runs()
     with get_users_conn() as u:
         if not u.execute("SELECT 1 FROM tracked_positions WHERE id = ? AND user_id = ? AND status = 'active'", (position_id, user_id)).fetchone():
             return None, False
@@ -621,6 +649,13 @@ def _analyse(user_id: int, position_id: int, trigger: str) -> None:
         today = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%A %d %B %Y")
         prompt_text = _prompt(ctx, today)
         analysis, link = _generate(chain, prompt_text, ctx.get("system"))
+        st = ctx["status"]
+        analysis.verdict = st["code"]  # the status is decided in code from the user's rules; the model only explains it
+        analysis.speed2.status = st["speed2"]["status"]
+        if st["speed1"]["status"] == "triggered":
+            analysis.speed1.status, analysis.speed1.note = "triggered", st["speed1"]["note"]
+        elif analysis.speed1.status == "triggered":  # headline-based, not shown by the data: shown to the user, never changes the status
+            analysis.speed1.status = "monitor"
 
         from app.ai import textcheck
 
@@ -637,6 +672,7 @@ def _analyse(user_id: int, position_id: int, trigger: str) -> None:
             "model": link["label"],
             "filters": ctx["framework"]["filters"], "facts": ctx["framework"]["facts"], "bucket_guess": ctx["framework"]["bucket_guess"],
             "valuation": ctx["valuation"], "position": ctx["position"],
+            "status": {k: st[k] for k in ("code", "label", "reasons", "rules", "speed1", "speed2", "weight_pct", "sector_pct", "enough_data")},
             "news": [{"n": i, "title": n["title"], "source": n["source"], "url": n["url"],
                       "when": n["when"].isoformat() if n.get("when") else None} for i, n in enumerate(ctx["news"], 1)],
             "disclaimer": DISCLAIMER,
@@ -660,6 +696,7 @@ def _analyse(user_id: int, position_id: int, trigger: str) -> None:
              "event" if trigger == "manual" else "interval", json.dumps(ctx["framework"]["filters"]),
              json.dumps([n["title"] for n in ctx["news"]]), json.dumps(a)),
         )
+        rule_status.record(u, position_id, user_id, st)
         u.commit()
 
 

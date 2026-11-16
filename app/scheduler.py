@@ -252,12 +252,45 @@ def _tick_metrics() -> None:
             logger.exception("stock_metrics rebuild failed")
 
 
+_last_status_day: str | None = None
+STATUS_AFTER_HM = 22 * 60  # 22:00 IST: after the India prices (19:00) and the post-results refresh (21:30) have had their turn
+
+
+def _tick_status() -> None:
+    """The status of every tracked stock against its owner's rules, recomputed in code (no AI, no cost): once a day after the data
+    jobs, and once when the process starts if some stock has no status yet. A change is recorded in position_status_history."""
+    global _last_status_day
+    from app.ai import status
+
+    now = datetime.now(IST)
+    today = now.date().isoformat()
+    if _last_status_day == today:
+        return
+    due = now.hour * 60 + now.minute >= STATUS_AFTER_HM
+    if not due and _last_status_day is None:  # first tick after a start: fill in any stock that has no status at all
+        with get_users_conn() as u:
+            due = bool(u.execute("""SELECT 1 FROM tracked_positions tp WHERE tp.status = 'active'
+                                    AND NOT EXISTS (SELECT 1 FROM position_status_history h WHERE h.position_id = tp.id) LIMIT 1""").fetchone())
+    if not due:
+        if _last_status_day is None:
+            _last_status_day = ""  # checked once; the evening run still happens
+        return
+    try:
+        users, changes = status.refresh_all()
+        logger.info("scheduler: rule status refreshed for %d users, %d changes", users, changes)
+        if now.hour * 60 + now.minute >= STATUS_AFTER_HM:
+            _last_status_day = today
+    except Exception:  # noqa: BLE001 - never stop the other jobs
+        logger.exception("rule status refresh failed")
+
+
 def _tick() -> None:
     _tick_housekeeping()
     _tick_fx()          # first of all: everything that shows US holdings in rupees should use a fresh rate
     _tick_prices()      # then prices: the briefing and the position analyses should read today's prices
     _tick_briefing()
     _tick_insights()
+    _tick_status()
     _tick_metrics()
 
 
@@ -319,10 +352,12 @@ def _tick_insights() -> None:
     """Daily per-stock analysis for every user who has tracked stocks, an AI model they can use, and hasn't switched
     automatic analysis off. Runs after 08:30 IST; the batch itself skips stocks already analysed today and stops quietly
     when the model runs out of quota (it is picked up again by a later tick, i.e. after the quota resets)."""
+    from app.ai.insights_engine import expire_stale_runs
     from app.ai.providers import build_chain
     from app.ingestion.runner import enqueue_insights
 
     now = datetime.now(IST)
+    expire_stale_runs()  # a run left "running" by a crash must not block its user for ever
     if not _due("insights", now):
         return
     day_start_utc = now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")

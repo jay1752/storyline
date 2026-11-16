@@ -25,6 +25,8 @@ never change this status."""
 
 from __future__ import annotations
 
+import json
+import logging
 from datetime import date
 
 CODE_LABEL = {"BUY": "Add rules met", "HOLD": "Within your rules", "TRIM": "Trim rule triggered", "EXIT": "Exit rule triggered",
@@ -271,3 +273,87 @@ def compute_for_position(u, pos, book: dict | None = None) -> dict:
     lots = [e["event_date"] for e in journal_entries(u, pos["id"]) if e["event_type"] in ("open", "add")]
     return compute_status(now["filters"], before["filters"], now["facts"], before["facts"], owned=owned, weight_pct=weight,
                           sector_pct=sector_pct, sector=stock["sector"], sz=sz, last_lot_date=max(lots) if lots else None)
+
+
+# ---------------------------------------------------------------------------------------------------- stored history
+
+def _basis(r: dict) -> str:
+    """What makes two results the same status: the code, the speed states per rule and the kinds of reasons. Not the numbers, so a
+    weight moving from 9.7% to 9.8% does not start a new history row."""
+    s2 = ",".join(f"{i['rule']}={i['state']}" for i in r["speed2"]["items"] if i["state"] != "clear")
+    kinds = ",".join(sorted({x["kind"] for x in r["reasons"] if x["kind"] != "note"}))
+    return f"{r['code']}|{r['label']}|{r['speed1']['status']}|{s2}|{kinds}"
+
+
+def record(u, position_id: int, user_id: int, result: dict) -> bool:
+    """Keep the status in position_status_history: a new row only when the status (or why) changes, otherwise the latest row is
+    refreshed in place (its reasons and when it was last confirmed). Returns True when a new row was added. Commit is the caller's."""
+    detail = {k: result[k] for k in ("rules", "speed1", "speed2", "weight_pct", "sector_pct", "enough_data")}
+    detail["basis"] = _basis(result)
+    last = u.execute("SELECT id, detail_json FROM position_status_history WHERE position_id = ? ORDER BY id DESC LIMIT 1", (position_id,)).fetchone()
+    same = False
+    if last:
+        try:
+            same = json.loads(last["detail_json"] or "{}").get("basis") == detail["basis"]
+        except ValueError:
+            same = False
+    if same:
+        u.execute("UPDATE position_status_history SET reasons_json = ?, detail_json = ?, checked_at = CURRENT_TIMESTAMP WHERE id = ?",
+                  (json.dumps(result["reasons"]), json.dumps(detail), last["id"]))
+        return False
+    u.execute("INSERT INTO position_status_history (position_id, user_id, code, label, reasons_json, detail_json) VALUES (?,?,?,?,?,?)",
+              (position_id, user_id, result["code"], result["label"], json.dumps(result["reasons"]), json.dumps(detail)))
+    return True
+
+
+def stored(u, position_id: int) -> dict | None:
+    """The latest stored status of a position as {code, label, reasons, since, checked_at, detail}, or None."""
+    r = u.execute("SELECT * FROM position_status_history WHERE position_id = ? ORDER BY id DESC LIMIT 1", (position_id,)).fetchone()
+    return _row(r)
+
+
+def _row(r) -> dict | None:
+    if not r:
+        return None
+    return {"code": r["code"], "label": r["label"], "reasons": json.loads(r["reasons_json"] or "[]"), "since": r["computed_at"],
+            "checked_at": r["checked_at"], "detail": json.loads(r["detail_json"] or "{}")}
+
+
+def stored_many(u, user_id: int) -> dict:
+    """{position_id: stored status} for one user's positions, one query."""
+    rows = u.execute("""SELECT h.* FROM position_status_history h
+                        JOIN (SELECT position_id, MAX(id) mid FROM position_status_history WHERE user_id = ? GROUP BY position_id) m ON m.mid = h.id""",
+                     (user_id,)).fetchall()
+    return {r["position_id"]: _row(r) for r in rows}
+
+
+def history(u, position_id: int, limit: int = 20) -> list[dict]:
+    """The changes of status, newest first: [{code, label, since, reasons}]."""
+    return [{"code": r["code"], "label": r["label"], "since": r["computed_at"], "reasons": json.loads(r["reasons_json"] or "[]")}
+            for r in u.execute("SELECT * FROM position_status_history WHERE position_id = ? ORDER BY id DESC LIMIT ?", (position_id, limit))]
+
+
+def refresh_user(u, user_id: int) -> int:
+    """Recompute and record the status of every active tracked stock of one user, no AI. Returns how many changed."""
+    book = book_weights(u, user_id)
+    changed = 0
+    for pos in u.execute("SELECT * FROM tracked_positions WHERE user_id = ? AND status = 'active'", (user_id,)).fetchall():
+        try:
+            if record(u, pos["id"], user_id, compute_for_position(u, pos, book)):
+                changed += 1
+        except Exception:  # noqa: BLE001 - one stock with odd data must not stop the rest
+            logging.getLogger(__name__).exception("status: could not compute %s for user %s", pos["symbol"], user_id)
+    u.commit()
+    return changed
+
+
+def refresh_all() -> tuple[int, int]:
+    """Every user with active tracked stocks. Returns (users, status changes)."""
+    from app.db import get_users_conn
+    users = changes = 0
+    with get_users_conn() as u:
+        ids = [r["user_id"] for r in u.execute("SELECT DISTINCT user_id FROM tracked_positions WHERE status = 'active'")]
+        for uid in ids:
+            changes += refresh_user(u, uid)
+            users += 1
+    return users, changes

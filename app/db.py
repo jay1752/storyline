@@ -296,6 +296,21 @@ CREATE TABLE IF NOT EXISTS position_snapshots (
     trigger_type     TEXT                      -- interval | event
 );
 
+-- The status of each tracked stock against the user's OWN rules, decided in code (app/ai/status.py), no AI. A row is added when the
+-- status or its basis changes; otherwise the latest row is refreshed in place. computed_at = when this status began, checked_at = last confirmed.
+CREATE TABLE IF NOT EXISTS position_status_history (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    position_id  INTEGER NOT NULL,
+    user_id      INTEGER NOT NULL,
+    computed_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    checked_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    code         TEXT NOT NULL,                 -- BUY | HOLD | TRIM | EXIT | WATCH (stored codes; the words shown are in app/ai/status.py CODE_LABEL)
+    label        TEXT NOT NULL,                 -- the words shown, e.g. "Within your rules" / "Not enough data"
+    reasons_json TEXT NOT NULL,                 -- [{kind, text}]
+    detail_json  TEXT                           -- rules judged / failing / unknown, speed 1 and 2, weights, basis
+);
+CREATE INDEX IF NOT EXISTS idx_position_status_pos ON position_status_history(position_id, id);
+
 -- The user's OWN journal for a tracked stock — fully optional. Each entry changes the position when it is made
 -- (add: weighted-average cost; trim: fewer shares; exit: closed) and records `before_json` so the most recent entry
 -- can be undone exactly. The daily analysis reads these entries and judges them against the user's framework.
