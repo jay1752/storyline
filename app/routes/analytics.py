@@ -586,39 +586,40 @@ def _first_non_null(values):
     return next((v for v in values if v is not None), None)
 
 
-def _compute_pe(conn, symbol: str, quarterly_rows) -> tuple:
-    """P/E needs EPS (from fundamentals) and price (from a separate source, e.g.
-    Tiingo) — neither ingestion source has both, so this is combined here at read
-    time rather than stored by either ingestion job. Returns (current, low_3yr,
-    high_3yr) — any/all None if either side of the data is missing.
+def pe_and_history(conn, symbol: str, quarterly_rows) -> tuple:
+    """(P/E now, the stock's own P/E history or None). P/E needs EPS (from fundamentals) and price (from a separate source), so it is combined here at
+    read time. Now = latest price over the last four quarters' EPS. The history is app/valuation.py's: the P/E at each of the last 36 month-ends, moved
+    by the price and by the trailing net profit then (the old range divided the 3-year PRICE range by today's earnings, which ignored that earnings
+    moved). None for the history when there are fewer than ~30 month-ends of it."""
+    from datetime import date as _date
+    from app import valuation
 
-    Simplification: the 3-year range divides the 3-year price range by *today's*
-    TTM EPS, not the EPS at each historical point in time — a common quick-and-dirty
-    approach, but it understates the range for a company whose earnings changed a lot
-    over the period. A precise version would need EPS matched to price date, not built.
-    """
     eps_values = [r["eps"] for r in quarterly_rows[-4:]]
     if len(quarterly_rows) < 4 or any(v is None for v in eps_values):
-        return None, None, None
+        return None, None
     ttm_eps = sum(eps_values)
     if not ttm_eps or ttm_eps <= 0:
-        return None, None, None  # a P/E on negative/zero trailing earnings isn't meaningful
+        return None, None  # a P/E on negative/zero trailing earnings isn't meaningful
+    since = (_date.today() - timedelta(days=int((valuation.MONTHS + 5) * 30.5))).isoformat()
+    px = [(r["date"], r["close"]) for r in conn.execute("SELECT date, close FROM price_history WHERE symbol = ? AND date >= ? ORDER BY date", (symbol, since)).fetchall()]
+    latest = next((c for _, c in reversed(px) if c), None)
+    if latest is None:
+        latest_row = conn.execute("SELECT close FROM price_history WHERE symbol = ? AND close IS NOT NULL ORDER BY date DESC LIMIT 1", (symbol,)).fetchone()
+        latest = latest_row["close"] if latest_row else None
+    if latest is None:
+        return None, None
+    pe_current = round(latest / ttm_eps, 1)
+    qs = [{"period_end_date": r["period_end_date"], "net_profit_cr": r["net_profit_cr"]} for r in conn.execute(
+        "SELECT period_end_date, net_profit_cr FROM quarterly_data WHERE symbol = ? AND quarter_label NOT LIKE '%nnual%' ORDER BY period_end_date", (symbol,)).fetchall()]
+    ann = [{"period_end_date": r["period_end_date"], "net_profit_cr": r["net_profit_cr"]} for r in conn.execute(
+        "SELECT period_end_date, net_profit_cr FROM annual_data WHERE symbol = ? ORDER BY period_end_date", (symbol,)).fetchall()] if symbol.startswith("NSE:") else []
+    return pe_current, valuation.pe_history(px, qs, pe_current, annual=ann)
 
-    latest_price = conn.execute(
-        "SELECT close FROM price_history WHERE symbol = ? ORDER BY date DESC LIMIT 1", (symbol,)
-    ).fetchone()
-    if not latest_price:
-        return None, None, None
 
-    since = (date.today() - timedelta(days=3 * 365)).isoformat()
-    range_row = conn.execute(
-        "SELECT MIN(close) lo, MAX(close) hi FROM price_history WHERE symbol = ? AND date >= ?", (symbol, since)
-    ).fetchone()
-
-    pe_current = round(latest_price["close"] / ttm_eps, 1)
-    pe_low = round(range_row["lo"] / ttm_eps, 1) if range_row and range_row["lo"] is not None else None
-    pe_high = round(range_row["hi"] / ttm_eps, 1) if range_row and range_row["hi"] is not None else None
-    return pe_current, pe_low, pe_high
+def _compute_pe(conn, symbol: str, quarterly_rows) -> tuple:
+    """(current, low over the last 36 month-ends, high) - any/all None when the data is missing or the history is too short. See pe_and_history."""
+    pe, h = pe_and_history(conn, symbol, quarterly_rows)
+    return pe, (h["low"] if h else None), (h["high"] if h else None)
 
 
 def _period_label(period_end_date: str, quarter_label: str, symbol: str | None = None) -> str:
@@ -1061,7 +1062,10 @@ def _stock_context(symbol: str, span: str):
 
     latest = rows[-1]
     with get_market_conn() as conn:
-        pe_current, pe_low, pe_high = _compute_pe(conn, symbol, rows)
+        pe_current, _pe_h = pe_and_history(conn, symbol, rows)
+        pe_low, pe_high = (_pe_h["low"], _pe_h["high"]) if _pe_h else (None, None)
+        pe_median = _pe_h["median"] if _pe_h else None
+        pe_months = _pe_h["months"] if _pe_h else None
     from app.annual import annual_rows as _annual_rows_for_ratios
     from app.ratios import filings_roce, ia_year_ratios
     with get_market_conn() as _rc:
@@ -1077,7 +1081,8 @@ def _stock_context(symbol: str, span: str):
         ("ROCE", _num(_roce, suffix="%", places=1)),
         ("Debt / Equity", _num(_de, places=2)),
         ("P/E (current)", _num(pe_current, suffix="x", places=1)),
-        ("P/E 3-yr range", f"{_num(pe_low, suffix='x', places=1)} – {_num(pe_high, suffix='x', places=1)}"),
+        (f"P/E range, last {pe_months} month-ends" if pe_months else "P/E range (needs 24 months)", f"{_num(pe_low, suffix='x', places=1)} – {_num(pe_high, suffix='x', places=1)}"),
+        ("P/E median over that range", _num(pe_median, suffix="x", places=1)),
     ]
     has_ratios = any(v is not None for v in (_roe, _roce, _de, pe_current))
 

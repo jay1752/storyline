@@ -286,7 +286,7 @@ def position_weight(u, pos, price) -> float | None:
 
 def _gather(u, pos, set_id: int | None = None) -> dict:
     """Everything the analysis needs about one tracked stock, computed in code. `u` is a users-DB connection."""
-    from app.routes.analytics import _compute_pe, _yoy  # reuse the exact valuation / growth logic the Analytics page shows
+    from app.routes.analytics import pe_and_history, _yoy  # reuse the exact valuation / growth logic the Analytics page shows
 
     sym = pos["symbol"]
     stock = u.execute("SELECT name, sector, market FROM market.stocks WHERE symbol = ?", (sym,)).fetchone()
@@ -316,7 +316,8 @@ def _gather(u, pos, set_id: int | None = None) -> dict:
 
     with get_market_conn() as m:
         closes = m.execute("SELECT date, close FROM price_history WHERE symbol = ? ORDER BY date DESC LIMIT 400", (sym,)).fetchall()
-        pe_cur, pe_lo, pe_hi = _compute_pe(m, sym, quarterly[-8:]) if quarterly else (None, None, None)
+        pe_cur, pe_h = pe_and_history(m, sym, quarterly[-8:]) if quarterly else (None, None)
+        pe_lo, pe_hi = (pe_h["low"], pe_h["high"]) if pe_h else (None, None)
     price = closes[0]["close"] if closes else None
     year = [c["close"] for c in closes[:260]]
     ago = next((c["close"] for c in closes if c["date"] <= (date.fromisoformat(closes[0]["date"]) - timedelta(days=365)).isoformat()), None) if closes else None
@@ -325,6 +326,8 @@ def _gather(u, pos, set_id: int | None = None) -> dict:
         "high_52w": _r(max(year), 2) if year else None, "low_52w": _r(min(year), 2) if year else None,
         "return_1y_pct": _r((price / ago - 1) * 100) if price and ago else None,
         "pe_current": pe_cur, "pe_3y_low": pe_lo, "pe_3y_high": pe_hi,
+        # the range is the P/E at each month-end (app/valuation.py), over this many month-ends (up to 36); none when fewer than 24
+        "pe_range_median": pe_h["median"] if pe_h else None, "pe_range_months": pe_h["months"] if pe_h else None,
     }
 
     # the user's own position in this stock, and how big it is in their book

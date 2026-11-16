@@ -700,6 +700,13 @@ def init_db() -> None:
             m.execute("ALTER TABLE stock_metrics ADD COLUMN last_q TEXT")
         if sm_cols and "n_q" not in sm_cols:
             m.execute("ALTER TABLE stock_metrics ADD COLUMN n_q INTEGER")
+        if sm_cols and "pe_pct" not in sm_cols:
+            # The P/E history (app/valuation.py) replaces the old "3-year range", which divided the 3-year price range by today's earnings. The old
+            # low/high are wrong, so they are cleared and the table is marked stale: the next metrics build (nightly, or the first screen view) refills them.
+            m.execute("ALTER TABLE stock_metrics ADD COLUMN pe_median REAL")
+            m.execute("ALTER TABLE stock_metrics ADD COLUMN pe_pct REAL")
+            m.execute("ALTER TABLE stock_metrics ADD COLUMN pe_months INTEGER")
+            m.execute("UPDATE stock_metrics SET pe_low = NULL, pe_high = NULL, updated_at = '2000-01-01 00:00:00'")
         _backfill_cap_tiers(m)
         _backfill_eps_adjustments(m)
         # Defensive: if this file was ever left in WAL mode (e.g. from before this fix),

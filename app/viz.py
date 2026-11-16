@@ -219,11 +219,11 @@ def _cycle(m, symbol):
 
 # ------------------------------------------------------------------------------------------------------------------------ valuation, analysts
 def _value(m, symbol, last_price):
-    r = m.execute("SELECT pe, pe_low, pe_high FROM stock_metrics WHERE symbol = ?", (symbol,)).fetchone()
+    r = m.execute("SELECT pe, pe_low, pe_high, pe_median, pe_pct, pe_months FROM stock_metrics WHERE symbol = ?", (symbol,)).fetchone()
     pe = None
-    if r and r["pe"] and r["pe_low"] and r["pe_high"] and r["pe_high"] > r["pe_low"] and r["pe"] > 0:
-        pe = {"now": round(r["pe"], 1), "lo": round(r["pe_low"], 1), "hi": round(r["pe_high"], 1),
-              "pos": max(0.0, min(100.0, (r["pe"] - r["pe_low"]) / (r["pe_high"] - r["pe_low"]) * 100))}
+    if r and r["pe"] and r["pe_low"] and r["pe_high"] and r["pe_high"] > r["pe_low"] and r["pe"] > 0 and r["pe_pct"] is not None:
+        pe = {"now": round(r["pe"], 1), "lo": round(r["pe_low"], 1), "hi": round(r["pe_high"], 1), "median": round(r["pe_median"], 1) if r["pe_median"] else None,
+              "pct": round(r["pe_pct"]), "months": r["pe_months"], "pos": max(0.0, min(100.0, (r["pe"] - r["pe_low"]) / (r["pe_high"] - r["pe_low"]) * 100))}
     an = None
     try:
         ia = get_indianapi_conn()
@@ -258,7 +258,8 @@ def _value(m, symbol, last_price):
         return None
     read = None
     if pe:
-        read = f"P/E <b>{pe['now']}×</b> sits <b>{pe['pos']:.0f}%</b> of the way up its own 3-year range ({pe['lo']}× to {pe['hi']}×)."
+        read = (f"P/E <b>{pe['now']}×</b> is at percentile <b>{pe['pct']}</b> of its own last {pe['months'] or 36} month-end readings (0 is its cheapest, 100 its dearest): "
+                f"range {pe['lo']}× to {pe['hi']}×" + (f", median {pe['median']}×" if pe["median"] else "") + ".")
     return {"pe": pe, "analysts": an, "read": read}
 
 

@@ -60,7 +60,9 @@ def stock_digest(user_id: int | None, symbol: str) -> str | None:
     out = [f"STOCK {symbol} · {stock['name']} · sector {stock['sector'] or 'unclassified'}" + (f" · {met['cap_tier']} cap" if met and met["cap_tier"] else "")]
     px = f"Last price {cur}{_n(price, 2)} ({price_date})" if price else "No price on file"
     if met and met["pe"]:
-        px += f" · P/E {_n(met['pe'])} (own 3-year range {_n(met['pe_low'])}–{_n(met['pe_high'])})"
+        have_hist = met["pe_low"] is not None and "pe_pct" in met.keys() and met["pe_pct"] is not None
+        px += (f" · P/E {_n(met['pe'])} (its own last {_n(met['pe_months'], 0)} month-end readings: range {_n(met['pe_low'])}–{_n(met['pe_high'])}, median {_n(met['pe_median'])}, "
+               f"today at percentile {_n(met['pe_pct'], 0)} where 0 is cheapest)") if have_hist else f" · P/E {_n(met['pe'])} (no 3-year P/E history for this stock yet)"
     out.append(px)
 
     # rules verdict, against THIS user's thresholds

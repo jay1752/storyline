@@ -256,7 +256,8 @@ def build_dossier(user_id: int, pos, set_id: int | None = None) -> tuple[Dossier
     v = ctx["valuation"]
     pv = [f"Reference price {cur} {_f(v.get('price'), 2)} on {v.get('price_date')}. 52-week high {_f(v.get('high_52w'), 2)}, low {_f(v.get('low_52w'), 2)}. One-year return {_f(v.get('return_1y_pct'))}%."]
     if v.get("pe_current"):
-        pv.append(f"P/E {_f(v.get('pe_current'))} against its own three-year range {_f(v.get('pe_3y_low'))} to {_f(v.get('pe_3y_high'))}.")
+        pv.append(f"P/E {_f(v.get('pe_current'))} against its own range of {_f(v.get('pe_3y_low'))} to {_f(v.get('pe_3y_high'))} over the last {v.get('pe_range_months') or 'n/a'} month-ends"
+                  + (f" (median {_f(v.get('pe_range_median'))})." if v.get("pe_range_median") else "."))
     if met:
         pv.append(f"Market cap {_f(met['mcap'], 0)} {'Rs Cr' if market == 'IN' else 'USD M'}; size tier {met['cap_tier'] or 'n/a'}.")
     d.add("Price and valuation", "Exchange prices via Tenetfolio's database", v.get("price_date"), pv)
@@ -432,7 +433,7 @@ def _glance(ctx, met, arows, qrows, us_ann, meta, v) -> list[dict]:
                   "tone": "pos" if ret and ret > 0 else ("neg" if ret and ret < 0 else "")})
     pe, lo, hi = v.get("pe_current"), v.get("pe_3y_low"), v.get("pe_3y_high")
     if pe:
-        sub = f"3-year range {lo:g} to {hi:g}" if lo and hi else ""
+        sub = f"{v.get('pe_range_months') or 36}-month range {lo:g} to {hi:g}" if lo and hi else ""
         if lo and hi and hi > lo:
             sub += f", {max(0, min(100, (pe - lo) / (hi - lo) * 100)):.0f}% of the way up"
         t.append({"label": "P/E", "value": f"{pe:g}x", "sub": sub, "tone": ""})

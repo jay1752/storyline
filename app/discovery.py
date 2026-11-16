@@ -137,7 +137,7 @@ def _amfi_window(as_of: str | None):
 def build_metrics(progress=None, only: str | None = None) -> int:
     from app.annual import annual_rows
     from app.ai.checklist import evaluate_framework, is_bank_or_financial
-    from app.routes.analytics import _compute_pe, _yoy
+    from app.routes.analytics import pe_and_history, _yoy
 
     th = fw.builtin()
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
@@ -188,9 +188,10 @@ def build_metrics(progress=None, only: str | None = None) -> int:
                 continue
             raws = {f["key"]: f["raw"] for f in fwk["filters"] if f.get("raw") is not None}
             try:
-                pe, lo, hi = _compute_pe(conn, sym, quarterly)
+                pe, ph = pe_and_history(conn, sym, quarterly)
+                lo, hi, pmed, ppct, pmon = (ph["low"], ph["high"], ph["median"], ph["pct"], ph["months"]) if ph else (None, None, None, None, None)
             except Exception:  # noqa: BLE001 - e.g. a stored price of NULL: no P/E for that stock, not a failed build
-                pe = lo = hi = None
+                pe = lo = hi = pmed = ppct = pmon = None
             px = conn.execute("SELECT close FROM price_history WHERE symbol = ? ORDER BY date DESC LIMIT 1", (sym,)).fetchone()
             ex = _annual_extras(annual)
             if sym in ia_g3:  # IndianAPI's own 3-year compounded growth is the figure for a stock it covers
@@ -223,10 +224,10 @@ def build_metrics(progress=None, only: str | None = None) -> int:
             latest = rows[-1]
             conn.execute(
                 """INSERT OR REPLACE INTO stock_metrics (symbol, market, name, sector, cap_tier, bank, raws, roce, de, growth_min4, opm, cfo_pat,
-                   sales_cagr_3y, roce_3y, div_payout, pe, pe_low, pe_high, price, mcap, last_q, n_q, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   sales_cagr_3y, roce_3y, div_payout, pe, pe_low, pe_high, pe_median, pe_pct, pe_months, price, mcap, last_q, n_q, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (sym, s["market"], s["name"], s["sector"], tier, 1 if is_bank_or_financial(s["sector"]) else 0, json.dumps(raws),
                  raws.get("roe" if is_bank_or_financial(s["sector"]) else "roce"), raws.get("de"), raws.get("sales_growth"), raws.get("opm"), raws.get("cfo_pat"),
-                 ex["sales_cagr_3y"], ex["roce_3y"], ex["div_payout"], pe, lo, hi, px["close"] if px else None, mcap, quarterly[-1]["period_end_date"], len(quarterly), now))
+                 ex["sales_cagr_3y"], ex["roce_3y"], ex["div_payout"], pe, lo, hi, pmed, ppct, pmon, px["close"] if px else None, mcap, quarterly[-1]["period_end_date"], len(quarterly), now))
             written += 1
             if i % 250 == 0:
                 conn.commit()
@@ -276,7 +277,7 @@ SCREENS = [
     {"key": "cash", "label": "Cash-rich", "desc": "Profit that turns into real cash: operating cash flow at least 90% of net profit, with a return on capital above 12%."},
     {"key": "dividend", "label": "Dividend payers", "desc": "Pay out at least 20% of profit as dividends and earn more than 12% on capital. India only for now."},
     {"key": "big", "label": "Big and stable", "desc": "Large companies with moderate debt and a return on capital above 12%."},
-    {"key": "cheap", "label": "Cheap vs own history", "desc": "Trading in the cheapest third of their own three-year P/E range, with a return on capital above 15%."},
+    {"key": "cheap", "label": "Cheap vs own history", "desc": "Trading in the cheapest third of their own P/E readings over up to the last three years (month-ends, moved by price and by the profit then), with a return on capital above 15%. Needs at least 24 months of history."},
 ]
 EXTRA_SCREENS = {
     "browse": {"key": "browse", "label": "Browse", "desc": "Every stock in this group, best match against your rules first."},
@@ -359,8 +360,9 @@ def facets(market: str = "IN") -> dict:
 
 
 def _pos_in_range(r: dict):
-    if r["pe"] and r["pe_low"] is not None and r["pe_high"] and r["pe_high"] > r["pe_low"]:
-        return (r["pe"] - r["pe_low"]) / (r["pe_high"] - r["pe_low"])
+    """Where today's P/E sits among its own last-36-month-end readings, 0 (cheapest) to 1 (dearest): its percentile rank (app/valuation.py)."""
+    if r.get("pe") and r.get("pe_pct") is not None:
+        return r["pe_pct"] / 100
     return None
 
 
