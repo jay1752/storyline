@@ -269,7 +269,8 @@ def judge(raws: dict, bank: bool, th: dict) -> dict:
 
 SCREENS = [
     {"key": "rules", "label": "Passes your rules", "star": True,
-     "desc": "Stocks that clear the thresholds you set on Investment rules. Change them there and this list changes."},
+     "desc": "Stocks that clear every threshold you set on Investment rules (at least 7 of your rules could be judged for each). Change them there and this list changes."},
+    {"key": "near", "label": "Misses one of your rules", "desc": "Stocks that clear every one of your thresholds except one. Change that one rule on Investment rules and the stock moves to the first list."},
     {"key": "compounders", "label": "Steady compounders", "desc": "High returns on capital that stayed high for three years, with sales growing 10% a year or more. India only for now."},
     {"key": "growers", "label": "Fast growers", "desc": "Sales up more than 20% on the year in each of the last four quarters, and a margin above 10%."},
     {"key": "financials", "label": "Strong banks & insurers", "desc": "Banks, lenders and insurers that earn a return on equity of 12% or more, more than 1% on assets, keep at least 8% of the balance sheet as equity, and trade below 3 times book value."},
@@ -384,7 +385,7 @@ def run_screen(key: str, th: dict, market: str = "IN", limit: int = 60, cap: str
         rows = [r for r in rows if r["cap_tier"] == cap]
     if sector:
         rows = [r for r in rows if r["sector"] == sector]
-    named = key in ("rules", "compounders", "growers", "financials", "debtfree", "cash", "dividend", "big", "cheap")
+    named = key in ("rules", "near", "compounders", "growers", "financials", "debtfree", "cash", "dividend", "big", "cheap")
     hits: list[tuple] = []
     for r in rows:
         roce, de, bank = r["roce"], r["de"], bool(r["bank"])
@@ -394,12 +395,12 @@ def run_screen(key: str, th: dict, market: str = "IN", limit: int = 60, cap: str
             continue
         if named and _filled(r) < 4:  # a list row must be mostly filled: at least 4 of the 5 figures shown beside it (market cap, P/E, ROCE, 3y growth, debt/equity)
             continue
-        if key == "rules":
+        if key in ("rules", "near"):
             j = judge(r["raws"], bank, th)
             if j["total"] < 7:  # too few rules could be judged (missing data) for "passes" to mean much
                 continue
             miss = len(j["failing"])
-            if miss <= 1:
+            if miss == (0 if key == "rules" else 1):  # "Passes your rules" is exactly that: no rule failed. One miss is the next screen.
                 hits.append((miss, -j["total"], -(roce or 0), r, j))
             continue
         if key == "browse":  # everything in the chosen group, best match against the user's rules first
@@ -468,5 +469,5 @@ def run_screen(key: str, th: dict, market: str = "IN", limit: int = 60, cap: str
     out = []
     for _, _, _, r, j in hits[:limit]:
         out.append({**{k: r[k] for k in ("symbol", "name", "market", "sector", "cap_tier", "roce", "de", "pe", "sales_cagr_3y", "growth_min4", "cfo_pat", "div_payout", "roce_3y", "bank", "opm", "mcap")}, "raws": r["raws"],
-                    "judge": judge(r["raws"], bool(r["bank"]), th) if key in ("rules", "browse") else None})
+                    "judge": judge(r["raws"], bool(r["bank"]), th) if key in ("rules", "near", "browse") else None})
     return {"count": len(hits), "rows": out}
