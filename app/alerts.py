@@ -6,10 +6,11 @@ What raises one (never a price move):
   results_due    a tracked Indian stock announces results within RESULTS_WINDOW_DAYS (market.results_calendar), once per result date.
 
 Where it shows: always in the app (/alerts and a card on Management). Email:
-  - ON BY DEFAULT, the user can switch it off in Profile or with the unsubscribe link: ONE consolidated email per user, at most one a day, listing every
-    tracked stock whose Exit, Trim or Add rule is triggered (flag_email, see flag_emails). It is sent when something newly became triggered, and as a
-    weekly reminder while flags stay open. A price move that pushes a position past the user's size limit counts: it changes the status.
-  - opt-in extras, off until chosen: a weekly digest of status changes on a day they pick, and one immediate email when a stock reaches Exit.
+  - ON BY DEFAULT, the user can switch it off in Profile or with the unsubscribe link: ONE consolidated email per user PER WEEK (Monday morning, India time),
+    listing every tracked stock whose Exit, Trim or Add rule is triggered as of the last nightly check, with those that became triggered since the last
+    weekly email marked new. Nothing is sent at other times, and nothing when no rule is triggered. A price move that pushes a position past the user's
+    size limit counts: it changes the status.
+  - opt-in extras, off until chosen: one immediate email when a stock reaches Exit (the old weekly digest of changes has no setting in Profile any more).
 Every email has an unsubscribe link, carries the "not investment advice" line, and is counted in email_log so a daily cap protects the sender's
 free allowance. Wording says what the rules show, never what to do."""
 
@@ -30,7 +31,8 @@ DAILY_EMAIL_CAP = 80            # Resend's free plan allows 100 a day: stay unde
 IMMEDIATE_PER_USER_PER_DAY = 5
 DIGEST_HOUR_IST = 9
 DIGEST_MIN_GAP_DAYS = 6
-FLAG_REMINDER_DAYS = 7          # while flags stay open and nothing is new, remind once a week
+FLAG_WEEKDAY = 0                # the weekly rule-trigger email goes out on Mondays (IST), after DIGEST_HOUR_IST
+FLAG_MIN_GAP_DAYS = 6           # and never twice within a week
 FLAG_MAX_PER_SECTION = 25       # the email lists this many stocks per section, then points to Management for the rest
 FLAG_CODES = ("EXIT", "TRIM", "BUY")   # BUY is stored for "Add rules met"
 FLAG_SECTIONS = [("EXIT", "Exit rule triggered"), ("TRIM", "Trim rule triggered"), ("BUY", "Add rules met")]
@@ -203,13 +205,13 @@ def flag_candidates(u) -> dict[int, list[dict]]:
     return out
 
 
-def flag_email(items: list[dict], new_ids: set[int], token: str, reminder: bool) -> tuple[str, str, str]:
-    """ONE email for one user: every flagged stock, grouped Exit, Trim, Add, with the new ones marked. States what each rule shows, never what to do."""
+def flag_email(items: list[dict], new_ids: set[int], token: str) -> tuple[str, str, str]:
+    """The weekly email for one user: every flagged stock, grouped Exit, Trim, Add, with those new since the last email marked. States what each rule shows,
+    never what to do."""
     base = _base_url()
     n = len(items)
     n_new = sum(1 for i in items if i["pid"] in new_ids)
-    subject = (f"Your tracked stocks: {n} rule trigger{'' if n == 1 else 's'}" + (f", {n_new} new" if n_new and n_new != n else "")) if not reminder else \
-              f"Reminder: {n} of your tracked stocks still have a rule triggered"
+    subject = (f"Your week: {n} tracked stock{' has' if n == 1 else 's have'} a rule triggered" + (f", {n_new} new" if n_new and n_new != n else ""))
     blocks_html, blocks_text = [], []
     for code, title in FLAG_SECTIONS:
         sec = [i for i in items if i["code"] == code]
@@ -225,15 +227,15 @@ def flag_email(items: list[dict], new_ids: set[int], token: str, reminder: bool)
         blocks_html.append(f'<h3 style="font-size:15px;margin:18px 0 8px">{html.escape(title)} ({len(sec)})</h3><ul style="margin:0 0 6px;padding-left:18px">{lis}</ul>{more}')
         blocks_text.append(f"{title} ({len(sec)})\n" + "\n".join(f"- {i['symbol']} {i['name'] or ''}{' [new]' if i['pid'] in new_ids else ''}: {i['reason'][:200]}\n  {base}/management/{i['pid']}" for i in shown)
                            + (f"\n  ...and {len(sec) - len(shown)} more: {base}/management" if len(sec) > len(shown) else ""))
-    intro = ("These tracked stocks have a rule of yours triggered, as of last night's check. Each line says where the stock stands against the rules you set." if not reminder else
-             "These are still triggered. Nothing new since your last email; this is a weekly reminder while they stay open.")
+    intro = ("These tracked stocks have a rule of yours triggered, as of last night's check. Each line says where the stock stands against the rules you set. "
+             "Stocks marked new became triggered since your last weekly email.")
     body = f'<p style="margin:0 0 4px;color:#333">{html.escape(intro)}</p>' + "".join(blocks_html)
     unsub = f"{base}/alerts/unsubscribe?token={token}"
     page = (f'<div style="font-family:system-ui,Arial,sans-serif;max-width:600px;font-size:15px;line-height:1.45;color:#1a1a1a">'
             f'<h2 style="font-size:18px;margin:0 0 10px">{html.escape("Your rules, applied to your tracked stocks")}</h2>{body}'
             f'<hr style="border:none;border-top:1px solid #ddd;margin:20px 0">'
             f'<p style="font-size:12.5px;color:#666;margin:0 0 8px">{html.escape(LINE)}</p>'
-            f'<p style="font-size:12.5px;color:#666;margin:0">You get this because you track stocks and set rules in Tenetfolio. It is sent at most once a day, and only when a rule is triggered. '
+            f'<p style="font-size:12.5px;color:#666;margin:0">You get this because you track stocks and set rules in Tenetfolio. It is sent once a week, on Mondays, and only when a rule is triggered. '
             f'<a href="{base}/profile#alerts">Change what you receive</a> or <a href="{html.escape(unsub)}">turn these emails off</a>.</p></div>')
     text = f"{intro}\n\n" + "\n\n".join(blocks_text) + f"\n\n{LINE}\nTurn these emails off: {unsub}\n"
     return subject, page, text
@@ -259,24 +261,21 @@ def deliver(send=None, now: datetime | None = None) -> dict:
         def log(user_id, kind, ok):
             u.execute("INSERT INTO email_log (user_id, kind, ok) VALUES (?, ?, ?)", (user_id, kind, int(ok)))
 
-        if now.hour >= DIGEST_HOUR_IST:   # the nightly status check ran the evening before; the email goes out in the morning
-            week_ago = (now - timedelta(days=FLAG_REMINDER_DAYS)).astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        if now.weekday() == FLAG_WEEKDAY and now.hour >= DIGEST_HOUR_IST:   # Monday morning, after the nightly status check of the night before
+            gap = (now - timedelta(days=FLAG_MIN_GAP_DAYS)).astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             for uid, items in flag_candidates(u).items():
                 p = get_prefs(u, uid)
                 last = p["last_flag_email_at"]
-                if last and last >= day_start:
-                    continue                                   # at most one a day
+                if last and last > gap:
+                    continue                                   # told within the last week
                 new_ids = {i["pid"] for i in items if not last or i["since"] > last}
-                reminder = not new_ids
-                if reminder and last and last > week_ago:
-                    continue                                   # nothing new, and told them within the week
                 if sent_today >= DAILY_EMAIL_CAP:
                     out["skipped_cap"] += 1
                     continue
                 to = _address(u, uid)
                 if not to:
                     continue
-                subject, h, t = flag_email(items, new_ids, p["token"], reminder)
+                subject, h, t = flag_email(items, new_ids, p["token"])
                 ok = send(to, subject, h, t, {"List-Unsubscribe": f"<{_base_url()}/alerts/unsubscribe?token={p['token']}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"})
                 log(uid, "flags", ok)
                 if ok:

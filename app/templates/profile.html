@@ -83,15 +83,11 @@
 
 <section class="form-card" id="alerts" aria-labelledby="al-title" style="margin-top:1.5rem;">
   <h2 id="al-title" style="font-size:1.1rem;margin:0 0 .3rem;">Email alerts</h2>
-  <p class="hint" style="margin:0 0 .8rem;">Alerts always appear in the app. The first email below is on by default: when a tracked stock has a rule of yours triggered (Exit, Trim or Add) you get one email a day at most, listing all of them. The others are off until you turn them on. Emails go to {{ (me.contact_email or me.email) }}, each has an unsubscribe link, and we use your address only for these alerts.</p>
+  <p class="hint" style="margin:0 0 .8rem;">Alerts always appear in the app. By default you get one email a week, on Monday morning India time, listing every tracked stock that has a rule of yours triggered (Exit, Trim or Add rules met), and nothing in weeks when none does. Emails go to {{ (me.contact_email or me.email) }}, never mention prices, and each has an unsubscribe link. We use your address only for these alerts.</p>
   <form method="post" action="/alerts/prefs">
     <div class="form-grid">
-      <div class="form-field form-field-wide"><label><input type="checkbox" name="flag_email" {{ 'checked' if prefs.flag_email else '' }}> Email me when a rule of mine is triggered on a tracked stock (Exit, Trim or Add rules met): one email a day at most, all stocks together, plus a weekly reminder while they stay open</label></div>
-      <div class="form-field form-field-wide"><label><input type="checkbox" name="digest_email" {{ 'checked' if prefs.digest_email else '' }}> Weekly digest of what changed (sent only in weeks when something did)</label></div>
-      <div class="form-field"><label for="digest_day">Digest day</label>
-        <select class="form-input" id="digest_day" name="digest_day">{% for d in days %}<option value="{{ loop.index0 }}" {{ 'selected' if prefs.digest_day == loop.index0 else '' }}>{{ d }}</option>{% endfor %}</select>
-        <span class="hint">Sent around 9 am India time.</span></div>
-      <div class="form-field form-field-wide"><label><input type="checkbox" name="exit_email" {{ 'checked' if prefs.exit_email else '' }}> Email me right away when a stock reaches "Exit rule triggered"</label></div>
+      <div class="form-field form-field-wide"><label><input type="checkbox" name="flag_email" {{ 'checked' if prefs.flag_email else '' }}> Email me once a week about tracked stocks with a rule triggered (Exit, Trim or Add rules met), all stocks together</label></div>
+      <div class="form-field form-field-wide"><label><input type="checkbox" name="exit_email" {{ 'checked' if prefs.exit_email else '' }}> Also email me right away when a stock reaches "Exit rule triggered" (off by default)</label></div>
       <div class="form-field form-field-wide"><label><input type="checkbox" name="results_alerts" {{ 'checked' if prefs.results_alerts else '' }}> Show an alert in the app when results are announced for a stock I track</label></div>
     </div>
     <div class="form-actions"><button class="btn btn-primary" type="submit">Save alert settings</button> <a class="btn" href="/alerts">See my alerts</a></div>

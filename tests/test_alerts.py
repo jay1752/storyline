@@ -255,7 +255,7 @@ class Delivery(unittest.TestCase):
 
 
 class FlagEmail(unittest.TestCase):
-    """The default-on email: one a day at most per user, every tracked stock whose Exit, Trim or Add rule is triggered, new ones marked, weekly reminder."""
+    """The default-on email: ONE a week per user (Monday morning, India time), every tracked stock whose Exit, Trim or Add rule is triggered, new ones marked."""
 
     def setUp(self):
         self.u = make_db()
@@ -267,7 +267,8 @@ class FlagEmail(unittest.TestCase):
         p = mock.patch("app.db.get_users_conn", return_value=self.u)
         p.start()
         self.addCleanup(p.stop)
-        self.now = datetime.now(IST).replace(hour=10, minute=0, second=0, microsecond=0)
+        today = datetime.now(IST)
+        self.now = (today - timedelta(days=today.weekday())).replace(hour=10, minute=0, second=0, microsecond=0)   # the latest Monday, 10:00 IST
 
     def send(self, to, subject, html, text, headers):
         self.sent.append({"to": to, "subject": subject, "html": html, "text": text, "headers": headers})
@@ -284,9 +285,9 @@ class FlagEmail(unittest.TestCase):
         self.u.execute("UPDATE position_status_history SET computed_at = ?", (when,))
         self.u.commit()
 
-    def set_last(self, uid, when):
+    def told(self, uid, days_ago):
         alerts.get_prefs(self.u, uid)
-        self.u.execute("UPDATE alert_prefs SET last_flag_email_at = ? WHERE user_id = ?", (when, uid))
+        self.u.execute("UPDATE alert_prefs SET last_flag_email_at = ? WHERE user_id = ?", ((self.now.astimezone(timezone.utc) - timedelta(days=days_ago)).strftime("%Y-%m-%d %H:%M:%S") if days_ago is not None else None, uid))   # relative to the simulated Monday
         self.u.commit()
 
     def test_one_email_lists_every_flagged_stock_grouped_exit_trim_add(self):
@@ -296,17 +297,23 @@ class FlagEmail(unittest.TestCase):
         self.status(5, 7, "BUY", "Add rules met", "A watchlist stock passes every rule.")
         self.assertEqual(self.deliver()["flags"], 1)
         m = self.sent[0]
-        self.assertEqual((m["to"], m["subject"]), ("me@example.com", "Your tracked stocks: 4 rule triggers"))
+        self.assertEqual((m["to"], m["subject"]), ("me@example.com", "Your week: 4 tracked stocks have a rule triggered"))
         for t in ("Exit rule triggered (1)", "Trim rule triggered (1)", "Add rules met (2)", "NSE:AAA", "NSE:BBB", "NSE:CCC", "NSE:DDD", "Promoter pledge is 13.8%"):
             self.assertIn(t, m["html"])
         self.assertLess(m["html"].index("Exit rule triggered"), m["html"].index("Trim rule triggered"))
         self.assertLess(m["html"].index("Trim rule triggered"), m["html"].index("Add rules met"))
         self.assertEqual(m["html"].count(">new<"), 4)                    # the first email: everything is news
+        self.assertIn("once a week, on Mondays", m["html"])
         self.assertIn("/alerts/unsubscribe?token=", m["html"])
         self.assertIn("List-Unsubscribe", m["headers"])
         self.assertIn("Not investment advice", m["html"])
 
-    def test_it_is_on_by_default_with_no_preferences_row_and_only_one_a_day(self):
+    def test_a_single_stock_reads_naturally(self):
+        self.status(1, 7, "EXIT", "Exit rule triggered")
+        self.deliver()
+        self.assertEqual(self.sent[0]["subject"], "Your week: 1 tracked stock has a rule triggered")
+
+    def test_it_is_on_by_default_with_no_preferences_row_and_only_once(self):
         self.status(1, 7, "EXIT", "Exit rule triggered")
         self.assertIsNone(self.u.execute("SELECT 1 FROM alert_prefs WHERE user_id = 7").fetchone())
         self.assertEqual(self.deliver()["flags"], 1)
@@ -319,9 +326,11 @@ class FlagEmail(unittest.TestCase):
         self.assertEqual(self.deliver()["flags"], 0)
         self.assertEqual(self.sent, [])
 
-    def test_nothing_goes_before_nine_in_the_morning_india_time(self):
+    def test_it_goes_on_monday_morning_only(self):
         self.status(1, 7, "EXIT", "Exit rule triggered")
-        self.assertEqual(self.deliver(self.now.replace(hour=7))["flags"], 0)
+        for d in range(1, 7):                                            # Tuesday .. Sunday
+            self.assertEqual(self.deliver(self.now + timedelta(days=d))["flags"], 0, d)
+        self.assertEqual(self.deliver(self.now.replace(hour=7))["flags"], 0)   # Monday before nine
         self.assertEqual(self.deliver(self.now.replace(hour=9))["flags"], 1)
 
     def test_switching_it_off_or_unsubscribing_stops_it(self):
@@ -330,39 +339,39 @@ class FlagEmail(unittest.TestCase):
         self.assertEqual(self.deliver()["flags"], 0)
         alerts.set_prefs(self.u, 7, digest_email=False, digest_day=6, exit_email=False, results_alerts=True, flag_email=True)
         self.assertEqual(self.deliver()["flags"], 1)
-        self.set_last(7, None)
+        self.told(7, None)
         self.assertTrue(alerts.unsubscribe(self.u, alerts.get_prefs(self.u, 7)["token"]))
         self.assertEqual(self.deliver()["flags"], 0)
         self.assertEqual(alerts.get_prefs(self.u, 7)["flag_email"], 0)
 
-    def test_the_next_day_with_nothing_new_sends_nothing_but_a_week_later_a_reminder(self):
+    def test_something_new_midweek_waits_for_the_next_monday_and_is_marked_new(self):
         self.status(1, 7, "EXIT", "Exit rule triggered")
         self.age_statuses()
-        self.set_last(7, (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S"))
-        self.assertEqual(self.deliver()["flags"], 0)                    # still open, told yesterday
-        self.set_last(7, (datetime.now(timezone.utc) - timedelta(days=8)).strftime("%Y-%m-%d %H:%M:%S"))
-        self.assertEqual(self.deliver()["flags"], 1)
-        self.assertTrue(self.sent[0]["subject"].startswith("Reminder: 1 of your tracked stocks still have a rule triggered"))
-        self.assertNotIn(">new<", self.sent[0]["html"])
-
-    def test_a_stock_that_became_triggered_since_the_last_email_is_marked_new_and_mailed_the_next_day(self):
-        self.status(1, 7, "EXIT", "Exit rule triggered")
-        self.age_statuses()
-        self.set_last(7, (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S"))
-        self.status(2, 7, "TRIM", "Trim rule triggered")               # recorded now, after the last email
+        self.told(7, 3)                                                  # emailed three days ago
+        self.status(2, 7, "TRIM", "Trim rule triggered")                 # became triggered since
+        self.assertEqual(self.deliver()["flags"], 0)                     # one a week: not yet
+        self.told(7, 8)
         self.assertEqual(self.deliver()["flags"], 1)
         m = self.sent[0]
-        self.assertEqual(m["subject"], "Your tracked stocks: 2 rule triggers, 1 new")
+        self.assertEqual(m["subject"], "Your week: 2 tracked stocks have a rule triggered, 1 new")
         self.assertEqual(m["html"].count(">new<"), 1)
-        self.assertLess(m["html"].index("NSE:BBB"), m["html"].index(">new<") + 400)
 
-    def test_a_price_driven_flip_counts_like_any_other_status_change(self):
+    def test_a_standing_flag_is_listed_again_every_week_without_a_new_mark(self):
+        self.status(1, 7, "EXIT", "Exit rule triggered")
+        self.age_statuses()
+        self.told(7, 8)
+        self.assertEqual(self.deliver()["flags"], 1)
+        self.assertNotIn(">new<", self.sent[0]["html"])
+        self.assertIn("NSE:AAA", self.sent[0]["html"])
+
+    def test_a_price_driven_flip_is_in_the_next_weekly_email(self):
         self.status(1, 7, "HOLD", "Within your rules")
         self.age_statuses()
-        self.set_last(7, (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S"))
+        self.told(7, 8)
         self.status(1, 7, "TRIM", "Trim rule triggered", "This is 8.4% of your book. Your rule: above 8%, trim back toward 5%.")   # the price rose
         self.assertEqual(self.deliver()["flags"], 1)
         self.assertIn("8.4% of your book", self.sent[0]["html"])
+        self.assertEqual(self.sent[0]["html"].count(">new<"), 1)
 
     def test_a_long_list_is_cut_per_section_and_points_to_management(self):
         for i in range(30):
