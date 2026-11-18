@@ -11,6 +11,8 @@
   <li><strong>Account.</strong> Your email address, name and Google account ID when you sign in with Google. We receive only what the Google basic scopes (openid, email, profile) provide. We never see your Google password.</li>
   <li><strong>Profile (optional).</strong> Display name, phone, contact email, city, country and a short bio, only if you fill them in.</li>
   <li><strong>Your investing data.</strong> Stocks you track, quantities, average prices and dates, your investment rules and sizing limits, journal notes, and the daily analyses we generate for you.</li>
+  <li><strong>Your trades and returns.</strong> The dated buys and sells (stock, date, quantity and price) that come from a statement you import, from your journal, or that you enter yourself. We use them to work out your returns, realised gains and the comparison with an index. You can delete individual trades and download them as a CSV file from Portfolio.</li>
+  <li><strong>Status history and alerts.</strong> Where each stock you track stood against your rules over time, the alerts we raise for you, your email preferences, the time you first turned an optional email on, and a log of each email we tried to send you (when, which kind, and whether it was accepted for delivery). The log holds no email content.</li>
   <li><strong>Imports.</strong> When you attach a broker statement, we read it to propose positions. We do not keep the file itself. The rows we extracted are saved with your account until you confirm or cancel the import. Excel, CSV and text-based PDFs are read on our own server. Scanned PDFs, photos, and files in a layout we don't recognise are sent whole to the AI provider you chose, which may process them outside India. Statements often show your name, address and account ID, and those go along with the file. You see a notice before you send a file, and we record the time of the first one.</li>
   <li><strong>Community posts and replies</strong> you choose to write, shown under your display name.</li>
   <li><strong>AI provider keys.</strong> If you add your own key for an AI service, we store it encrypted and never show it again.</li>
@@ -22,15 +24,28 @@
 <ul>
   <li>To run your account and show your portfolio, rules, stories and community.</li>
   <li>To generate AI analyses, briefings and chat answers for you.</li>
+  <li>To work out each tracked stock’s status against your rules every night, and to send you the emails described below.</li>
+  <li>To calculate your returns, realised gains and rule history from the trades you record.</li>
   <li>To keep the service secure, fix problems, understand how the product is used and improve it, and prevent misuse.</li>
 </ul>
 <p>We do not sell your data, and we do not show advertising.</p>
+
+<h2>Emails we send you</h2>
+<ul>
+  <li><strong>Weekly rule email (on by default).</strong> Once a week, on Monday morning India time, we email you a list of the stocks you track that have a rule of yours triggered (an Exit, Trim or Add rule), with the newest marked. We send it because you track stocks and set rules in Tenetfolio, and it is part of that service. If no rule is triggered that week, we send nothing. It carries stock names and where each stands against your rules, and does not give advice.</li>
+  <li><strong>Optional emails.</strong> An immediate email when a stock reaches an Exit rule is off until you turn it on. We record when you first turned an optional email on.</li>
+  <li><strong>Account emails.</strong> For example to verify or recover an address, when that applies.</li>
+  <li><strong>Where they go.</strong> To your sign-in email address, or to the contact email you set in Profile if you added one.</li>
+  <li><strong>Turning them off.</strong> Every email has a link to turn these emails off in one step, and you can change them any time under Profile, Email alerts. In-app alerts keep appearing in the app.</li>
+</ul>
+<p>We do not send marketing or promotional emails and we do not use your address for advertising.</p>
 
 <h2>Who else sees it</h2>
 <ul>
   <li><strong>Google</strong>, for sign-in.</li>
   <li><strong>The AI provider you choose</strong> (for example Google Gemini, Anthropic, OpenAI, Groq or OpenRouter). When you use the assistant, a daily analysis or a briefing, the text of your request and the relevant stock, portfolio or statement data is sent to that provider using your key (or the shared key, if you choose it). The provider’s own privacy terms apply to what it receives. A statement PDF or image you attach is sent to it so it can be read.</li>
   <li><strong>Our hosting provider</strong>, which stores the data on our behalf in a cloud server.</li>
+  <li><strong>Our email delivery provider</strong> (Resend), which receives your email address and the text of each email so that it can deliver it. That text includes the names of stocks you track and their status against your rules.</li>
   <li><strong>Other users</strong>, only for content you post in Community.</li>
   <li><strong>Authorities</strong>, where the law requires it.</li>
 </ul>
@@ -40,7 +55,7 @@
 <p>We use one essential cookie to keep you signed in, and a few settings (such as theme and view choices) stored in your browser. We do not use advertising or cross-site tracking cookies.</p>
 
 <h2>How long we keep it</h2>
-<p>We keep your account data while your account exists. If you ask us to delete your account, we delete your profile, positions, rules, journal, stored keys and posts, except what we must keep for security or legal reasons. Backups clear out in the normal course.</p>
+<p>We keep your account data while your account exists. When you delete your account, we delete your profile, positions, trades, rules, journal, status history, alerts, email preferences, email log, stored keys and posts, except what we must keep for security or legal reasons. Backups clear out in the normal course.</p>
 
 <h2>Security</h2>
 <p>Connections use HTTPS, AI keys are encrypted, and access to the server is restricted. No system is perfectly secure, so please use a strong Google account and tell us at once if you suspect misuse.</p>
@@ -49,7 +64,9 @@
 <ul>
   <li>Edit your profile, rules and positions in the app at any time.</li>
   <li>Remove or replace your AI key in AI settings.</li>
-  <li>Ask us to export or delete your data by emailing <a href="mailto:{{ contact }}">{{ contact }}</a> from the address on your account. We will respond within a reasonable time.</li>
+  <li>Turn the emails off in Profile (Email alerts) or with the link in any email.</li>
+  <li>Delete individual trades, and download your trades and realised gains as CSV files, from Portfolio, Returns and ledger.</li>
+  <li>Delete your account yourself at any time in Profile, Delete my account. For anything else, such as a copy of other data we hold about you, email <a href="mailto:{{ contact }}">{{ contact }}</a> from the address on your account. We will respond within a reasonable time.</li>
 </ul>
 
 <h2>Children</h2>
