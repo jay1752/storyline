@@ -141,7 +141,7 @@ class Delivery(unittest.TestCase):
         self.alert()
         self.alert(to="TRIM", label="Trim rule triggered")
         self.opt()   # prefs exist, every email off
-        self.assertEqual(self.deliver(self.SUN_10), {"immediate": 0, "digests": 0, "skipped_cap": 0})
+        self.assertEqual(self.deliver(self.SUN_10), {"immediate": 0, "digests": 0, "flags": 0, "skipped_cap": 0})
         self.assertEqual(self.sent, [])
 
     def test_exit_email_goes_once_with_unsubscribe_headers_and_only_for_exit(self):
@@ -251,6 +251,167 @@ class Delivery(unittest.TestCase):
         self.u.commit()
         self.deliver(self.NOW)
         self.assertNotIn("<script>x</script>", self.sent[0]["html"])
+
+
+
+class FlagEmail(unittest.TestCase):
+    """The default-on email: one a day at most per user, every tracked stock whose Exit, Trim or Add rule is triggered, new ones marked, weekly reminder."""
+
+    def setUp(self):
+        self.u = make_db()
+        for pid, uid, sym, kind in ((4, 7, "NSE:CCC", "position"), (5, 7, "NSE:DDD", "watchlist")):
+            self.u.execute("INSERT INTO tracked_positions (id, user_id, symbol, company_name, anchor_type, anchor_date, status) VALUES (?,?,?,?,?, '2026-01-01', 'active')",
+                           (pid, uid, sym, sym + " Ltd", kind))
+        self.u.commit()
+        self.sent, self.ok = [], True
+        p = mock.patch("app.db.get_users_conn", return_value=self.u)
+        p.start()
+        self.addCleanup(p.stop)
+        self.now = datetime.now(IST).replace(hour=10, minute=0, second=0, microsecond=0)
+
+    def send(self, to, subject, html, text, headers):
+        self.sent.append({"to": to, "subject": subject, "html": html, "text": text, "headers": headers})
+        return self.ok
+
+    def deliver(self, now=None):
+        return alerts.deliver(send=self.send, now=now or self.now)
+
+    def status(self, pid, uid, code, label, reason="Your rule is triggered."):
+        st.record(self.u, pid, uid, res(code, label, reasons=[{"kind": "entry", "text": reason}]))
+        self.u.commit()
+
+    def age_statuses(self, when="2026-01-01 00:00:00"):
+        self.u.execute("UPDATE position_status_history SET computed_at = ?", (when,))
+        self.u.commit()
+
+    def set_last(self, uid, when):
+        alerts.get_prefs(self.u, uid)
+        self.u.execute("UPDATE alert_prefs SET last_flag_email_at = ? WHERE user_id = ?", (when, uid))
+        self.u.commit()
+
+    def test_one_email_lists_every_flagged_stock_grouped_exit_trim_add(self):
+        self.status(1, 7, "EXIT", "Exit rule triggered", "Promoter pledge is 13.8%.")
+        self.status(2, 7, "TRIM", "Trim rule triggered", "This is 9.8% of your book.")
+        self.status(4, 7, "BUY", "Add rules met", "All 9 rules are met.")
+        self.status(5, 7, "BUY", "Add rules met", "A watchlist stock passes every rule.")
+        self.assertEqual(self.deliver()["flags"], 1)
+        m = self.sent[0]
+        self.assertEqual((m["to"], m["subject"]), ("me@example.com", "Your tracked stocks: 4 rule triggers"))
+        for t in ("Exit rule triggered (1)", "Trim rule triggered (1)", "Add rules met (2)", "NSE:AAA", "NSE:BBB", "NSE:CCC", "NSE:DDD", "Promoter pledge is 13.8%"):
+            self.assertIn(t, m["html"])
+        self.assertLess(m["html"].index("Exit rule triggered"), m["html"].index("Trim rule triggered"))
+        self.assertLess(m["html"].index("Trim rule triggered"), m["html"].index("Add rules met"))
+        self.assertEqual(m["html"].count(">new<"), 4)                    # the first email: everything is news
+        self.assertIn("/alerts/unsubscribe?token=", m["html"])
+        self.assertIn("List-Unsubscribe", m["headers"])
+        self.assertIn("Not investment advice", m["html"])
+
+    def test_it_is_on_by_default_with_no_preferences_row_and_only_one_a_day(self):
+        self.status(1, 7, "EXIT", "Exit rule triggered")
+        self.assertIsNone(self.u.execute("SELECT 1 FROM alert_prefs WHERE user_id = 7").fetchone())
+        self.assertEqual(self.deliver()["flags"], 1)
+        self.assertEqual(self.deliver()["flags"], 0)
+        self.assertEqual(len(self.sent), 1)
+
+    def test_a_user_with_nothing_triggered_gets_nothing(self):
+        self.status(1, 7, "HOLD", "Within your rules")
+        self.status(2, 7, "WATCH", "Not enough data")
+        self.assertEqual(self.deliver()["flags"], 0)
+        self.assertEqual(self.sent, [])
+
+    def test_nothing_goes_before_nine_in_the_morning_india_time(self):
+        self.status(1, 7, "EXIT", "Exit rule triggered")
+        self.assertEqual(self.deliver(self.now.replace(hour=7))["flags"], 0)
+        self.assertEqual(self.deliver(self.now.replace(hour=9))["flags"], 1)
+
+    def test_switching_it_off_or_unsubscribing_stops_it(self):
+        self.status(1, 7, "EXIT", "Exit rule triggered")
+        alerts.set_prefs(self.u, 7, digest_email=False, digest_day=6, exit_email=False, results_alerts=True, flag_email=False)
+        self.assertEqual(self.deliver()["flags"], 0)
+        alerts.set_prefs(self.u, 7, digest_email=False, digest_day=6, exit_email=False, results_alerts=True, flag_email=True)
+        self.assertEqual(self.deliver()["flags"], 1)
+        self.set_last(7, None)
+        self.assertTrue(alerts.unsubscribe(self.u, alerts.get_prefs(self.u, 7)["token"]))
+        self.assertEqual(self.deliver()["flags"], 0)
+        self.assertEqual(alerts.get_prefs(self.u, 7)["flag_email"], 0)
+
+    def test_the_next_day_with_nothing_new_sends_nothing_but_a_week_later_a_reminder(self):
+        self.status(1, 7, "EXIT", "Exit rule triggered")
+        self.age_statuses()
+        self.set_last(7, (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S"))
+        self.assertEqual(self.deliver()["flags"], 0)                    # still open, told yesterday
+        self.set_last(7, (datetime.now(timezone.utc) - timedelta(days=8)).strftime("%Y-%m-%d %H:%M:%S"))
+        self.assertEqual(self.deliver()["flags"], 1)
+        self.assertTrue(self.sent[0]["subject"].startswith("Reminder: 1 of your tracked stocks still have a rule triggered"))
+        self.assertNotIn(">new<", self.sent[0]["html"])
+
+    def test_a_stock_that_became_triggered_since_the_last_email_is_marked_new_and_mailed_the_next_day(self):
+        self.status(1, 7, "EXIT", "Exit rule triggered")
+        self.age_statuses()
+        self.set_last(7, (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S"))
+        self.status(2, 7, "TRIM", "Trim rule triggered")               # recorded now, after the last email
+        self.assertEqual(self.deliver()["flags"], 1)
+        m = self.sent[0]
+        self.assertEqual(m["subject"], "Your tracked stocks: 2 rule triggers, 1 new")
+        self.assertEqual(m["html"].count(">new<"), 1)
+        self.assertLess(m["html"].index("NSE:BBB"), m["html"].index(">new<") + 400)
+
+    def test_a_price_driven_flip_counts_like_any_other_status_change(self):
+        self.status(1, 7, "HOLD", "Within your rules")
+        self.age_statuses()
+        self.set_last(7, (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S"))
+        self.status(1, 7, "TRIM", "Trim rule triggered", "This is 8.4% of your book. Your rule: above 8%, trim back toward 5%.")   # the price rose
+        self.assertEqual(self.deliver()["flags"], 1)
+        self.assertIn("8.4% of your book", self.sent[0]["html"])
+
+    def test_a_long_list_is_cut_per_section_and_points_to_management(self):
+        for i in range(30):
+            pid = 100 + i
+            self.u.execute("INSERT INTO tracked_positions (id, user_id, symbol, company_name, anchor_type, anchor_date, status) VALUES (?, 7, ?, ?, 'position', '2026-01-01', 'active')", (pid, f"NSE:S{i:02d}", f"S{i:02d} Ltd"))
+            st.record(self.u, pid, 7, res("EXIT", "Exit rule triggered"))
+        self.u.commit()
+        self.deliver()
+        h = self.sent[0]["html"]
+        self.assertIn("Exit rule triggered (30)", h)
+        self.assertIn("and 5 more", h)
+        self.assertEqual(h.count("/management/"), 25)                     # 25 stock links; the "see them all" link points at /management itself
+
+    def test_each_user_gets_only_their_own_stocks(self):
+        self.status(1, 7, "EXIT", "Exit rule triggered")
+        self.status(3, 8, "TRIM", "Trim rule triggered")
+        self.assertEqual(self.deliver()["flags"], 2)
+        to = {m["to"]: m["html"] for m in self.sent}
+        self.assertIn("NSE:AAA", to["me@example.com"])
+        self.assertNotIn("Trim rule triggered", to["me@example.com"])
+        self.assertEqual(set(to), {"me@example.com", "alerts-here@example.com"})
+
+    def test_a_failed_send_is_retried_and_not_counted_as_told(self):
+        self.status(1, 7, "EXIT", "Exit rule triggered")
+        self.ok = False
+        self.assertEqual(self.deliver()["flags"], 0)
+        self.assertIsNone(alerts.get_prefs(self.u, 7)["last_flag_email_at"])
+        self.assertEqual([r["ok"] for r in self.u.execute("SELECT ok FROM email_log WHERE kind = 'flags'")], [0])
+        self.ok = True
+        self.assertEqual(self.deliver()["flags"], 1)
+
+    def test_the_daily_sender_cap_applies(self):
+        self.status(1, 7, "EXIT", "Exit rule triggered")
+        for _ in range(alerts.DAILY_EMAIL_CAP):
+            self.u.execute("INSERT INTO email_log (user_id, kind, ok, sent_at) VALUES (99, 'digest', 1, ?)", (datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),))
+        self.u.commit()
+        out = self.deliver()
+        self.assertEqual((out["flags"], out["skipped_cap"]), (0, 1))
+
+    def test_text_says_what_the_rules_show_never_what_to_do_and_escapes_names(self):
+        self.u.execute("UPDATE tracked_positions SET company_name = '<script>x</script>' WHERE id = 1")
+        self.status(1, 7, "EXIT", "Exit rule triggered", "Your exit rule on ROCE is confirmed over two quarters.")
+        self.status(2, 7, "TRIM", "Trim rule triggered")
+        self.deliver()
+        m = self.sent[0]
+        low = (m["subject"] + m["html"] + m["text"]).lower()
+        for bad in ("you should", "consider", "we suggest", "it is time to", "buy now", "sell now"):
+            self.assertNotIn(bad, low)
+        self.assertNotIn("<script>x</script>", m["html"])
 
 
 if __name__ == "__main__":

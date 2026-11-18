@@ -5,15 +5,18 @@ What raises one (never a price move):
                  Moves to or from "Not enough data" are left out: that is missing data, not a change in the stock.
   results_due    a tracked Indian stock announces results within RESULTS_WINDOW_DAYS (market.results_calendar), once per result date.
 
-Where it shows: always in the app (/alerts and a card on Management). Email is opt-in and off until the user turns it on:
-  - a weekly digest on the day they choose, only in weeks that had a change;
-  - optionally one immediate email when a stock reaches "Exit rule triggered".
+Where it shows: always in the app (/alerts and a card on Management). Email:
+  - ON BY DEFAULT, the user can switch it off in Profile or with the unsubscribe link: ONE consolidated email per user, at most one a day, listing every
+    tracked stock whose Exit, Trim or Add rule is triggered (flag_email, see flag_emails). It is sent when something newly became triggered, and as a
+    weekly reminder while flags stay open. A price move that pushes a position past the user's size limit counts: it changes the status.
+  - opt-in extras, off until chosen: a weekly digest of status changes on a day they pick, and one immediate email when a stock reaches Exit.
 Every email has an unsubscribe link, carries the "not investment advice" line, and is counted in email_log so a daily cap protects the sender's
 free allowance. Wording says what the rules show, never what to do."""
 
 from __future__ import annotations
 
 import html
+import json
 import logging
 import secrets
 from datetime import date, datetime, timedelta, timezone
@@ -27,6 +30,10 @@ DAILY_EMAIL_CAP = 80            # Resend's free plan allows 100 a day: stay unde
 IMMEDIATE_PER_USER_PER_DAY = 5
 DIGEST_HOUR_IST = 9
 DIGEST_MIN_GAP_DAYS = 6
+FLAG_REMINDER_DAYS = 7          # while flags stay open and nothing is new, remind once a week
+FLAG_MAX_PER_SECTION = 25       # the email lists this many stocks per section, then points to Management for the rest
+FLAG_CODES = ("EXIT", "TRIM", "BUY")   # BUY is stored for "Add rules met"
+FLAG_SECTIONS = [("EXIT", "Exit rule triggered"), ("TRIM", "Trim rule triggered"), ("BUY", "Add rules met")]
 DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 LINE = "Not investment advice. Each status shows where a stock stands against rules you set, worked out from public data. Any decision is yours."
 
@@ -47,12 +54,14 @@ def get_prefs(u, user_id: int):
     return r
 
 
-def set_prefs(u, user_id: int, *, digest_email: bool, digest_day: int, exit_email: bool, results_alerts: bool) -> None:
+def set_prefs(u, user_id: int, *, digest_email: bool, digest_day: int, exit_email: bool, results_alerts: bool, flag_email: bool | None = None) -> None:
     get_prefs(u, user_id)
     day = digest_day if isinstance(digest_day, int) and 0 <= digest_day <= 6 else 6
     u.execute("""UPDATE alert_prefs SET digest_email = ?, digest_day = ?, exit_email = ?, results_alerts = ?, updated_at = ?,
                  consent_at = CASE WHEN (? OR ?) AND consent_at IS NULL THEN ? ELSE consent_at END WHERE user_id = ?""",
               (int(digest_email), day, int(exit_email), int(results_alerts), _now_utc(), int(digest_email), int(exit_email), _now_utc(), user_id))
+    if flag_email is not None:
+        u.execute("UPDATE alert_prefs SET flag_email = ? WHERE user_id = ?", (int(flag_email), user_id))
     u.commit()
 
 
@@ -60,7 +69,7 @@ def unsubscribe(u, token: str) -> bool:
     """Switch every alert email off for the owner of this token. True when the token was valid."""
     if not token:
         return False
-    cur = u.execute("UPDATE alert_prefs SET digest_email = 0, exit_email = 0, updated_at = ? WHERE token = ?", (_now_utc(), token))
+    cur = u.execute("UPDATE alert_prefs SET digest_email = 0, exit_email = 0, flag_email = 0, updated_at = ? WHERE token = ?", (_now_utc(), token))
     u.commit()
     return cur.rowcount > 0
 
@@ -171,6 +180,65 @@ def digest_email(items: list[dict], token: str) -> tuple[str, str, str]:
             _text(items, token, base))
 
 
+def flag_candidates(u) -> dict[int, list[dict]]:
+    """Every user's tracked stocks whose CURRENT status is Exit, Trim or Add rules met, for users who have not switched the email off (no preferences row
+    means on). {user_id: [{symbol, name, code, label, reason, since}]}, Exit first. 'Not enough data' is not a trigger."""
+    rows = u.execute("""SELECT h.user_id, h.code, h.label, h.reasons_json, h.computed_at since, tp.id pid, tp.symbol, tp.company_name, tp.anchor_type
+                        FROM position_status_history h
+                        JOIN (SELECT position_id, MAX(id) mid FROM position_status_history GROUP BY position_id) x ON x.mid = h.id
+                        JOIN tracked_positions tp ON tp.id = h.position_id AND tp.status = 'active'
+                        LEFT JOIN alert_prefs p ON p.user_id = h.user_id
+                        WHERE h.code IN ('EXIT', 'TRIM', 'BUY') AND h.label != ? AND COALESCE(p.flag_email, 1) = 1""", (NO_DATA,)).fetchall()
+    out: dict[int, list[dict]] = {}
+    order = {c: i for i, (c, _) in enumerate(FLAG_SECTIONS)}
+    for r in rows:
+        try:
+            reasons = [x["text"] for x in json.loads(r["reasons_json"] or "[]") if x.get("kind") != "note"]
+        except ValueError:
+            reasons = []
+        out.setdefault(r["user_id"], []).append({"pid": r["pid"], "symbol": r["symbol"], "name": r["company_name"], "code": r["code"], "label": r["label"],
+                                                 "reason": (reasons[0] if reasons else ""), "since": r["since"], "kind": r["anchor_type"]})
+    for items in out.values():
+        items.sort(key=lambda i: (order[i["code"]], i["symbol"]))
+    return out
+
+
+def flag_email(items: list[dict], new_ids: set[int], token: str, reminder: bool) -> tuple[str, str, str]:
+    """ONE email for one user: every flagged stock, grouped Exit, Trim, Add, with the new ones marked. States what each rule shows, never what to do."""
+    base = _base_url()
+    n = len(items)
+    n_new = sum(1 for i in items if i["pid"] in new_ids)
+    subject = (f"Your tracked stocks: {n} rule trigger{'' if n == 1 else 's'}" + (f", {n_new} new" if n_new and n_new != n else "")) if not reminder else \
+              f"Reminder: {n} of your tracked stocks still have a rule triggered"
+    blocks_html, blocks_text = [], []
+    for code, title in FLAG_SECTIONS:
+        sec = [i for i in items if i["code"] == code]
+        if not sec:
+            continue
+        shown = sec[:FLAG_MAX_PER_SECTION]
+        lis = "".join(
+            f'<li style="margin:0 0 9px"><a href="{base}/management/{i["pid"]}" style="font-weight:600;text-decoration:none">{html.escape(i["symbol"])}</a> '
+            f'<span style="color:#555">{html.escape(i["name"] or "")}</span>'
+            + (' <span style="background:#e8f0ea;color:#1d5c3a;border-radius:4px;padding:1px 6px;font-size:12px">new</span>' if i["pid"] in new_ids else "")
+            + (f'<br><span style="color:#444;font-size:14px">{html.escape(i["reason"][:200])}</span>' if i["reason"] else "") + "</li>" for i in shown)
+        more = f'<p style="margin:0 0 14px;color:#555;font-size:14px">and {len(sec) - len(shown)} more: <a href="{base}/management">see them all in Management</a></p>' if len(sec) > len(shown) else ""
+        blocks_html.append(f'<h3 style="font-size:15px;margin:18px 0 8px">{html.escape(title)} ({len(sec)})</h3><ul style="margin:0 0 6px;padding-left:18px">{lis}</ul>{more}')
+        blocks_text.append(f"{title} ({len(sec)})\n" + "\n".join(f"- {i['symbol']} {i['name'] or ''}{' [new]' if i['pid'] in new_ids else ''}: {i['reason'][:200]}\n  {base}/management/{i['pid']}" for i in shown)
+                           + (f"\n  ...and {len(sec) - len(shown)} more: {base}/management" if len(sec) > len(shown) else ""))
+    intro = ("These tracked stocks have a rule of yours triggered, as of last night's check. Each line says where the stock stands against the rules you set." if not reminder else
+             "These are still triggered. Nothing new since your last email; this is a weekly reminder while they stay open.")
+    body = f'<p style="margin:0 0 4px;color:#333">{html.escape(intro)}</p>' + "".join(blocks_html)
+    unsub = f"{base}/alerts/unsubscribe?token={token}"
+    page = (f'<div style="font-family:system-ui,Arial,sans-serif;max-width:600px;font-size:15px;line-height:1.45;color:#1a1a1a">'
+            f'<h2 style="font-size:18px;margin:0 0 10px">{html.escape("Your rules, applied to your tracked stocks")}</h2>{body}'
+            f'<hr style="border:none;border-top:1px solid #ddd;margin:20px 0">'
+            f'<p style="font-size:12.5px;color:#666;margin:0 0 8px">{html.escape(LINE)}</p>'
+            f'<p style="font-size:12.5px;color:#666;margin:0">You get this because you track stocks and set rules in Tenetfolio. It is sent at most once a day, and only when a rule is triggered. '
+            f'<a href="{base}/profile#alerts">Change what you receive</a> or <a href="{html.escape(unsub)}">turn these emails off</a>.</p></div>')
+    text = f"{intro}\n\n" + "\n\n".join(blocks_text) + f"\n\n{LINE}\nTurn these emails off: {unsub}\n"
+    return subject, page, text
+
+
 def _address(u, user_id: int) -> str | None:
     r = u.execute("SELECT email, contact_email FROM users WHERE id = ?", (user_id,)).fetchone()
     return (r["contact_email"] or r["email"]) if r else None
@@ -184,12 +252,37 @@ def deliver(send=None, now: datetime | None = None) -> dict:
     send = send or mail.send_message
     now = (now or datetime.now(IST)).astimezone(IST)
     day_start = now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    out = {"immediate": 0, "digests": 0, "skipped_cap": 0}
+    out = {"immediate": 0, "digests": 0, "flags": 0, "skipped_cap": 0}
     with get_users_conn() as u:
         sent_today = u.execute("SELECT COUNT(*) FROM email_log WHERE ok = 1 AND sent_at >= ?", (day_start,)).fetchone()[0]
 
         def log(user_id, kind, ok):
             u.execute("INSERT INTO email_log (user_id, kind, ok) VALUES (?, ?, ?)", (user_id, kind, int(ok)))
+
+        if now.hour >= DIGEST_HOUR_IST:   # the nightly status check ran the evening before; the email goes out in the morning
+            week_ago = (now - timedelta(days=FLAG_REMINDER_DAYS)).astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            for uid, items in flag_candidates(u).items():
+                p = get_prefs(u, uid)
+                last = p["last_flag_email_at"]
+                if last and last >= day_start:
+                    continue                                   # at most one a day
+                new_ids = {i["pid"] for i in items if not last or i["since"] > last}
+                reminder = not new_ids
+                if reminder and last and last > week_ago:
+                    continue                                   # nothing new, and told them within the week
+                if sent_today >= DAILY_EMAIL_CAP:
+                    out["skipped_cap"] += 1
+                    continue
+                to = _address(u, uid)
+                if not to:
+                    continue
+                subject, h, t = flag_email(items, new_ids, p["token"], reminder)
+                ok = send(to, subject, h, t, {"List-Unsubscribe": f"<{_base_url()}/alerts/unsubscribe?token={p['token']}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"})
+                log(uid, "flags", ok)
+                if ok:
+                    u.execute("UPDATE alert_prefs SET last_flag_email_at = ? WHERE user_id = ?", (_now_utc(), uid))
+                    sent_today += 1
+                    out["flags"] += 1
 
         cut = (now - timedelta(hours=24)).astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         due = u.execute("""SELECT a.*, p.token FROM alerts a JOIN alert_prefs p ON p.user_id = a.user_id

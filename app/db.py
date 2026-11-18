@@ -359,7 +359,9 @@ CREATE TABLE IF NOT EXISTS alert_prefs (
     token           TEXT NOT NULL,                 -- unguessable: the unsubscribe link needs no sign-in
     consent_at      TEXT,                          -- when they first turned an email on
     last_digest_at  TEXT,
-    updated_at      TEXT
+    updated_at      TEXT,
+    flag_email      INTEGER NOT NULL DEFAULT 1,    -- ON by default: one email a day at most listing every tracked stock whose Exit, Trim or Add rule is triggered
+    last_flag_email_at TEXT                        -- when that email was last sent (UTC): what has changed since then is marked "new"
 );
 CREATE TABLE IF NOT EXISTS email_log (               -- every alert email attempt: audit and the daily cap on the sender's free allowance
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -796,6 +798,10 @@ def init_db() -> None:
         for col, decl in [("evidence_json", "TEXT"), ("news_summary", "TEXT"), ("analysis_json", "TEXT")]:
             if col not in ps_cols:
                 u.execute(f"ALTER TABLE position_snapshots ADD COLUMN {col} {decl}")
+        ap_cols = {row["name"] for row in u.execute("PRAGMA table_info(alert_prefs)").fetchall()}
+        if ap_cols and "flag_email" not in ap_cols:   # alert_prefs exists without the rule-trigger email columns (deployed earlier)
+            u.execute("ALTER TABLE alert_prefs ADD COLUMN flag_email INTEGER NOT NULL DEFAULT 1")
+            u.execute("ALTER TABLE alert_prefs ADD COLUMN last_flag_email_at TEXT")
         # Additive migration: users already holds the seeded real account — password_hash
         # NULL means "exists but never set a password" (the auth signup flow's "claim
         # this row" case, see app/routes/auth.py), not "broken."

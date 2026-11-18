@@ -30,10 +30,11 @@ def alerts_read(request: Request):
 
 
 @router.post("/alerts/prefs")
-def alerts_prefs(request: Request, digest_email: str = Form(""), digest_day: int = Form(6), exit_email: str = Form(""), results_alerts: str = Form("")):
+def alerts_prefs(request: Request, digest_email: str = Form(""), digest_day: int = Form(6), exit_email: str = Form(""), results_alerts: str = Form(""),
+                 flag_email: str = Form("")):
     with get_users_conn() as u:
         alerts.set_prefs(u, request.state.user_id, digest_email=bool(digest_email), digest_day=digest_day,
-                         exit_email=bool(exit_email), results_alerts=bool(results_alerts))
+                         exit_email=bool(exit_email), results_alerts=bool(results_alerts), flag_email=bool(flag_email))
     return RedirectResponse("/profile?saved=1#alerts", status_code=303)
 
 
