@@ -285,7 +285,7 @@
   {% endif %}
 </div>
 
-<div class="tabbar" id="tabbar" role="tablist" aria-label="Story sections">
+<div class="story-tabs" id="tabbar" role="tablist" aria-label="Story sections">
   <button type="button" role="tab" data-tab="analysis" class="on">Today</button>
   <button type="button" role="tab" data-tab="journal">Journal{% if events %} <span class="count">{{ events|length }}</span>{% endif %}</button>
   {% if history %}<button type="button" role="tab" data-tab="story">History <span class="count">{{ total_entries }}</span></button>{% endif %}
