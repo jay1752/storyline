@@ -707,8 +707,8 @@ def _analyse(user_id: int, position_id: int, trigger: str) -> None:
 
 def run_insights_for_user(user_id: int, progress=None, trigger: str = "daily", skip_fresh_hours: int = 18) -> int:
     """Analyse the active tracked stocks of one user, one after another: every stock for a manual run, the stocks the user's Investment
-    rules select (scope, per-stock switch, daily cap) for the daily run. Stocks analysed within `skip_fresh_hours`
-    are skipped, so a re-run after a partial day only does what is left. Stops early (without error) when every model
+    rules select (scope, per-stock schedule, cap) for the scheduled run: a stock is written again when its weekly or monthly turn comes
+    (monthly unless set otherwise). For other runs, stocks analysed within `skip_fresh_hours` are skipped. Stops early (without error) when every model
     is out of quota — remaining stocks are picked up by the next run. Returns how many analyses were written."""
     current_user_id.set(user_id)
     with get_users_conn() as u:
@@ -716,18 +716,22 @@ def run_insights_for_user(user_id: int, progress=None, trigger: str = "daily", s
         if trigger == "daily":  # the automatic run follows the user's Investment rules (platform default, own override, per-stock switch)
             plan = framework_rules.story_plan(u, user_id)
             positions = framework_rules.story_select(plan, positions)
-            skip_fresh_hours = plan["fresh"]
+            days = {r["id"]: framework_rules.story_days(plan["over"].get(r["symbol"])) for r in positions}  # weekly or monthly, per stock
     if trigger == "daily" and not positions:
         return 0
     if not build_chain(user_id):
         raise AnalysisError("No usable AI model: add an API key in AI settings first.")
     with get_users_conn() as u:
-        fresh_cut = (datetime.now(timezone.utc) - timedelta(hours=skip_fresh_hours)).strftime("%Y-%m-%d %H:%M:%S")
-        fresh = {r["position_id"] for r in u.execute(
-            "SELECT DISTINCT position_id FROM position_snapshots WHERE analysis_json IS NOT NULL AND checked_at > ?", (fresh_cut,))}
+        now = datetime.now(timezone.utc)
+        last = {r["position_id"]: r["t"] for r in u.execute(
+            "SELECT position_id, MAX(checked_at) AS t FROM position_snapshots WHERE analysis_json IS NOT NULL GROUP BY position_id")}
+    def _fresh(pid: int) -> bool:
+        hours = days[pid] * 24 - 6 if trigger == "daily" else skip_fresh_hours   # a day's slack so a stock is not skipped for being minutes short
+        cut = (now - timedelta(hours=max(hours, 0))).strftime("%Y-%m-%d %H:%M:%S")
+        return bool(last.get(pid)) and last[pid] > cut
     written = 0
     for p in positions:
-        if p["id"] in fresh:
+        if _fresh(p["id"]):
             continue
         run_id, created = queue_run(user_id, p["id"], trigger)
         if not run_id or not created:

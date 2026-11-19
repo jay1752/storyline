@@ -56,9 +56,9 @@ SCOPES = ("platform", "user", "stock")
 STORY_DEFS = [
     {"key": "story_scope", "label": "Daily story runs for", "kind": "choice", "default": 2, "lo": 0, "hi": 2,
      "choices": [(0, "No stocks (I run it myself)"), (1, "My positions only"), (2, "Positions and watchlist")],
-     "note": "which of your tracked stocks get an AI story automatically each morning"},
+     "note": "which of your tracked stocks get an AI story automatically, monthly unless you set a stock to weekly on its page"},
     {"key": "story_max", "label": "Stocks per daily run", "kind": "number", "default": 50, "unit": "stocks", "lo": 1, "hi": 500,
-     "note": "upper limit, positions first; the rest wait for the next day. Keeps AI usage predictable"},
+     "note": "upper limit per run, positions first; the rest wait for the next run. Keeps AI usage predictable"},
     {"key": "story_fresh", "label": "Skip a stock analysed within", "kind": "number", "default": 18, "unit": "hours", "lo": 1, "hi": 168,
      "note": "avoids re-running a story that is still fresh"},
 ]
@@ -152,7 +152,7 @@ class RuleError(ValueError):
 
 
 def validate(key: str, value) -> float:
-    d = BY_KEY.get(key) or STORY_BY_KEY.get(key) or ({"key": key, "label": "Daily story", "lo": 0, "hi": 1} if key == STORY_STOCK_KEY else None)
+    d = BY_KEY.get(key) or STORY_BY_KEY.get(key) or ({"key": key, "label": "Story schedule", "lo": 0, "hi": 30} if key == STORY_STOCK_KEY else None)
     if not d:
         raise RuleError("Unknown rule.")
     try:
@@ -230,7 +230,7 @@ def story_platform_layers(u) -> dict:
 
 
 def story_stock_override(u, user_id: int, symbol: str):
-    """1 = always run this stock's daily story, 0 = never, None = follow the user's setting."""
+    """This stock's story schedule: 7 = weekly, 30 = monthly, 0 = never, None = the default (monthly, for the stocks the user's scope selects). 1 is the old 'always run' and counts as weekly."""
     r = u.execute("SELECT value FROM framework_overrides WHERE scope='stock' AND user_id=? AND symbol=? AND key=?", (user_id, symbol, STORY_STOCK_KEY)).fetchone()
     return None if r is None else int(r["value"])
 
@@ -240,6 +240,14 @@ def story_plan(u, user_id: int) -> dict:
     over = {r["symbol"]: int(r["value"]) for r in u.execute(
         "SELECT symbol, value FROM framework_overrides WHERE scope='stock' AND user_id=? AND key=?", (user_id, STORY_STOCK_KEY))}
     return {"scope": int(s["story_scope"]["value"]), "max": int(s["story_max"]["value"]), "fresh": int(s["story_fresh"]["value"]), "over": over}
+
+
+DEFAULT_STORY_DAYS = 30
+
+
+def story_days(over) -> int:
+    """How often an automatic story is written for a stock: weekly (7) or monthly (30, the default). Old 'always run' (1) counts as weekly."""
+    return 7 if over in (1, 7) else DEFAULT_STORY_DAYS
 
 
 def sizing_plan(u, user_id: int) -> dict:
@@ -259,7 +267,7 @@ def story_select(plan: dict, positions) -> list:
         o = plan["over"].get(p["symbol"])
         if o == 0:
             continue
-        if o == 1 or plan["scope"] == 2 or (plan["scope"] == 1 and p["anchor_type"] == "position"):
+        if o or plan["scope"] == 2 or (plan["scope"] == 1 and p["anchor_type"] == "position"):
             chosen.append(p)
     return chosen[: plan["max"]]
 

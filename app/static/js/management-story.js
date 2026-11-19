@@ -114,18 +114,25 @@
   });
 })();
 
-// Per-stock daily story switch: "Follow my rules" (no override) / Always run / Never run
+// Per-stock story schedule: Weekly run / Monthly run (the default) / Never run, and "Run now", which starts the run and puts the schedule back
 (function () {
   const sel = document.getElementById("story-mode");
   if (!sel) return;
   sel.addEventListener("change", async () => {
     const v = sel.value;
+    if (v === "now") {
+      sel.value = sel.dataset.current;
+      const b = document.getElementById("run-btn");
+      if (b) b.click();
+      return;
+    }
     try {
-      const r = await fetch("/management/" + sel.dataset.id + "/rules/" + (v === "" ? "reset" : "save"), {
+      const r = await fetch("/management/" + sel.dataset.id + "/rules/save", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(v === "" ? { key: "story_stock" } : { key: "story_stock", value: Number(v), enabled: true }),
+        body: JSON.stringify({ key: "story_stock", value: Number(v), enabled: true }),
       });
       if (!r.ok) { const o = await r.json().catch(() => ({})); throw new Error(o.error || "Couldn't save that."); }
+      sel.dataset.current = v;
       sel.classList.add("saved");
       setTimeout(() => sel.classList.remove("saved"), 900);
     } catch (e) { alert(e.message); location.reload(); }

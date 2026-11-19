@@ -169,6 +169,8 @@ def management_story(request: Request, position_id: int, all: int = 0):
         rule_layers = fw.layers(u, user_id, pos["symbol"])
         story_over = fw.story_stock_override(u, user_id, pos["symbol"])
         rule_sets = fw.list_sets(u, user_id)
+        _sc = int(fw.story_layers(u, user_id)["story_scope"]["value"])
+        story_eff = (fw.story_days(story_over) if story_over else 0) if story_over is not None else (fw.DEFAULT_STORY_DAYS if (_sc == 2 or (_sc == 1 and pos["anchor_type"] == "position")) else 0)
         assigned_set_id = fw.assigned_set(u, user_id, pos["symbol"])
         sizing = fw.sizing_plan(u, user_id)
         story_scope = fw.story_layers(u, user_id)["story_scope"]
@@ -213,7 +215,7 @@ def management_story(request: Request, position_id: int, all: int = 0):
             "saved": request.query_params.get("saved"),
             "latest": latest, "history": [e for e in entries if e is not latest and (e["analysis"] or (e["legacy"] and not e["legacy"][0].startswith("Just added")))],
             "scan": scan, "rule_layers": rule_layers, "rule_state": rule_state, "status_hist": status_hist,
-            "size": size, "story_over": story_over, "rule_sets": rule_sets, "assigned_set_id": assigned_set_id, "story_default": dict(fw.STORY_BY_KEY["story_scope"]["choices"]).get(int(story_scope["value"]), ""),
+            "size": size, "story_over": story_over, "story_eff": story_eff, "rule_sets": rule_sets, "assigned_set_id": assigned_set_id, "story_default": dict(fw.STORY_BY_KEY["story_scope"]["choices"]).get(int(story_scope["value"]), ""),
             "run": run, "running": bool(run and run["status"] in ("queued", "running")),
             "total_entries": total, "more": more, "story_disclaimer": STORY_DISCLAIMER,   # always the current wording, not the one saved inside an older story
         },

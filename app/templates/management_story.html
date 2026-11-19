@@ -241,12 +241,13 @@
   <div class="page-actions">
     <a class="btn" href="/analytics/{{ pos.symbol }}"><svg class="icon icon-sm"><use href="#i-analytics"/></svg>Fundamentals</a>
     {% if pos.status == 'active' %}
-    <label class="story-mode" title="Whether this stock's story runs automatically each morning. It follows your Investment rules unless you choose here.">
-      <span>Daily story</span>
-      <select class="form-input" id="story-mode" data-id="{{ pos.id }}" aria-label="Daily story for this stock">
-        <option value="" {{ 'selected' if story_over is none else '' }}>Follow my rules ({{ story_default }})</option>
-        <option value="1" {{ 'selected' if story_over == 1 else '' }}>Always run</option>
-        <option value="0" {{ 'selected' if story_over == 0 else '' }}>Never run</option>
+    <label class="story-mode" title="How often this stock's written story is made automatically. Monthly unless you choose otherwise. The status against your rules is worked out every night regardless, with no AI.">
+      <span>Story</span>
+      <select class="form-input" id="story-mode" data-id="{{ pos.id }}" data-current="{{ story_eff }}" aria-label="How often this stock's story runs">
+        <option value="7" {{ 'selected' if story_eff == 7 else '' }}>Weekly run</option>
+        <option value="30" {{ 'selected' if story_eff == 30 else '' }}>Monthly run</option>
+        <option value="now">Run now</option>
+        <option value="0" {{ 'selected' if story_eff == 0 else '' }}>Never run</option>
       </select>
     </label>
     {% if rule_sets %}<label class="story-mode" title="Which rules this stock is checked against: its Fundamentals scan, daily story and Deep research. The next analysis uses the change.">
